@@ -1,63 +1,49 @@
-import { ArrowRight, ArrowLeft, Tag, Sparkles, ShieldCheck } from 'lucide-react';
-import { Language } from '../types';
+import { Language, Product, Currency } from '../types';
+import Product3DCoverflow from './Product3DCoverflow';
+import { mockProducts } from '../data/mockData';
 
 interface PromoBannerProps {
   language: Language;
-  onShopNow: () => void;
+  onShopNow?: () => void;
+  products?: Product[];
+  currency?: Currency;
+  onSelectProduct?: (product: Product) => void;
+  onAddToCart?: (product: Product, variant?: string, color?: string) => void;
 }
 
-export default function PromoBanner({ language, onShopNow }: PromoBannerProps) {
+export default function PromoBanner({
+  language,
+  products = mockProducts,
+  currency = 'YER',
+  onSelectProduct,
+  onAddToCart,
+}: PromoBannerProps) {
   const isAr = language === 'ar';
 
   return (
-    <section id="promo-banner" className="py-12 bg-white">
+    <section id="promo-banner" className="py-10 sm:py-14 bg-white overflow-hidden">
       <div className="container mx-auto px-4">
-        <div className="relative rounded-3xl overflow-hidden bg-tech-dark text-white min-h-[360px] flex items-center shadow-2xl border border-white/10">
-          {/* Background image & gradient */}
-          <div className="absolute inset-0 z-0">
-            <img
-              src="https://images.unsplash.com/photo-1550009158-9ebf69173e03?q=80&w=1400&auto=format&fit=crop"
-              alt="Promo Banner"
-              className="w-full h-full object-cover object-center opacity-30 scale-105"
-            />
-            <div className="absolute inset-0 bg-gradient-to-r from-tech-dark via-tech-dark/85 to-transparent rtl:bg-gradient-to-l" />
-          </div>
+        {/* Simple Minimal Title on Pure White Canvas */}
+        <div className="text-center max-w-xl mx-auto mb-2">
+          <h2 className="text-xl sm:text-2xl lg:text-3xl font-black text-gray-900 tracking-tight">
+            {isAr ? 'معرض فيديوهات المنتجات الرائدة' : 'Flagship Products Video Showcase'}
+          </h2>
+          <p className="text-xs sm:text-sm text-gray-500 mt-1">
+            {isAr
+              ? 'تقليب تفاعلي وتلقائي للفيديوهات ثلاثية الأبعاد بدقة عالية'
+              : 'Interactive 3D Video Coverflow with Auto & Manual Flipping'}
+          </p>
+        </div>
 
-          {/* Content */}
-          <div className="relative z-10 p-8 md:p-14 max-w-xl">
-            <div className="inline-flex items-center gap-2 bg-gradient-to-r from-cyan-500 to-primary text-white text-xs font-black uppercase px-3.5 py-1 rounded-full mb-3 shadow">
-              <Sparkles className="w-3.5 h-3.5" />
-              <span>{isAr ? 'حزمة الترقية الشاملة 2026' : 'Flagship Upgrade Bundle'}</span>
-            </div>
-
-            <h2 className="text-2xl sm:text-4xl lg:text-5xl font-black mb-3 leading-tight font-display text-white">
-              {isAr
-                ? 'باكج الشحن السريع وحماية الهاتف بخصم 35%'
-                : 'GaN Fast Charging & MagSafe Protection Bundle'}
-            </h2>
-
-            <p className="text-xs sm:text-sm text-gray-300 mb-6 leading-relaxed">
-              {isAr
-                ? 'احصل على شاحن أنكر GaN ثلاثي المنافذ مع كفر MagSafe أصلي وكابل 100W مجدول بضمان سنتين مع كود TECH10 عند الدفع.'
-                : 'Get Anker 3-Port GaN charger, certified MagSafe armor case, and 100W braided line with 2-year warranty. Use code TECH10.'}
-            </p>
-
-            <div className="flex flex-wrap items-center gap-3">
-              <button
-                id="promo-shop-btn"
-                onClick={onShopNow}
-                className="inline-flex items-center gap-2 bg-primary hover:bg-primary-hover text-white font-bold px-7 py-3.5 rounded-xl transition-all shadow-lg active:scale-95 text-xs sm:text-sm"
-              >
-                <span>{isAr ? 'اقتنِ الحزمة واستكشف العروض' : 'Shop Bundle & Offers'}</span>
-                {isAr ? <ArrowLeft className="w-4 h-4" /> : <ArrowRight className="w-4 h-4" />}
-              </button>
-
-              <div className="flex items-center gap-1.5 text-xs text-emerald-400 font-bold bg-white/10 px-3 py-2 rounded-xl border border-white/15">
-                <ShieldCheck className="w-4 h-4 text-emerald-400" />
-                <span>{isAr ? 'شحن فوري + ضمان سنتين' : '2-Yr Warranty Included'}</span>
-              </div>
-            </div>
-          </div>
+        {/* 3D Video Templates on Pure White Background with Soft Shadow */}
+        <div className="w-full">
+          <Product3DCoverflow
+            products={products}
+            language={language}
+            currency={currency}
+            onSelectProduct={onSelectProduct}
+            onAddToCart={onAddToCart}
+          />
         </div>
       </div>
     </section>

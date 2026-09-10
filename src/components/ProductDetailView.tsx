@@ -15,11 +15,16 @@ import {
   Zap,
   Cpu,
   Info,
+  Video,
+  Play,
+  ExternalLink,
+  Image as ImageIcon,
 } from 'lucide-react';
 import { Product, Language, Currency, Review } from '../types';
 import { mockReviews, mockProducts, formatPrice } from '../data/mockData';
 import { triggerFlyToCart } from './FlyingCartAnimation';
 import ProductCard from './ProductCard';
+import { getYouTubeId, getYouTubeEmbedUrl } from '../utils/videoUtils';
 
 interface ProductDetailViewProps {
   product: Product;
@@ -27,6 +32,7 @@ interface ProductDetailViewProps {
   currency: Currency;
   onBack: () => void;
   onAddToCart: (product: Product, variant: string, color: string, quantity: number) => void;
+  onQuickOrder?: (product: Product, variant: string, color: string, quantity: number) => void;
   onSelectRelated: (product: Product) => void;
   isWishlisted: boolean;
   onToggleWishlist: (productId: string) => void;
@@ -40,6 +46,7 @@ export default function ProductDetailView({
   currency,
   onBack,
   onAddToCart,
+  onQuickOrder,
   onSelectRelated,
   isWishlisted,
   onToggleWishlist,
@@ -54,13 +61,14 @@ export default function ProductDetailView({
     product.variants.options[0] || 'الأساسي'
   );
   const [quantity, setQuantity] = useState<number>(1);
-  const [activeTab, setActiveTab] = useState<'specs' | 'desc' | 'reviews' | 'warranty'>('specs');
+  const [activeTab, setActiveTab] = useState<'specs' | 'desc' | 'reviews' | 'warranty'>('desc');
   const [reviewsList, setReviewsList] = useState<Review[]>(mockReviews);
   const [newReviewAuthor, setNewReviewAuthor] = useState('');
   const [newReviewComment, setNewReviewComment] = useState('');
   const [newReviewRating, setNewReviewRating] = useState(5);
   const [reviewSubmitted, setReviewSubmitted] = useState(false);
   const [addedAlert, setAddedAlert] = useState(false);
+  const [mediaMode, setMediaMode] = useState<'photo' | 'video'>('photo');
 
   // Price adjustment for higher variants
   const variantIndex = product.variants.options.indexOf(selectedVariant);
@@ -78,6 +86,20 @@ export default function ProductDetailView({
     onAddToCart(product, selectedVariant, selectedColor, quantity);
     setAddedAlert(true);
     setTimeout(() => setAddedAlert(false), 2000);
+  };
+
+  const handleQuickOrder = () => {
+    const mainImg = document.getElementById('product-detail-main-img');
+    triggerFlyToCart({
+      imageUrl: activeImage || product.image,
+      productName: isAr ? product.nameAr : product.name,
+      sourceElement: mainImg,
+    });
+    if (onQuickOrder) {
+      onQuickOrder(product, selectedVariant, selectedColor, quantity);
+    } else {
+      onAddToCart(product, selectedVariant, selectedColor, quantity);
+    }
   };
 
   const handleAddReview = (e: FormEvent) => {
@@ -124,41 +146,158 @@ export default function ProductDetailView({
           <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 lg:gap-12">
             {/* Gallery Column (5 Cols) */}
             <div className="lg:col-span-5 space-y-4">
+              {/* Media Mode Tabs: Photos vs Real Video */}
+              {product.videoUrl && (
+                <div className="flex items-center gap-2 p-1 bg-gray-100 rounded-2xl w-fit">
+                  <button
+                    onClick={() => setMediaMode('photo')}
+                    className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold transition-all ${
+                      mediaMode === 'photo'
+                        ? 'bg-white text-gray-900 shadow-xs'
+                        : 'text-gray-600 hover:text-gray-900'
+                    }`}
+                  >
+                    <ImageIcon className="w-3.5 h-3.5" />
+                    <span>{isAr ? `معرض الصور (${product.images?.length || 1})` : `Photos (${product.images?.length || 1})`}</span>
+                  </button>
+
+                  <button
+                    onClick={() => setMediaMode('video')}
+                    className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold transition-all ${
+                      mediaMode === 'video'
+                        ? 'bg-red-600 text-white shadow-xs'
+                        : 'text-gray-600 hover:text-gray-900'
+                    }`}
+                  >
+                    <Video className="w-3.5 h-3.5 text-current animate-pulse" />
+                    <span>{isAr ? 'فيديو حقيقي بدقة 8K' : 'Real 8K Video'}</span>
+                  </button>
+                </div>
+              )}
+
+              {/* Main Media Showcase Container */}
               <div className="aspect-square bg-gray-50 rounded-3xl overflow-hidden border border-gray-line relative p-4 group">
-                <img
-                  id="product-detail-main-img"
-                  src={activeImage}
-                  alt={product.name}
-                  className="w-full h-full object-cover rounded-2xl group-hover:scale-105 transition-transform duration-500"
-                />
+                {mediaMode === 'photo' ? (
+                  <>
+                    <img
+                      id="product-detail-main-img"
+                      src={activeImage}
+                      alt={product.name}
+                      referrerPolicy="no-referrer"
+                      className="w-full h-full object-cover rounded-2xl group-hover:scale-105 transition-transform duration-500"
+                    />
 
-                {/* Brand Logo Floating */}
-                <div className="absolute top-4 left-4 rtl:left-auto rtl:right-4 bg-tech-dark text-white text-xs font-mono font-black px-3 py-1 rounded-lg uppercase tracking-wider shadow-md">
-                  {product.brand}
-                </div>
+                    {/* Brand Logo Floating */}
+                    <div className="absolute top-4 left-4 rtl:left-auto rtl:right-4 bg-tech-dark text-white text-xs font-mono font-black px-3 py-1 rounded-lg uppercase tracking-wider shadow-md">
+                      {product.brand}
+                    </div>
 
-                {/* 2-Year Warranty Badge */}
-                <div className="absolute bottom-4 left-4 rtl:left-auto rtl:right-4 bg-emerald-50 text-emerald-800 border border-emerald-200 text-xs font-bold px-3 py-1 rounded-xl shadow-xs flex items-center gap-1.5">
-                  <ShieldCheck className="w-4 h-4 text-emerald-600" />
-                  <span>{product.warrantyYears} {isAr ? 'سنوات ضمان رسمي' : 'Years Warranty'}</span>
-                </div>
+                    {/* 2-Year Warranty Badge */}
+                    <div className="absolute bottom-4 left-4 rtl:left-auto rtl:right-4 bg-emerald-50 text-emerald-800 border border-emerald-200 text-xs font-bold px-3 py-1 rounded-xl shadow-xs flex items-center gap-1.5">
+                      <ShieldCheck className="w-4 h-4 text-emerald-600" />
+                      <span>{product.warrantyYears} {isAr ? 'سنوات ضمان رسمي' : 'Years Warranty'}</span>
+                    </div>
+                  </>
+                ) : (
+                  <div className="w-full h-full rounded-2xl overflow-hidden bg-black flex items-center justify-center relative">
+                    {(() => {
+                      const ytId = getYouTubeId(product.videoUrl);
+                      if (ytId) {
+                        return (
+                          <div className="w-full h-full relative flex items-center justify-center">
+                            <iframe
+                              src={getYouTubeEmbedUrl(ytId, {
+                                autoplay: true,
+                                mute: false,
+                                controls: true,
+                                loop: true,
+                              })}
+                              title={product.name}
+                              allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
+                              allowFullScreen
+                              className="w-full h-full border-0"
+                            />
+                            {/* Watch on YouTube direct link */}
+                            <a
+                              href={product.videoUrl || `https://youtube.com/shorts/${ytId}`}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="absolute top-3 right-3 rtl:right-auto rtl:left-3 z-20 px-3 py-1.5 rounded-xl bg-black/70 hover:bg-black/90 text-white text-[11px] font-bold border border-white/20 backdrop-blur-md flex items-center gap-1.5 shadow-lg transition-all"
+                            >
+                              <ExternalLink className="w-3.5 h-3.5 text-red-400" />
+                              <span>{isAr ? 'فتح على يوتيوب' : 'Open in YouTube'}</span>
+                            </a>
+                          </div>
+                        );
+                      }
+                      return (
+                        <video
+                          src={product.videoUrl}
+                          poster={activeImage}
+                          autoPlay
+                          controls
+                          loop
+                          playsInline
+                          className="w-full h-full object-contain"
+                        />
+                      );
+                    })()}
+                  </div>
+                )}
               </div>
 
-              {/* Thumbnails */}
+              {/* Thumbnails Strip (Scrollable for 6+ images) */}
               {product.images && product.images.length > 1 && (
-                <div className="flex gap-3">
+                <div className="flex gap-2.5 overflow-x-auto pb-2 scrollbar-thin">
                   {product.images.map((img, i) => (
                     <button
                       key={i}
-                      onClick={() => setActiveImage(img)}
-                      className={`w-18 h-18 rounded-2xl overflow-hidden border-2 transition-all p-1 bg-gray-50 ${
-                        activeImage === img ? 'border-primary ring-2 ring-primary/20 scale-105' : 'border-gray-200 hover:border-gray-300'
+                      onClick={() => {
+                        setActiveImage(img);
+                        setMediaMode('photo');
+                      }}
+                      className={`w-16 h-16 sm:w-18 sm:h-18 shrink-0 rounded-2xl overflow-hidden border-2 transition-all p-0.5 bg-gray-50 ${
+                        activeImage === img && mediaMode === 'photo'
+                          ? 'border-primary ring-2 ring-primary/20 scale-105'
+                          : 'border-gray-200 hover:border-gray-300'
                       }`}
                     >
-                      <img src={img} alt="thumb" className="w-full h-full object-cover rounded-xl" />
+                      <img
+                        src={img}
+                        alt={`thumb-${i}`}
+                        referrerPolicy="no-referrer"
+                        className="w-full h-full object-cover rounded-xl"
+                      />
                     </button>
                   ))}
                 </div>
+              )}
+
+              {/* Pinterest Integration Button & Source Badge */}
+              {product.pinterestUrl && (
+                <a
+                  href={product.pinterestUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="flex items-center justify-between p-3 rounded-2xl bg-gradient-to-r from-red-50 to-pink-50 hover:from-red-100 hover:to-pink-100 border border-red-200 text-[#E60023] transition-all shadow-xs group"
+                >
+                  <div className="flex items-center gap-2">
+                    <div className="w-7 h-7 rounded-full bg-[#E60023] text-white flex items-center justify-center shadow-xs group-hover:scale-110 transition-transform">
+                      <svg className="w-4 h-4 fill-current" viewBox="0 0 24 24">
+                        <path d="M12 0a12 12 0 0 0-4.37 23.18c-.06-.97-.1-2.47.02-3.53.11-.97.74-6.3.74-6.3s-.19-.38-.19-.94c0-.88.51-1.54 1.15-1.54.54 0 .8.41.8.9 0 .55-.35 1.37-.53 2.13-.15.64.32 1.15.95 1.15 1.14 0 2.02-1.2 2.02-2.94 0-1.54-1.1-2.61-2.68-2.61-1.83 0-2.9 1.37-2.9 2.79 0 .55.21 1.14.48 1.46.05.06.06.12.04.18l-.18.73c-.03.11-.1.14-.22.08-1-.46-1.62-1.92-1.62-3.1 0-2.52 1.83-4.84 5.28-4.84 2.77 0 4.93 1.98 4.93 4.62 0 2.76-1.74 4.98-4.15 4.98-.81 0-1.57-.42-1.84-.91l-.5 1.9c-.18.7-.67 1.58-1 2.11A11.96 11.96 0 0 0 12 24c6.63 0 12-5.37 12-12S18.63 0 12 0z"/>
+                      </svg>
+                    </div>
+                    <div>
+                      <div className="text-xs font-bold text-gray-900">
+                        {isAr ? 'تصفح المزيد من الصور والأفكار على Pinterest' : 'Explore more photos & pins on Pinterest'}
+                      </div>
+                      <div className="text-[10px] text-gray-500">
+                        {isAr ? 'معرض صور عالي الدقة وريفيوهات ملهمة' : 'Curated high-res galleries & video clips'}
+                      </div>
+                    </div>
+                  </div>
+                  <ExternalLink className="w-4 h-4 text-gray-400 group-hover:text-[#E60023] transition-colors" />
+                </a>
               )}
             </div>
 
@@ -181,6 +320,17 @@ export default function ProductDetailView({
                 <h1 className="text-xl sm:text-3xl font-black text-gray-dark tracking-tight leading-snug mb-3">
                   {isAr ? product.nameAr : product.name}
                 </h1>
+
+                {/* Product Description - Always visible and prominently placed */}
+                <div className="mb-4 p-4 rounded-2xl bg-gradient-to-r from-orange-50/70 via-amber-50/40 to-sky-50/50 border border-orange-200/80 shadow-xs">
+                  <div className="flex items-center gap-1.5 text-xs font-bold text-orange-800 mb-1.5">
+                    <Info className="w-4 h-4 text-orange-600 shrink-0" />
+                    <span>{isAr ? 'وصف المنتج ومميزاته الرسمية:' : 'Product Overview & Key Features:'}</span>
+                  </div>
+                  <p className="text-xs sm:text-sm text-gray-700 leading-relaxed font-normal">
+                    {isAr ? product.descriptionAr : product.description}
+                  </p>
+                </div>
 
                 {/* Price & Installments Callout */}
                 <div className="p-4 rounded-2xl bg-gray-50 border border-gray-line mb-5">
@@ -289,10 +439,22 @@ export default function ProductDetailView({
                   {/* Add to Cart CTA */}
                   <button
                     onClick={handleAdd}
-                    className="flex-1 bg-primary hover:bg-primary-hover text-white font-bold py-3.5 px-6 rounded-xl transition-all shadow-md flex items-center justify-center gap-2 text-xs sm:text-sm active:scale-98"
+                    id="product-detail-add-to-cart-btn"
+                    className="flex-1 min-w-[180px] bg-gradient-to-r from-orange-600 via-orange-500 to-amber-600 hover:from-orange-700 hover:to-amber-700 text-white font-black py-3.5 px-5 rounded-2xl transition-all shadow-md hover:shadow-orange-500/25 flex items-center justify-center gap-2 text-xs sm:text-sm active:scale-98 cursor-pointer ring-2 ring-orange-400/20"
                   >
-                    <ShoppingBag className="w-4 h-4" />
-                    <span>{isAr ? 'إضافة إلى السلة ومتابعة الشراء' : 'Add to Cart'}</span>
+                    <ShoppingBag className="w-4 h-4 text-white" />
+                    <span>{isAr ? 'إضافة إلى السلة' : 'Add to Cart'}</span>
+                  </button>
+
+                  {/* One-Click Quick Order CTA */}
+                  <button
+                    onClick={handleQuickOrder}
+                    id="product-detail-quick-order-btn"
+                    className="flex-1 min-w-[180px] bg-gradient-to-r from-emerald-600 via-teal-600 to-emerald-700 hover:from-emerald-700 hover:to-teal-800 text-white font-black py-3.5 px-5 rounded-2xl transition-all shadow-md hover:shadow-emerald-600/30 flex items-center justify-center gap-2 text-xs sm:text-sm active:scale-98 cursor-pointer group"
+                    title={isAr ? 'طلب فوري بضغطة واحدة وفتح الفاتورة للواتساب' : 'Quick Order via WhatsApp Invoice'}
+                  >
+                    <Zap className="w-4 h-4 text-amber-300 fill-amber-300 group-hover:scale-110 transition-transform" />
+                    <span>{isAr ? 'طلب سريع فوري ⚡' : 'Quick Order ⚡'}</span>
                   </button>
 
                   {/* Wishlist Button */}
@@ -437,8 +599,8 @@ export default function ProductDetailView({
                 </p>
                 <div className="bg-primary/5 p-4 rounded-2xl border border-primary/20 text-xs text-primary font-medium">
                   {isAr
-                    ? 'جميع الهواتف والملحقات المعروضة في إلكترولكس أصلية 100%، مستوردة من الوكلاء الرسميين وتعمل على كافة شبكات الاتصالات في المملكة ودول الخليج.'
-                    : 'All devices and accessories at ElectroLux are 100% genuine with manufacturer warranty.'}
+                    ? 'جميع الهواتف والملحقات المعروضة في متجر صدام العقاري للإلكترونيات أصلية 100%، مستوردة من الوكلاء الرسميين مع الضمان المعتمد.'
+                    : 'All devices and accessories at Saddam Al-Aqari Electronics are 100% genuine with official authorized warranty.'}
                 </div>
               </div>
             )}
@@ -551,6 +713,7 @@ export default function ProductDetailView({
                   currency={currency}
                   onSelect={onSelectRelated}
                   onAddToCart={(prod, vr, col) => onAddToCart(prod, vr, col, 1)}
+                  onQuickOrder={(prod, vr, col) => onQuickOrder ? onQuickOrder(prod, vr, col, 1) : onAddToCart(prod, vr, col, 1)}
                   isWishlisted={isWishlisted}
                   onToggleWishlist={onToggleWishlist}
                 />
@@ -558,6 +721,31 @@ export default function ProductDetailView({
             </div>
           </div>
         )}
+        {/* Persistent Sticky Bottom Action Bar for Mobile - Add to Cart is NEVER lost */}
+        <div className="lg:hidden fixed bottom-0 inset-x-0 z-40 bg-white/95 backdrop-blur-md p-2.5 border-t border-gray-200 shadow-2xl flex items-center gap-2">
+          <div className="flex-1 min-w-0">
+            <div className="text-[10px] text-gray-500 truncate">{isAr ? product.nameAr : product.name}</div>
+            <div className="text-sm font-black text-gray-dark font-mono leading-tight">
+              {formatPrice(currentPrice, currency, isAr)}
+            </div>
+          </div>
+          <button
+            onClick={handleAdd}
+            id="mobile-sticky-add-to-cart-btn"
+            className="bg-white hover:bg-orange-50 border border-orange-200 text-orange-700 font-bold py-2.5 px-3 rounded-xl shadow-xs flex items-center gap-1.5 text-xs active:scale-95 shrink-0"
+          >
+            <ShoppingBag className="w-3.5 h-3.5 text-orange-600" />
+            <span>{isAr ? 'إضافة' : 'Add'}</span>
+          </button>
+          <button
+            onClick={handleQuickOrder}
+            id="mobile-sticky-quick-order-btn"
+            className="bg-gradient-to-r from-emerald-600 to-teal-700 text-white font-bold py-2.5 px-3.5 rounded-xl shadow-md flex items-center gap-1.5 text-xs active:scale-95 shrink-0"
+          >
+            <Zap className="w-3.5 h-3.5 text-amber-300 fill-amber-300" />
+            <span>{isAr ? 'طلب سريع ⚡' : 'Quick Order'}</span>
+          </button>
+        </div>
       </div>
     </div>
   );

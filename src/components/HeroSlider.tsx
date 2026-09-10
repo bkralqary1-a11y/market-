@@ -1,7 +1,8 @@
-import { useState, useEffect, useRef, type TouchEvent } from 'react';
+import { useState, useEffect, useRef, type TouchEvent, type MouseEvent } from 'react';
 import { ChevronRight, ChevronLeft, ShieldCheck, Zap, Sparkles, ArrowRight, ArrowLeft, Cpu, MessageSquare } from 'lucide-react';
 import { Language, Currency } from '../types';
 import { formatPrice, mockProducts } from '../data/mockData';
+import { soundFX } from '../utils/audioEffects';
 
 interface HeroSliderProps {
   language: Language;
@@ -20,6 +21,24 @@ export default function HeroSlider({
   const [currentSlide, setCurrentSlide] = useState(0);
   const [touchStart, setTouchStart] = useState<number | null>(null);
   const [touchEnd, setTouchEnd] = useState<number | null>(null);
+  const [mouseTilt, setMouseTilt] = useState<{ x: number; y: number }>({ x: 0, y: 0 });
+
+  const handleMouseMove = (e: MouseEvent<HTMLElement>) => {
+    const { clientX, clientY, currentTarget } = e;
+    const rect = currentTarget.getBoundingClientRect();
+    const x = ((clientX - rect.left) / rect.width - 0.5) * 8;
+    const y = ((clientY - rect.top) / rect.height - 0.5) * -8;
+    setMouseTilt({ x: Number(x.toFixed(2)), y: Number(y.toFixed(2)) });
+  };
+
+  const handleMouseLeave = () => {
+    setMouseTilt({ x: 0, y: 0 });
+  };
+
+  const changeSlide = (newIndex: number) => {
+    soundFX.playWhoosh();
+    setCurrentSlide(newIndex);
+  };
 
   const slides = [
     {
@@ -110,10 +129,12 @@ export default function HeroSlider({
 
   return (
     <section
-      className="relative w-full min-h-[500px] sm:min-h-[560px] md:min-h-[620px] flex items-center overflow-hidden bg-black text-white"
+      className="relative w-full min-h-[500px] sm:min-h-[560px] md:min-h-[620px] flex items-center overflow-hidden bg-black text-white transform-gpu select-none"
       onTouchStart={handleTouchStart}
       onTouchMove={handleTouchMove}
       onTouchEnd={handleTouchEnd}
+      onMouseMove={handleMouseMove}
+      onMouseLeave={handleMouseLeave}
     >
       {/* 1. Full-Bleed Top Background Image (الثلاث الصور الي يتقلبين تظهر من فوق و img تكون خلف div) */}
       {slides.map((item, idx) => (
@@ -122,7 +143,13 @@ export default function HeroSlider({
           className={`absolute inset-0 w-full h-full transition-opacity duration-1000 ease-in-out z-0 pointer-events-none ${
             idx === currentSlide ? 'opacity-100 scale-100' : 'opacity-0 scale-105'
           }`}
-          style={{ transitionProperty: 'opacity, transform' }}
+          style={{
+            transitionProperty: 'opacity, transform',
+            transform: idx === currentSlide
+              ? `scale(1.04) translate3d(${-mouseTilt.x * 1.5}px, ${-mouseTilt.y * 1.5}px, 0)`
+              : 'scale(1.08)',
+            transition: 'transform 300ms ease-out, opacity 1000ms ease-in-out',
+          }}
         >
           <img
             src={item.image}
@@ -141,8 +168,14 @@ export default function HeroSlider({
       <div className="absolute top-10 left-10 w-72 h-72 bg-orange-500/15 rounded-full blur-3xl pointer-events-none z-0" />
       <div className="absolute bottom-10 right-10 w-80 h-80 bg-cyan-500/10 rounded-full blur-3xl pointer-events-none z-0" />
 
-      {/* 3. Text Overlay Content (الكتابة خفيفة فوق الصورة وموزعة للهواتف) */}
-      <div className="container mx-auto px-4 sm:px-6 pt-24 sm:pt-16 pb-12 sm:pb-16 md:py-20 relative z-10 w-full">
+      {/* 3. Text Overlay Content with 3D Depth Layering */}
+      <div
+        className="container mx-auto px-4 sm:px-6 pt-24 sm:pt-16 pb-12 sm:pb-16 md:py-20 relative z-10 w-full transform-gpu transition-transform duration-200 ease-out"
+        style={{
+          transform: `perspective(1000px) rotateX(${mouseTilt.y * 0.8}deg) rotateY(${mouseTilt.x * 0.8}deg) translateZ(20px)`,
+          transformStyle: 'preserve-3d',
+        }}
+      >
         <div className="max-w-3xl space-y-4 sm:space-y-5">
           {/* Top Badge */}
           <div className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-black/50 backdrop-blur-md border border-orange-500/40 text-xs font-bold shadow-lg">
@@ -167,7 +200,7 @@ export default function HeroSlider({
             {(isAr ? slide.specs : slide.specsEn).map((spec, i) => (
               <span
                 key={i}
-                className="bg-black/40 backdrop-blur-md border border-white/20 px-3 py-1 rounded-xl text-xs font-semibold text-gray-100 flex items-center gap-1.5 shadow-sm"
+                className="bg-black/40 backdrop-blur-md border border-white/20 px-3 py-1 rounded-xl text-xs font-semibold text-gray-100 flex items-center gap-1.5 shadow-sm hover:border-orange-400/50 transition-colors"
               >
                 <Cpu className="w-3 h-3 text-orange-400" />
                 <span>{spec}</span>
@@ -203,7 +236,10 @@ export default function HeroSlider({
           <div className="flex items-center gap-2 pt-2.5">
             {/* button 1: زر صغير بالركن */}
             <button
-              onClick={() => onSelectProduct(slide.product)}
+              onClick={() => {
+                soundFX.playClick();
+                onSelectProduct(slide.product);
+              }}
               className="bg-gradient-to-r from-orange-500 to-amber-600 hover:from-orange-600 hover:to-amber-700 text-white font-bold px-3.5 sm:px-4 py-1.5 sm:py-2 rounded-lg shadow-md active:scale-95 transition-all text-xs flex items-center gap-1.5 border border-orange-400/30 cursor-pointer shrink-0"
               title={isAr ? 'عرض المواصفات والطلب' : 'View Specs & Order'}
             >
@@ -213,24 +249,28 @@ export default function HeroSlider({
 
             {/* button 2: زر أصغر */}
             <button
-              onClick={() => onExplore()}
+              onClick={() => {
+                soundFX.playClick();
+                onExplore();
+              }}
               className="bg-white/15 hover:bg-white/25 text-white/90 font-medium px-2.5 sm:px-3 py-1 sm:py-1.5 rounded-lg border border-white/25 backdrop-blur-md transition-all text-[11px] sm:text-xs text-center cursor-pointer shrink-0"
               title={isAr ? 'استعراض كل الأقسام' : 'Browse Categories'}
             >
               {isAr ? 'الأقسام' : 'Categories'}
             </button>
 
-            {/* a: زر تواصل وتساب دائري أصغر من الجميع يحتوي على https://wa.me/96777102030 */}
+            {/* a: زر تواصل وتساب دائري أصغر من الجميع يحتوي على https://wa.me/967774102030 */}
             <a
-              href={`https://wa.me/96777102030?text=${encodeURIComponent(
+              href={`https://wa.me/967774102030?text=${encodeURIComponent(
                 isAr
-                  ? `السلام عليكم متجر صدام العقاري، أود الاستفسار عن ${slide.title}`
-                  : `Hello Saddam Al-Aqari Store, I want to inquire about ${slide.titleEn}`
+                  ? `السلام عليكم متجر صدام العقاري، أود طلب وشراء: ${slide.title}`
+                  : `Hello Saddam Al-Aqari Store, I would like to order: ${slide.titleEn}`
               )}`}
               target="_blank"
               rel="noopener noreferrer"
+              onClick={() => soundFX.playClick()}
               className="w-8 h-8 sm:w-9 sm:h-9 rounded-full bg-emerald-600 hover:bg-emerald-500 text-white flex items-center justify-center shadow-lg border border-emerald-400/50 backdrop-blur-md transition-all hover:scale-110 active:scale-95 shrink-0 cursor-pointer"
-              title="تواصل واتساب (+967 771 020 30)"
+              title={isAr ? "الطلب السريع عبر واتساب (+967 774 102 030)" : "Quick Order WhatsApp (+967 774 102 030)"}
               aria-label="WhatsApp"
             >
               <MessageSquare className="w-4 h-4 fill-white" />
@@ -246,7 +286,7 @@ export default function HeroSlider({
           {slides.map((_, idx) => (
             <button
               key={idx}
-              onClick={() => setCurrentSlide(idx)}
+              onClick={() => changeSlide(idx)}
               className={`h-2 rounded-full transition-all duration-300 ${
                 currentSlide === idx ? 'w-7 sm:w-8 bg-orange-500 shadow-md' : 'w-2 bg-white/40 hover:bg-white/70'
               }`}
@@ -258,15 +298,15 @@ export default function HeroSlider({
         {/* Arrow Buttons */}
         <div className="flex items-center gap-2">
           <button
-            onClick={() => setCurrentSlide((prev) => (prev === 0 ? slides.length - 1 : prev - 1))}
-            className="p-2 sm:p-2.5 rounded-xl bg-black/40 hover:bg-orange-500 text-white transition-all border border-white/20 backdrop-blur-md active:scale-95"
+            onClick={() => changeSlide(currentSlide === 0 ? slides.length - 1 : currentSlide - 1)}
+            className="p-2 sm:p-2.5 rounded-xl bg-black/40 hover:bg-orange-500 text-white transition-all border border-white/20 backdrop-blur-md active:scale-95 cursor-pointer"
             aria-label="Previous slide"
           >
             {isAr ? <ChevronRight className="w-4 h-4" /> : <ChevronLeft className="w-4 h-4" />}
           </button>
           <button
-            onClick={() => setCurrentSlide((prev) => (prev + 1) % slides.length)}
-            className="p-2 sm:p-2.5 rounded-xl bg-black/40 hover:bg-orange-500 text-white transition-all border border-white/20 backdrop-blur-md active:scale-95"
+            onClick={() => changeSlide((currentSlide + 1) % slides.length)}
+            className="p-2 sm:p-2.5 rounded-xl bg-black/40 hover:bg-orange-500 text-white transition-all border border-white/20 backdrop-blur-md active:scale-95 cursor-pointer"
             aria-label="Next slide"
           >
             {isAr ? <ChevronLeft className="w-4 h-4" /> : <ChevronRight className="w-4 h-4" />}

@@ -2,6 +2,8 @@ import { useState, useEffect, useRef, type ReactNode } from 'react';
 import { Smartphone, Headphones, Shield, Zap, Cable, ArrowRight, ArrowLeft, Layers } from 'lucide-react';
 import { CategoryId, Language } from '../types';
 import { mockCategories } from '../data/mockData';
+import Tilt3D from './Tilt3D';
+import { soundFX } from '../utils/audioEffects';
 
 interface CategoriesSectionProps {
   language: Language;
@@ -111,16 +113,22 @@ export default function CategoriesSection({
           {/* Nav arrows for mobile & desktop */}
           <div className="flex items-center gap-2">
             <button
-              onClick={() => handleScroll('left')}
-              className="p-2 sm:p-2.5 rounded-xl bg-white hover:bg-orange-500 hover:text-white text-gray-700 border border-gray-200 shadow-sm transition-all active:scale-95"
+              onClick={() => {
+                soundFX.playWhoosh();
+                handleScroll('left');
+              }}
+              className="p-2 sm:p-2.5 rounded-xl bg-white hover:bg-orange-500 hover:text-white text-gray-700 border border-gray-200 shadow-sm transition-all active:scale-95 cursor-pointer"
               aria-label="Previous category"
             >
               <ArrowRight className="w-4 h-4 rtl:hidden" />
               <ArrowLeft className="w-4 h-4 ltr:hidden" />
             </button>
             <button
-              onClick={() => handleScroll('right')}
-              className="p-2 sm:p-2.5 rounded-xl bg-white hover:bg-orange-500 hover:text-white text-gray-700 border border-gray-200 shadow-sm transition-all active:scale-95"
+              onClick={() => {
+                soundFX.playWhoosh();
+                handleScroll('right');
+              }}
+              className="p-2 sm:p-2.5 rounded-xl bg-white hover:bg-orange-500 hover:text-white text-gray-700 border border-gray-200 shadow-sm transition-all active:scale-95 cursor-pointer"
               aria-label="Next category"
             >
               <ArrowLeft className="w-4 h-4 rtl:hidden" />
@@ -144,65 +152,76 @@ export default function CategoriesSection({
             const isSelected = currentIndex === idx;
 
             return (
-              <div
+              <Tilt3D
                 key={cat.id}
-                onClick={() => onSelectCategory(cat.id)}
-                className={`flex-none w-[240px] sm:w-[280px] md:w-[300px] h-[220px] sm:h-[250px] relative rounded-2xl overflow-hidden group cursor-pointer snap-start transition-all duration-300 select-none border-2 ${
-                  isSelected ? 'border-orange-500 shadow-xl scale-[1.02]' : 'border-white/80 shadow-md hover:shadow-xl hover:scale-[1.02]'
-                }`}
-                style={{
-                  boxShadow: isSelected
-                    ? '0 12px 28px rgba(234, 88, 12, 0.25), 0 4px 0 #ea580c'
-                    : '0 8px 20px rgba(0, 0, 0, 0.12), 0 3px 0 rgba(0,0,0,0.08)',
-                }}
+                maxAngle={12}
+                scale={1.04}
+                depth={20}
+                className="flex-none w-[240px] sm:w-[280px] md:w-[300px] h-[220px] sm:h-[250px] snap-start"
               >
-                {/* Full Background Image */}
-                <img
-                  src={bgImg}
-                  alt={isAr ? cat.nameAr : cat.name}
-                  className="absolute inset-0 w-full h-full object-cover object-center group-hover:scale-110 transition-transform duration-700"
-                  loading="lazy"
-                />
+                <div
+                  onClick={() => {
+                    soundFX.playClick();
+                    onSelectCategory(cat.id);
+                  }}
+                  className={`w-full h-full relative rounded-2xl overflow-hidden group cursor-pointer transition-all duration-300 select-none border-2 transform-gpu ${
+                    isSelected ? 'border-orange-500 shadow-xl' : 'border-white/80 shadow-md hover:shadow-2xl'
+                  }`}
+                  style={{
+                    transformStyle: 'preserve-3d',
+                    boxShadow: isSelected
+                      ? '0 12px 28px rgba(234, 88, 12, 0.35), 0 4px 0 #ea580c'
+                      : '0 8px 24px rgba(0, 0, 0, 0.14), 0 3px 0 rgba(0,0,0,0.08)',
+                  }}
+                >
+                  {/* Full Background Image */}
+                  <img
+                    src={bgImg}
+                    alt={isAr ? cat.nameAr : cat.name}
+                    className="absolute inset-0 w-full h-full object-cover object-center group-hover:scale-110 transition-transform duration-700"
+                    loading="lazy"
+                  />
 
-                {/* Subtle Black Shadow / Gradient behind text as requested */}
-                <div className="absolute inset-0 bg-gradient-to-t from-black/90 via-black/45 to-black/10 transition-opacity duration-300 group-hover:from-black/95 group-hover:via-black/50" />
+                  {/* Subtle Black Shadow / Gradient behind text as requested */}
+                  <div className="absolute inset-0 bg-gradient-to-t from-black/90 via-black/45 to-black/10 transition-opacity duration-300 group-hover:from-black/95 group-hover:via-black/50" />
 
-                {/* Top Badge (Icon & Count) */}
-                <div className="absolute top-3.5 right-3.5 rtl:right-auto rtl:left-3.5 flex items-center gap-2 z-10">
-                  <span className="text-[11px] font-bold font-mono text-white bg-black/40 backdrop-blur-md px-2.5 py-1 rounded-full border border-white/20 shadow-sm">
-                    {cat.itemCount} {isAr ? 'منتج' : 'items'}
-                  </span>
-                </div>
+                  {/* Top Badge (Icon & Count) */}
+                  <div className="absolute top-3.5 right-3.5 rtl:right-auto rtl:left-3.5 flex items-center gap-2 z-10 transform-gpu" style={{ transform: 'translateZ(20px)' }}>
+                    <span className="text-[11px] font-bold font-mono text-white bg-black/40 backdrop-blur-md px-2.5 py-1 rounded-full border border-white/20 shadow-sm">
+                      {cat.itemCount} {isAr ? 'منتج' : 'items'}
+                    </span>
+                  </div>
 
-                <div className="absolute top-3.5 left-3.5 rtl:left-auto rtl:right-3.5 z-10">
-                  <div className="w-10 h-10 rounded-xl bg-orange-600/90 backdrop-blur-md text-white flex items-center justify-center border border-white/25 shadow-md group-hover:scale-110 group-hover:bg-orange-500 transition-all">
-                    {categoryIcons[cat.id] || <Zap className="w-5 h-5 text-white" />}
+                  <div className="absolute top-3.5 left-3.5 rtl:left-auto rtl:right-3.5 z-10 transform-gpu" style={{ transform: 'translateZ(20px)' }}>
+                    <div className="w-10 h-10 rounded-xl bg-orange-600/90 backdrop-blur-md text-white flex items-center justify-center border border-white/25 shadow-md group-hover:scale-110 group-hover:bg-orange-500 transition-all">
+                      {categoryIcons[cat.id] || <Zap className="w-5 h-5 text-white" />}
+                    </div>
+                  </div>
+
+                  {/* Card Bottom: Text written in White with Subtle Black Drop Shadow */}
+                  <div className="absolute bottom-0 inset-x-0 p-4 sm:p-5 z-10 text-right rtl:text-right ltr:text-left flex flex-col justify-end transform-gpu" style={{ transform: 'translateZ(25px)' }}>
+                    {/* Category Title in pure white */}
+                    <h3 className="text-lg sm:text-xl font-extrabold text-white mb-1.5 leading-tight tracking-wide drop-shadow-[0_2px_6px_rgba(0,0,0,0.9)] group-hover:text-amber-300 transition-colors">
+                      {isAr ? cat.nameAr : cat.name}
+                    </h3>
+
+                    {/* Description in soft white */}
+                    <p className="text-xs text-white/90 line-clamp-2 leading-relaxed drop-shadow-[0_1px_3px_rgba(0,0,0,0.9)] mb-3">
+                      {isAr ? cat.descriptionAr : cat.name}
+                    </p>
+
+                    {/* Browse CTA Button in White/Orange */}
+                    <div className="flex items-center gap-2 text-xs font-bold text-white bg-white/15 backdrop-blur-md w-fit px-3 py-1.5 rounded-lg border border-white/30 group-hover:bg-orange-500 group-hover:border-orange-400 transition-all shadow-sm">
+                      <span>{isAr ? 'استعراض المنتجات' : 'View Products'}</span>
+                      {isAr ? (
+                        <ArrowLeft className="w-3.5 h-3.5 group-hover:-translate-x-1 transition-transform" />
+                      ) : (
+                        <ArrowRight className="w-3.5 h-3.5 group-hover:translate-x-1 transition-transform" />
+                      )}
+                    </div>
                   </div>
                 </div>
-
-                {/* Card Bottom: Text written in White with Subtle Black Drop Shadow */}
-                <div className="absolute bottom-0 inset-x-0 p-4 sm:p-5 z-10 text-right rtl:text-right ltr:text-left flex flex-col justify-end">
-                  {/* Category Title in pure white */}
-                  <h3 className="text-lg sm:text-xl font-extrabold text-white mb-1.5 leading-tight tracking-wide drop-shadow-[0_2px_6px_rgba(0,0,0,0.9)] group-hover:text-amber-300 transition-colors">
-                    {isAr ? cat.nameAr : cat.name}
-                  </h3>
-
-                  {/* Description in soft white */}
-                  <p className="text-xs text-white/90 line-clamp-2 leading-relaxed drop-shadow-[0_1px_3px_rgba(0,0,0,0.9)] mb-3">
-                    {isAr ? cat.descriptionAr : cat.name}
-                  </p>
-
-                  {/* Browse CTA Button in White/Orange */}
-                  <div className="flex items-center gap-2 text-xs font-bold text-white bg-white/15 backdrop-blur-md w-fit px-3 py-1.5 rounded-lg border border-white/30 group-hover:bg-orange-500 group-hover:border-orange-400 transition-all shadow-sm">
-                    <span>{isAr ? 'استعراض المنتجات' : 'View Products'}</span>
-                    {isAr ? (
-                      <ArrowLeft className="w-3.5 h-3.5 group-hover:-translate-x-1 transition-transform" />
-                    ) : (
-                      <ArrowRight className="w-3.5 h-3.5 group-hover:translate-x-1 transition-transform" />
-                    )}
-                  </div>
-                </div>
-              </div>
+              </Tilt3D>
             );
           })}
         </div>

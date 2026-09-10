@@ -24,6 +24,11 @@ import SearchModal from './components/SearchModal';
 import InvoiceModal from './components/InvoiceModal';
 import FloatingCartBar from './components/FloatingCartBar';
 import FlyingCartAnimation from './components/FlyingCartAnimation';
+import Ambient3DBackground from './components/Ambient3DBackground';
+import WaveDivider from './components/WaveDivider';
+import SocialMediaShowcase from './components/SocialMediaShowcase';
+import FloatingSocialDock from './components/FloatingSocialDock';
+import { soundFX } from './utils/audioEffects';
 
 export default function App() {
   // App navigation state
@@ -96,6 +101,7 @@ export default function App() {
     color = product.colors[0] || '#0f172a',
     qty = 1
   ) => {
+    soundFX.playAddToCart();
     setCart((prev) => {
       const existingIdx = prev.findIndex(
         (i) => i.product.id === product.id && i.selectedVariant === variant && i.selectedColor === color
@@ -119,7 +125,18 @@ export default function App() {
     // Never force user into cart drawer when adding product: respects user request "دون الدخول الى السله"
   };
 
+  // One-Click Quick Order: directly adds product and opens invoice modal for instant WhatsApp checkout
+  const handleQuickOrder = (
+    product: Product,
+    variant = product.variants.options[0] || 'الأساسي',
+    color = product.colors[0] || '#0f172a'
+  ) => {
+    handleAddToCart(product, variant, color, 1);
+    setInvoiceModalOpen(true);
+  };
+
   const handleUpdateQuantity = (idx: number, qty: number) => {
+    soundFX.playClick();
     setCart((prev) => {
       const next = [...prev];
       next[idx].quantity = qty;
@@ -128,10 +145,12 @@ export default function App() {
   };
 
   const handleRemoveFromCart = (idx: number) => {
+    soundFX.playClick();
     setCart((prev) => prev.filter((_, i) => i !== idx));
   };
 
   const handleToggleWarranty = (idx: number) => {
+    soundFX.playClick();
     setCart((prev) => {
       const next = [...prev];
       next[idx].warrantyUpgrade = !next[idx].warrantyUpgrade;
@@ -141,6 +160,7 @@ export default function App() {
 
   // Wishlist toggle
   const handleToggleWishlist = (productId: string) => {
+    soundFX.playClick();
     setWishlist((prev) =>
       prev.includes(productId) ? prev.filter((id) => id !== productId) : [...prev, productId]
     );
@@ -148,6 +168,7 @@ export default function App() {
 
   // Compare toggle
   const handleToggleCompare = (productId: string) => {
+    soundFX.playClick();
     setComparedProductIds((prev) => {
       if (prev.includes(productId)) {
         return prev.filter((id) => id !== productId);
@@ -162,11 +183,13 @@ export default function App() {
 
   // Navigation handlers
   const handleSelectProduct = (product: Product) => {
+    soundFX.playClick();
     setSelectedProduct(product);
     setCurrentView('product');
   };
 
   const handleSelectCategory = (catId: CategoryId) => {
+    soundFX.playWhoosh();
     setSelectedCategory(catId);
     setCurrentView('shop');
   };
@@ -188,8 +211,11 @@ export default function App() {
   return (
     <div
       dir={isAr ? 'rtl' : 'ltr'}
-      className="min-h-screen flex flex-col bg-white text-gray-dark font-sans selection:bg-primary selection:text-white"
+      className="min-h-screen flex flex-col bg-white text-gray-dark font-sans selection:bg-primary selection:text-white relative overflow-x-hidden"
     >
+      {/* 3D Interactive Ambient Particles & Holographic Orbs */}
+      <Ambient3DBackground />
+
       {/* 1. Master Header */}
       <Header
         currentView={currentView}
@@ -232,11 +258,17 @@ export default function App() {
             {/* Authorized Brands Ticker */}
             <BrandTicker language={language} />
 
+            {/* 3D Wave Transition into Categories */}
+            <WaveDivider variant="sky-cyan" />
+
             {/* The 5 Requested Categories (Phones, Audio, Cases, Chargers, Cables) */}
             <CategoriesSection
               language={language}
               onSelectCategory={handleSelectCategory}
             />
+
+            {/* 3D Wave Transition into Trending */}
+            <WaveDivider variant="cyan-orange" />
 
             {/* Trending & Best Sellers Showcase */}
             <section id="trending-products-section" className="py-14 bg-gray-50 border-t border-gray-line">
@@ -290,6 +322,7 @@ export default function App() {
                       currency={currency}
                       onSelect={handleSelectProduct}
                       onAddToCart={(p, vr, col) => handleAddToCart(p, vr, col, 1)}
+                      onQuickOrder={handleQuickOrder}
                       isWishlisted={wishlist.includes(prod.id)}
                       onToggleWishlist={handleToggleWishlist}
                       isCompared={comparedProductIds.includes(prod.id)}
@@ -314,14 +347,30 @@ export default function App() {
               </div>
             </section>
 
-            {/* Mid-Page Promo Banner (GaN Charging & MagSafe Bundle) */}
+            {/* 3D Wave Transition into Promo Banner */}
+            <WaveDivider variant="orange-gold" flip />
+
+            {/* Mid-Page Promo Banner (GaN Charging & MagSafe Bundle + 3D Products Coverflow) */}
             <PromoBanner
               language={language}
+              currency={currency}
+              products={mockProducts}
               onShopNow={() => {
                 setSelectedCategory('chargers');
                 setCurrentView('shop');
               }}
+              onSelectProduct={handleSelectProduct}
+              onAddToCart={(p, vr, col) => handleAddToCart(p, vr, col, 1)}
             />
+
+            {/* 3D Wave Transition into Social Media Showcase */}
+            <WaveDivider variant="cyan-orange" />
+
+            {/* Official Social Media Showcase (استعراض قنوات التواصل والفيديوهات مع تقلبات تفاعلية ومزج فخم) */}
+            <SocialMediaShowcase language={language} />
+
+            {/* 3D Wave Transition above Footer */}
+            <WaveDivider variant="orange-gold" />
           </>
         )}
 
@@ -333,6 +382,7 @@ export default function App() {
             currency={currency}
             onSelectProduct={handleSelectProduct}
             onAddToCart={(p, vr, col) => handleAddToCart(p, vr, col, 1)}
+            onQuickOrder={handleQuickOrder}
             wishlist={wishlist}
             onToggleWishlist={handleToggleWishlist}
             comparedIds={comparedProductIds}
@@ -350,6 +400,10 @@ export default function App() {
             currency={currency}
             onBack={() => setCurrentView('shop')}
             onAddToCart={(p, vr, col, q) => handleAddToCart(p, vr, col, q)}
+            onQuickOrder={(p, vr, col, q) => {
+              handleAddToCart(p, vr, col, q);
+              setInvoiceModalOpen(true);
+            }}
             onSelectRelated={handleSelectProduct}
             isWishlisted={wishlist.includes(selectedProduct.id)}
             onToggleWishlist={handleToggleWishlist}
@@ -506,6 +560,11 @@ export default function App() {
         language={language}
         currency={currency}
         onAddToCart={(p, vr, col, q) => handleAddToCart(p, vr, col, q)}
+        onQuickOrder={(p, vr, col, q) => {
+          handleAddToCart(p, vr, col, q);
+          setQuickViewProduct(null);
+          setInvoiceModalOpen(true);
+        }}
         onViewFullDetails={handleSelectProduct}
         isWishlisted={quickViewProduct ? wishlist.includes(quickViewProduct.id) : false}
         onToggleWishlist={handleToggleWishlist}
@@ -513,6 +572,9 @@ export default function App() {
 
       {/* Flying Cart Animation Overlay ("رجم وإلقاء صورة المنتج إلى السلة بعدة طرق") */}
       <FlyingCartAnimation />
+
+      {/* Floating 3D VIP Social Dock (منصات التواصل الاجتماعي الرسمية وخدمة العملاء) */}
+      <FloatingSocialDock language={language} />
 
       {/* 4. Luxury Footer */}
       <Footer

@@ -10,6 +10,7 @@ interface ShopViewProps {
   currency: Currency;
   onSelectProduct: (product: Product) => void;
   onAddToCart: (product: Product, variant: string, color: string) => void;
+  onQuickOrder?: (product: Product, variant: string, color: string) => void;
   wishlist: string[];
   onToggleWishlist: (productId: string) => void;
   comparedIds: string[];
@@ -24,6 +25,7 @@ export default function ShopView({
   currency,
   onSelectProduct,
   onAddToCart,
+  onQuickOrder,
   wishlist,
   onToggleWishlist,
   comparedIds,
@@ -269,6 +271,7 @@ export default function ShopView({
                     currency={currency}
                     onSelect={onSelectProduct}
                     onAddToCart={(prod, vr, col) => onAddToCart(prod, vr, col)}
+                    onQuickOrder={onQuickOrder}
                     isWishlisted={wishlist.includes(p.id)}
                     onToggleWishlist={onToggleWishlist}
                     isCompared={comparedIds.includes(p.id)}

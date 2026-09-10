@@ -34,6 +34,9 @@ export interface Product {
   sku: string;
   tag?: string;
   tagAr?: string;
+  videoUrl?: string;
+  pinterestUrl?: string;
+  pinterestImages?: string[];
 }
 
 export interface CartItem {
