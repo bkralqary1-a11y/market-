@@ -6,6 +6,7 @@ export interface Product {
   nameAr: string;
   price: number;
   originalPrice?: number;
+  discountPercentage?: number;
   category: CategoryId;
   categoryNameEn: string;
   categoryNameAr: string;
@@ -17,6 +18,7 @@ export interface Product {
   description: string;
   descriptionAr: string;
   inStock: boolean;
+  stock?: number;
   fastShipping: boolean;
   warrantyYears: number;
   isTrending?: boolean;

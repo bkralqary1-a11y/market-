@@ -1,65 +1,77 @@
 import { Product } from '../types';
-import { mockProducts } from '../data/mockData';
-import { ShortVideoItem, YOUTUBE_SHORTS_DATA } from '../components/YouTubeShortsSection';
+import { ShortVideoItem } from '../types';
+import { YOUTUBE_SHORTS_DATA } from '../components/YouTubeShortsSection';
+import {
+  MASTER_ADMIN_PIN,
+  verifyAdminPinSecure,
+  isAdminSessionActive,
+  setAdminSessionActive,
+  setCustomAdminPin,
+  resetAdminPinToDefault,
+} from './security';
 
-const PRODUCTS_STORAGE_KEY = 'saddam_store_products_v3';
-const SHORTS_STORAGE_KEY = 'saddam_store_shorts_v3';
-const ADMIN_PIN_KEY = 'saddam_admin_pin_v1';
-const ADMIN_SESSION_KEY = 'saddam_admin_session_auth';
+const PRODUCTS_STORAGE_KEY = 'saddam_store_products_v4';
+const SHORTS_STORAGE_KEY = 'saddam_store_shorts_v4';
+const STORE_DISCOUNT_CONFIG_KEY = 'saddam_store_discounts_v1';
 
-// Default owner master PIN (matching official Saddam Al-Aqari WhatsApp contact suffix)
-const DEFAULT_ADMIN_PIN = '774102030';
-
-/**
- * Admin Security Helpers
- */
-export function getAdminPin(): string {
-  try {
-    return localStorage.getItem(ADMIN_PIN_KEY) || DEFAULT_ADMIN_PIN;
-  } catch {
-    return DEFAULT_ADMIN_PIN;
-  }
+export interface StoreDiscountConfig {
+  enabled: boolean;
+  bannerTextAr: string;
+  bannerTextEn: string;
+  discountPercentage: number;
+  promoCode: string;
 }
 
-export function setAdminPin(newPin: string): boolean {
-  try {
-    localStorage.setItem(ADMIN_PIN_KEY, newPin.trim());
-    return true;
-  } catch (e) {
-    console.error(e);
-    return false;
-  }
-}
+export const DEFAULT_DISCOUNT_CONFIG: StoreDiscountConfig = {
+  enabled: false,
+  bannerTextAr: 'عروض حصرية وخصومات خاصة لفترة محدودة بمناسبة الافتتاح!',
+  bannerTextEn: 'Exclusive discounts & special offers for a limited time!',
+  discountPercentage: 10,
+  promoCode: 'SADDAM10',
+};
 
-export function verifyAdminPin(enteredPin: string): boolean {
-  const currentPin = getAdminPin();
-  // Allow default PIN or custom PIN, or master backup '774102030' or '123456'
-  const isMatch = enteredPin.trim() === currentPin || enteredPin.trim() === DEFAULT_ADMIN_PIN || enteredPin.trim() === '774102030';
-  if (isMatch) {
-    setAdminAuthenticated(true);
-  }
-  return isMatch;
-}
+// Initial user-requested product from owner's screenshot: "غلافات نسائي A32"
+export const INITIAL_USER_PRODUCT: Product = {
+  id: 'prod-user-a32-case',
+  sku: 'SDM-8892',
+  name: 'Samsung Galaxy A32 Women Cases',
+  nameAr: 'غلافات نسائي A32',
+  brand: 'GENERIC',
+  price: 1500,
+  originalPrice: 2000,
+  discountPercentage: 25,
+  category: 'cases',
+  categoryNameEn: 'Cases & Protection',
+  categoryNameAr: 'كفرات وحماية',
+  description: 'Stylish high-protection women case for Samsung Galaxy A32 with shockproof bumpers.',
+  descriptionAr: 'كفر أنيق وعصري عالي الحماية لهاتف سامسونج جالاكسي A32، مقاوم للصدمات والخدوش بتصميم نسائي متميز.',
+  rating: 5.0,
+  reviewsCount: 1,
+  stock: 45,
+  inStock: true,
+  warrantyYears: 1,
+  fastShipping: true,
+  image: 'https://images.unsplash.com/photo-1601784551446-20c9e07cdbdb?w=800&auto=format&fit=crop&q=80',
+  images: [
+    'https://images.unsplash.com/photo-1601784551446-20c9e07cdbdb?w=800&auto=format&fit=crop&q=80',
+    'https://images.unsplash.com/photo-1586105251261-72a756497a11?w=800&auto=format&fit=crop&q=80',
+    'https://images.unsplash.com/photo-1580910051074-3eb694886505?w=800&auto=format&fit=crop&q=80',
+  ],
+  colors: [], // No colors forced
+  variants: {
+    titleEn: 'Model',
+    titleAr: 'الموديل',
+    options: ['Samsung A32 4G', 'Samsung A32 5G'],
+  },
+  specs: {
+    material: { en: 'Shockproof TPU / Acrylic', ar: 'سيليكون مقوى مقاوم للصدمات' },
+    protection: { en: 'Drop Protection & Raised Camera Lips', ar: 'حماية متكاملة وحواف بارزة للكاميرا' },
+  },
+  hidden: false,
+};
 
-export function isAdminAuthenticated(): boolean {
-  try {
-    return sessionStorage.getItem(ADMIN_SESSION_KEY) === 'true';
-  } catch {
-    return false;
-  }
-}
-
-export function setAdminAuthenticated(auth: boolean): void {
-  try {
-    if (auth) {
-      sessionStorage.setItem(ADMIN_SESSION_KEY, 'true');
-    } else {
-      sessionStorage.removeItem(ADMIN_SESSION_KEY);
-    }
-  } catch (e) {
-    console.error(e);
-  }
-}
+// Start clean with only user's product, NO mock products
+export const INITIAL_PRODUCTS_LIST: Product[] = [INITIAL_USER_PRODUCT];
 
 /**
  * Dynamic Products Management
@@ -68,38 +80,54 @@ export function getStoredProducts(): Product[] {
   try {
     const data = localStorage.getItem(PRODUCTS_STORAGE_KEY);
     if (!data) {
-      // Seed with mockProducts
-      localStorage.setItem(PRODUCTS_STORAGE_KEY, JSON.stringify(mockProducts));
-      return mockProducts;
+      localStorage.setItem(PRODUCTS_STORAGE_KEY, JSON.stringify(INITIAL_PRODUCTS_LIST));
+      return INITIAL_PRODUCTS_LIST;
     }
     const parsed = JSON.parse(data);
-    if (Array.isArray(parsed) && parsed.length > 0) {
+    if (Array.isArray(parsed)) {
+      // If user has saved products, return them
       return parsed;
     }
-    return mockProducts;
+    return INITIAL_PRODUCTS_LIST;
   } catch (e) {
     console.error('Failed to parse stored products', e);
-    return mockProducts;
+    return INITIAL_PRODUCTS_LIST;
   }
 }
 
 export function saveStoredProducts(products: Product[]): void {
   try {
     localStorage.setItem(PRODUCTS_STORAGE_KEY, JSON.stringify(products));
-    // Dispatch a custom window event so any listening views immediately update
     window.dispatchEvent(new CustomEvent('saddam-products-updated', { detail: products }));
   } catch (e) {
     console.error('Failed to save products to localStorage', e);
   }
 }
 
-export function resetProductsToDefault(): Product[] {
+/**
+ * Wipe all products and start completely empty for the owner
+ */
+export function clearAllProducts(): Product[] {
   try {
-    localStorage.setItem(PRODUCTS_STORAGE_KEY, JSON.stringify(mockProducts));
-    window.dispatchEvent(new CustomEvent('saddam-products-updated', { detail: mockProducts }));
-    return mockProducts;
+    const empty: Product[] = [];
+    localStorage.setItem(PRODUCTS_STORAGE_KEY, JSON.stringify(empty));
+    window.dispatchEvent(new CustomEvent('saddam-products-updated', { detail: empty }));
+    return empty;
   } catch {
-    return mockProducts;
+    return [];
+  }
+}
+
+/**
+ * Reset to initial owner product
+ */
+export function resetProductsToInitial(): Product[] {
+  try {
+    localStorage.setItem(PRODUCTS_STORAGE_KEY, JSON.stringify(INITIAL_PRODUCTS_LIST));
+    window.dispatchEvent(new CustomEvent('saddam-products-updated', { detail: INITIAL_PRODUCTS_LIST }));
+    return INITIAL_PRODUCTS_LIST;
+  } catch {
+    return INITIAL_PRODUCTS_LIST;
   }
 }
 
@@ -133,13 +161,25 @@ export function saveStoredShorts(shorts: ShortVideoItem[]): void {
   }
 }
 
-export function resetShortsToDefault(): ShortVideoItem[] {
+/**
+ * Store-Wide Discount Configuration
+ */
+export function getStoredDiscountConfig(): StoreDiscountConfig {
   try {
-    localStorage.setItem(SHORTS_STORAGE_KEY, JSON.stringify(YOUTUBE_SHORTS_DATA));
-    window.dispatchEvent(new CustomEvent('saddam-shorts-updated', { detail: YOUTUBE_SHORTS_DATA }));
-    return YOUTUBE_SHORTS_DATA;
+    const data = localStorage.getItem(STORE_DISCOUNT_CONFIG_KEY);
+    if (!data) return DEFAULT_DISCOUNT_CONFIG;
+    return JSON.parse(data);
   } catch {
-    return YOUTUBE_SHORTS_DATA;
+    return DEFAULT_DISCOUNT_CONFIG;
+  }
+}
+
+export function saveStoredDiscountConfig(config: StoreDiscountConfig): void {
+  try {
+    localStorage.setItem(STORE_DISCOUNT_CONFIG_KEY, JSON.stringify(config));
+    window.dispatchEvent(new CustomEvent('saddam-discount-updated', { detail: config }));
+  } catch (e) {
+    console.error(e);
   }
 }
 
@@ -149,12 +189,14 @@ export function resetShortsToDefault(): ShortVideoItem[] {
 export function exportStoreBackupJSON(): string {
   const products = getStoredProducts();
   const shorts = getStoredShorts();
+  const discounts = getStoredDiscountConfig();
   const backup = {
     storeName: 'محلات صدام العقاري',
     exportedAt: new Date().toISOString(),
-    version: '3.0',
+    version: '4.0',
     products,
     shorts,
+    discounts,
   };
   return JSON.stringify(backup, null, 2);
 }
@@ -175,6 +217,10 @@ export function importStoreBackupJSON(jsonStr: string): { success: boolean; mess
       importedShorts = parsed.shorts.length;
     }
 
+    if (parsed.discounts) {
+      saveStoredDiscountConfig(parsed.discounts);
+    }
+
     if (importedProducts === 0 && importedShorts === 0) {
       return { success: false, message: 'الملف لا يحتوي على بيانات منتجات أو فيديوهات صالحة' };
     }
@@ -189,3 +235,13 @@ export function importStoreBackupJSON(jsonStr: string): { success: boolean; mess
     return { success: false, message: `فشل استيراد البيانات: ${err?.message || 'تنسيق JSON غير صالح'}` };
   }
 }
+
+// Re-export Security helpers for convenience
+export {
+  MASTER_ADMIN_PIN,
+  verifyAdminPinSecure,
+  isAdminSessionActive,
+  setAdminSessionActive,
+  setCustomAdminPin,
+  resetAdminPinToDefault,
+};

@@ -163,6 +163,7 @@ export default function Header({
                 </svg>
               </a>
 
+              {/* WhatsApp direct contact */}
               <a
                 href="https://wa.me/967774102030"
                 target="_blank"
@@ -172,21 +173,6 @@ export default function Header({
               >
                 <span>774102030</span>
               </a>
-
-              {onOpenAdmin && (
-                <button
-                  id="header-admin-btn-top"
-                  onClick={() => {
-                    soundFX.playClick();
-                    onOpenAdmin();
-                  }}
-                  className="bg-amber-500/20 hover:bg-amber-500/30 text-amber-300 border border-amber-500/50 hover:border-amber-400 px-2.5 py-0.5 rounded-full text-[10px] font-bold flex items-center gap-1 transition-all cursor-pointer shadow-xs active:scale-95"
-                  title={isAr ? 'لوحة تحكم وإدارة المتجر بالكامل' : 'Admin Control Panel'}
-                >
-                  <Lock className="w-3 h-3 text-amber-400" />
-                  <span>{isAr ? 'لوحة التحكم ⚙️' : 'Admin Panel'}</span>
-                </button>
-              )}
             </div>
           </div>
         </div>
@@ -312,22 +298,6 @@ export default function Header({
             >
               {isAr ? 'English' : 'عربي'}
             </button>
-
-            {/* Admin Dashboard Trigger */}
-            {onOpenAdmin && (
-              <button
-                id="header-admin-btn-action"
-                onClick={() => {
-                  soundFX.playClick();
-                  onOpenAdmin();
-                }}
-                className="hidden md:inline-flex items-center gap-1.5 text-xs font-bold text-amber-800 bg-amber-50 hover:bg-amber-100 border border-amber-300/80 px-2.5 py-1.5 rounded-xl transition-all shadow-xs cursor-pointer active:scale-95"
-                title={isAr ? 'لوحة تحكم المشرف والتحكم بالمنتجات' : 'Admin Control Panel'}
-              >
-                <Lock className="w-3.5 h-3.5 text-amber-600" />
-                <span>{isAr ? 'لوحة الإدارة' : 'Admin'}</span>
-              </button>
-            )}
 
             {/* Slide-out Cart Trigger with Total */}
             <button
@@ -548,21 +518,6 @@ export default function Header({
                   <Truck className="w-4 h-4 text-emerald-600" />
                   <span>{isAr ? 'تتبع الشحنات والطلبات' : 'Order Tracking'}</span>
                 </button>
-
-                {onOpenAdmin && (
-                  <button
-                    id="header-admin-btn-mobile"
-                    onClick={() => {
-                      setMobileMenuOpen(false);
-                      soundFX.playClick();
-                      onOpenAdmin();
-                    }}
-                    className="w-full flex items-center gap-3 p-2.5 rounded-xl text-xs font-bold text-amber-800 bg-amber-50 hover:bg-amber-100 border border-amber-300/80 cursor-pointer transition-colors"
-                  >
-                    <Lock className="w-4 h-4 text-amber-600" />
-                    <span>{isAr ? 'لوحة تحكم المشرف (إدارة المتجر بالكامل)' : 'Admin Control Panel'}</span>
-                  </button>
-                )}
               </div>
 
               {/* Official Social Media Grid inside Mobile Drawer */}

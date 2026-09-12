@@ -1,7 +1,8 @@
 import { useState, useEffect } from 'react';
 import { PageView, Language, Currency, CategoryId, Product, CartItem, ShortVideoItem } from './types';
 import { mockProducts } from './data/mockData';
-import { getStoredProducts, saveStoredProducts, getStoredShorts, saveStoredShorts } from './utils/storeStorage';
+import { getStoredProducts, saveStoredProducts, getStoredShorts, saveStoredShorts, getStoredDiscountConfig, StoreDiscountConfig } from './utils/storeStorage';
+import { Sparkles, MessageCircle } from 'lucide-react';
 
 // Components
 import Header from './components/Header';
@@ -37,6 +38,7 @@ export default function App() {
   // Dynamic persistent products and video shorts (التحكم الكامل بالمتجر)
   const [products, setProducts] = useState<Product[]>(() => getStoredProducts());
   const [shorts, setShorts] = useState<ShortVideoItem[]>(() => getStoredShorts());
+  const [discountConfig, setDiscountConfig] = useState<StoreDiscountConfig>(() => getStoredDiscountConfig());
   const [adminModalOpen, setAdminModalOpen] = useState(false);
 
   // App navigation state
@@ -228,10 +230,12 @@ export default function App() {
 
   // Home filtered products
   const homeFilteredProducts = visibleProducts.filter((p) => {
-    if (homeFilter === 'trending') return p.isTrending;
-    if (homeFilter === 'popular') return p.isPopular;
+    if (homeFilter === 'trending') return p.isTrending ?? true;
+    if (homeFilter === 'popular') return p.isPopular ?? true;
     return true;
   });
+
+  const displayedHomeProducts = homeFilteredProducts.length > 0 ? homeFilteredProducts : visibleProducts;
 
   const cartTotalAmount = cart.reduce((sum, item) => {
     const itemPrice = item.product.price + (item.warrantyUpgrade ? 49 : 0);
@@ -271,6 +275,18 @@ export default function App() {
         onOpenAuth={() => setAuthOpen(true)}
         onOpenAdmin={() => setAdminModalOpen(true)}
       />
+
+      {/* Store-wide Promo & Discount Announcement Banner (Controlled from Admin Panel) */}
+      {discountConfig.enabled && (
+        <div className="bg-gradient-to-r from-red-600 via-orange-600 to-amber-600 text-white text-xs py-2 px-4 text-center font-bold flex items-center justify-center gap-2 shadow-sm transition-all z-20">
+          <span>🔥 {isAr ? discountConfig.bannerTextAr : discountConfig.bannerTextEn}</span>
+          {discountConfig.promoCode && (
+            <span className="bg-white text-red-600 px-2 py-0.5 rounded-md font-mono text-[11px] font-black uppercase tracking-wider">
+              {isAr ? 'كود الخصم:' : 'CODE:'} {discountConfig.promoCode}
+            </span>
+          )}
+        </div>
+      )}
 
       {/* 2. Main Content Area */}
       <main className="flex-grow">
@@ -345,25 +361,50 @@ export default function App() {
                   </div>
                 </div>
 
-                {/* Products Grid */}
-                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
-                  {homeFilteredProducts.slice(0, 8).map((prod) => (
-                    <ProductCard
-                      key={prod.id}
-                      product={prod}
-                      language={language}
-                      currency={currency}
-                      onSelect={handleSelectProduct}
-                      onAddToCart={(p, vr, col) => handleAddToCart(p, vr, col, 1)}
-                      onQuickOrder={handleQuickOrder}
-                      isWishlisted={wishlist.includes(prod.id)}
-                      onToggleWishlist={handleToggleWishlist}
-                      isCompared={comparedProductIds.includes(prod.id)}
-                      onToggleCompare={handleToggleCompare}
-                      onQuickView={(p) => setQuickViewProduct(p)}
-                    />
-                  ))}
-                </div>
+                {/* Products Grid or Welcoming State */}
+                {visibleProducts.length === 0 ? (
+                  <div className="text-center py-14 px-4 bg-white rounded-3xl border border-dashed border-gray-200 max-w-xl mx-auto my-4 shadow-xs">
+                    <div className="w-14 h-14 bg-amber-50 rounded-2xl flex items-center justify-center mx-auto mb-3 text-amber-600">
+                      <Sparkles className="w-7 h-7" />
+                    </div>
+                    <h3 className="text-lg font-black text-gray-900 mb-1.5">
+                      {isAr ? 'متجر صدام العقاري للأجهزة والإلكترونيات' : 'Saddam Al-Aqqari Tech Store'}
+                    </h3>
+                    <p className="text-xs text-gray-500 mb-5 max-w-md mx-auto leading-relaxed">
+                      {isAr
+                        ? 'المتجر محمي ومشفر بالكامل. يمكنك الاستفسار والطلب المباشر لكافة الأجهزة والملحقات عبر الواتساب فوراً.'
+                        : 'Encrypted and protected store. Contact us directly on WhatsApp for inquiries and instant orders.'}
+                    </p>
+                    <a
+                      href="https://wa.me/967774102030"
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="inline-flex items-center gap-2 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs px-6 py-3 rounded-2xl shadow-md transition-all active:scale-95"
+                    >
+                      <MessageCircle className="w-4 h-4" />
+                      <span>{isAr ? 'تواصل عبر الواتساب (774102030)' : 'Chat on WhatsApp (774102030)'}</span>
+                    </a>
+                  </div>
+                ) : (
+                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
+                    {displayedHomeProducts.slice(0, 8).map((prod) => (
+                      <ProductCard
+                        key={prod.id}
+                        product={prod}
+                        language={language}
+                        currency={currency}
+                        onSelect={handleSelectProduct}
+                        onAddToCart={(p, vr, col) => handleAddToCart(p, vr, col, 1)}
+                        onQuickOrder={handleQuickOrder}
+                        isWishlisted={wishlist.includes(prod.id)}
+                        onToggleWishlist={handleToggleWishlist}
+                        isCompared={comparedProductIds.includes(prod.id)}
+                        onToggleCompare={handleToggleCompare}
+                        onQuickView={(p) => setQuickViewProduct(p)}
+                      />
+                    ))}
+                  </div>
+                )}
 
                 {/* View More Button */}
                 <div className="text-center mt-10">
@@ -639,7 +680,10 @@ export default function App() {
       {/* 5. Full Admin Control Dashboard Modal (التحكم بالكامل وإدارة المنتجات والفيديوهات) */}
       <AdminControlModal
         isOpen={adminModalOpen}
-        onClose={() => setAdminModalOpen(false)}
+        onClose={() => {
+          setAdminModalOpen(false);
+          setDiscountConfig(getStoredDiscountConfig());
+        }}
         products={products}
         onUpdateProducts={(updated) => {
           setProducts(updated);

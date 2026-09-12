@@ -64,15 +64,6 @@ export default function AccountView({ language, currency, onBackToStore, onSelec
           </div>
 
           <div className="flex items-center gap-2 text-xs">
-            {onOpenAdmin && (
-              <button
-                onClick={onOpenAdmin}
-                className="bg-amber-500 hover:bg-amber-600 text-white px-3.5 py-1.5 rounded-xl font-bold flex items-center gap-1.5 shadow-sm transition-all cursor-pointer active:scale-95"
-              >
-                <Lock className="w-4 h-4" />
-                <span>{isAr ? 'لوحة تحكم المتجر' : 'Admin Panel'}</span>
-              </button>
-            )}
             <span className="bg-emerald-50 text-emerald-700 px-3 py-1.5 rounded-xl border border-emerald-200 font-bold flex items-center gap-1.5">
               <ShieldCheck className="w-4 h-4" />
               <span>{isAr ? 'حساب موثق ومحمى' : 'Verified Account'}</span>

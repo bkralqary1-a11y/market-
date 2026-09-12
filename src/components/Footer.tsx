@@ -219,17 +219,6 @@ export default function Footer({ language, onSelectCategory, onNavigate, onOpenA
                   {isAr ? 'سياسة الضمان والاستبدال' : 'Warranty & Guarantee'}
                 </span>
               </li>
-              {onOpenAdmin && (
-                <li>
-                  <button
-                    onClick={onOpenAdmin}
-                    className="text-amber-400 hover:text-amber-300 transition-colors flex items-center gap-1.5 font-bold pt-1 cursor-pointer"
-                  >
-                    <Lock className="w-3.5 h-3.5" />
-                    <span>{isAr ? 'لوحة تحكم الإدارة (سري)' : 'Admin Control Panel'}</span>
-                  </button>
-                </li>
-              )}
             </ul>
           </div>
 

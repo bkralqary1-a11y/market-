@@ -153,12 +153,16 @@ export default function ProductCard({
             </button>
           </div>
 
-          {/* Product Image */}
+          {/* Product Image with Pinterest error fallback */}
           <img
             ref={imgRef}
             src={product.image}
             alt={product.name}
             referrerPolicy="no-referrer"
+            onError={(e) => {
+              e.currentTarget.onerror = null;
+              e.currentTarget.src = 'https://images.unsplash.com/photo-1580910051074-3eb694886505?w=600&auto=format&fit=crop&q=80';
+            }}
             className="w-full h-full object-cover rounded-2xl group-hover:scale-105 transition-transform duration-500"
           />
 
