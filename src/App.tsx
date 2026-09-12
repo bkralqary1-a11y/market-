@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
-import { PageView, Language, Currency, CategoryId, Product, CartItem } from './types';
+import { PageView, Language, Currency, CategoryId, Product, CartItem, ShortVideoItem } from './types';
 import { mockProducts } from './data/mockData';
+import { getStoredProducts, saveStoredProducts, getStoredShorts, saveStoredShorts } from './utils/storeStorage';
 
 // Components
 import Header from './components/Header';
@@ -27,15 +28,22 @@ import FlyingCartAnimation from './components/FlyingCartAnimation';
 import Ambient3DBackground from './components/Ambient3DBackground';
 import WaveDivider from './components/WaveDivider';
 import SocialMediaShowcase from './components/SocialMediaShowcase';
+import YouTubeShortsSection from './components/YouTubeShortsSection';
 import FloatingSocialDock from './components/FloatingSocialDock';
+import AdminControlModal from './components/AdminControlModal';
 import { soundFX } from './utils/audioEffects';
 
 export default function App() {
+  // Dynamic persistent products and video shorts (التحكم الكامل بالمتجر)
+  const [products, setProducts] = useState<Product[]>(() => getStoredProducts());
+  const [shorts, setShorts] = useState<ShortVideoItem[]>(() => getStoredShorts());
+  const [adminModalOpen, setAdminModalOpen] = useState(false);
+
   // App navigation state
   const [currentView, setCurrentView] = useState<PageView>('home');
   const [language, setLanguage] = useState<Language>('ar');
   const [currency, setCurrency] = useState<Currency>('YER');
-  const [selectedProduct, setSelectedProduct] = useState<Product>(mockProducts[0]);
+  const [selectedProduct, setSelectedProduct] = useState<Product>(() => (products.length > 0 ? products[0] : mockProducts[0]));
   const [selectedCategory, setSelectedCategory] = useState<CategoryId>('all');
 
   // Initial cart: completely empty so user starts with zeroed-out clean state
@@ -91,6 +99,27 @@ export default function App() {
   useEffect(() => {
     window.scrollTo({ top: 0, behavior: 'smooth' });
   }, [currentView]);
+
+  // Global listener for Admin Control Panel (Ctrl+Shift+A, Alt+A, or custom event)
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if ((e.ctrlKey && e.shiftKey && e.key.toLowerCase() === 'a') || (e.altKey && e.key.toLowerCase() === 'a')) {
+        e.preventDefault();
+        soundFX.playModalOpen();
+        setAdminModalOpen((prev) => !prev);
+      }
+    };
+    const handleAdminEvent = () => {
+      soundFX.playModalOpen();
+      setAdminModalOpen(true);
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    window.addEventListener('open-admin-panel', handleAdminEvent);
+    return () => {
+      window.removeEventListener('keydown', handleKeyDown);
+      window.removeEventListener('open-admin-panel', handleAdminEvent);
+    };
+  }, []);
 
   const isAr = language === 'ar';
 
@@ -194,8 +223,11 @@ export default function App() {
     setCurrentView('shop');
   };
 
+  // Filter active products (non-hidden) for client views
+  const visibleProducts = products.filter((p) => !p.hidden);
+
   // Home filtered products
-  const homeFilteredProducts = mockProducts.filter((p) => {
+  const homeFilteredProducts = visibleProducts.filter((p) => {
     if (homeFilter === 'trending') return p.isTrending;
     if (homeFilter === 'popular') return p.isPopular;
     return true;
@@ -206,7 +238,7 @@ export default function App() {
     return sum + itemPrice * item.quantity;
   }, 0);
 
-  const comparedProducts = mockProducts.filter((p) => comparedProductIds.includes(p.id));
+  const comparedProducts = products.filter((p) => comparedProductIds.includes(p.id));
 
   return (
     <div
@@ -237,6 +269,7 @@ export default function App() {
         setCurrency={setCurrency}
         onOpenSearch={() => setSearchOpen(true)}
         onOpenAuth={() => setAuthOpen(true)}
+        onOpenAdmin={() => setAdminModalOpen(true)}
       />
 
       {/* 2. Main Content Area */}
@@ -354,13 +387,25 @@ export default function App() {
             <PromoBanner
               language={language}
               currency={currency}
-              products={mockProducts}
+              products={visibleProducts}
               onShopNow={() => {
                 setSelectedCategory('chargers');
                 setCurrentView('shop');
               }}
               onSelectProduct={handleSelectProduct}
               onAddToCart={(p, vr, col) => handleAddToCart(p, vr, col, 1)}
+            />
+
+            {/* 3D Wave Transition into YouTube Shorts */}
+            <WaveDivider variant="sky-cyan" />
+
+            {/* Exclusive YouTube Shorts with live video URLs and dynamic admin controls */}
+            <YouTubeShortsSection
+              language={language}
+              currency={currency}
+              shorts={shorts}
+              products={visibleProducts}
+              onSelectProduct={handleSelectProduct}
             />
 
             {/* 3D Wave Transition into Social Media Showcase */}
@@ -377,7 +422,7 @@ export default function App() {
         {/* VIEW 2: SHOP CATALOG */}
         {currentView === 'shop' && (
           <ShopView
-            products={mockProducts}
+            products={visibleProducts}
             language={language}
             currency={currency}
             onSelectProduct={handleSelectProduct}
@@ -455,6 +500,7 @@ export default function App() {
             currency={currency}
             onBackToStore={() => setCurrentView('home')}
             onSelectProduct={handleSelectProduct}
+            onOpenAdmin={() => setAdminModalOpen(true)}
           />
         )}
 
@@ -539,7 +585,7 @@ export default function App() {
       <SearchModal
         isOpen={searchOpen}
         onClose={() => setSearchOpen(false)}
-        products={mockProducts}
+        products={visibleProducts}
         language={language}
         currency={currency}
         onSelectProduct={handleSelectProduct}
@@ -574,7 +620,10 @@ export default function App() {
       <FlyingCartAnimation />
 
       {/* Floating 3D VIP Social Dock (منصات التواصل الاجتماعي الرسمية وخدمة العملاء) */}
-      <FloatingSocialDock language={language} />
+      <FloatingSocialDock
+        language={language}
+        onOpenAdmin={() => setAdminModalOpen(true)}
+      />
 
       {/* 4. Luxury Footer */}
       <Footer
@@ -584,6 +633,25 @@ export default function App() {
           if (view === 'shop') setSelectedCategory('all');
           setCurrentView(view);
         }}
+        onOpenAdmin={() => setAdminModalOpen(true)}
+      />
+
+      {/* 5. Full Admin Control Dashboard Modal (التحكم بالكامل وإدارة المنتجات والفيديوهات) */}
+      <AdminControlModal
+        isOpen={adminModalOpen}
+        onClose={() => setAdminModalOpen(false)}
+        products={products}
+        onUpdateProducts={(updated) => {
+          setProducts(updated);
+          saveStoredProducts(updated);
+        }}
+        shorts={shorts}
+        onUpdateShorts={(updated) => {
+          setShorts(updated);
+          saveStoredShorts(updated);
+        }}
+        language={language}
+        currency={currency}
       />
     </div>
   );

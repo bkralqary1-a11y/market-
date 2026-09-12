@@ -1,28 +1,12 @@
 import { useState } from 'react';
 import { Play, ExternalLink, MessageCircle, X, ChevronRight, ChevronLeft, Sparkles, Smartphone, Eye, Share2, Volume2 } from 'lucide-react';
-import { Language, Currency, Product } from '../types';
+import { Language, Currency, Product, ShortVideoItem } from '../types';
 import { getYouTubeEmbedUrl, getYouTubeThumbnail } from '../utils/videoUtils';
 import Tilt3D from './Tilt3D';
 import { soundFX } from '../utils/audioEffects';
 import { formatPrice } from '../data/mockData';
 
-export interface ShortVideoItem {
-  id: string;
-  youtubeId: string;
-  shortsUrl: string;
-  titleAr: string;
-  titleEn: string;
-  captionAr: string;
-  captionEn: string;
-  viewsText: string;
-  productId: string;
-  productNameAr: string;
-  productNameEn: string;
-  productPrice: number;
-  productImage: string;
-  tagAr: string;
-  tagEn: string;
-}
+export type { ShortVideoItem };
 
 export const YOUTUBE_SHORTS_DATA: ShortVideoItem[] = [
   {
@@ -83,6 +67,7 @@ interface YouTubeShortsSectionProps {
   currency?: Currency;
   onSelectProduct?: (product: Product) => void;
   products?: Product[];
+  shorts?: ShortVideoItem[];
 }
 
 export default function YouTubeShortsSection({
@@ -90,11 +75,15 @@ export default function YouTubeShortsSection({
   currency = 'YER',
   onSelectProduct,
   products = [],
+  shorts = YOUTUBE_SHORTS_DATA,
 }: YouTubeShortsSectionProps) {
   const isAr = language === 'ar';
   const [activePlayId, setActivePlayId] = useState<string | null>(null);
   const [fullscreenIndex, setFullscreenIndex] = useState<number | null>(null);
   const [copiedLink, setCopiedLink] = useState<string | null>(null);
+
+  // Active visible shorts
+  const activeShorts = (shorts && shorts.length > 0 ? shorts : YOUTUBE_SHORTS_DATA).filter((s) => !s.hidden);
 
   const handleOpenFullscreen = (idx: number) => {
     soundFX.playModalOpen();
@@ -102,15 +91,15 @@ export default function YouTubeShortsSection({
   };
 
   const handleNextFullscreen = () => {
-    if (fullscreenIndex === null) return;
+    if (fullscreenIndex === null || activeShorts.length === 0) return;
     soundFX.playWhoosh();
-    setFullscreenIndex((fullscreenIndex + 1) % YOUTUBE_SHORTS_DATA.length);
+    setFullscreenIndex((fullscreenIndex + 1) % activeShorts.length);
   };
 
   const handlePrevFullscreen = () => {
-    if (fullscreenIndex === null) return;
+    if (fullscreenIndex === null || activeShorts.length === 0) return;
     soundFX.playWhoosh();
-    setFullscreenIndex((fullscreenIndex - 1 + YOUTUBE_SHORTS_DATA.length) % YOUTUBE_SHORTS_DATA.length);
+    setFullscreenIndex((fullscreenIndex - 1 + activeShorts.length) % activeShorts.length);
   };
 
   const handleShareShort = (short: ShortVideoItem) => {
@@ -122,7 +111,7 @@ export default function YouTubeShortsSection({
     }
   };
 
-  const currentFullscreenShort = fullscreenIndex !== null ? YOUTUBE_SHORTS_DATA[fullscreenIndex] : null;
+  const currentFullscreenShort = fullscreenIndex !== null && activeShorts[fullscreenIndex] ? activeShorts[fullscreenIndex] : null;
 
   return (
     <section id="youtube-shorts-section" className="py-12 sm:py-16 bg-gradient-to-b from-neutral-900 via-black to-neutral-950 text-white relative overflow-hidden">
@@ -169,7 +158,7 @@ export default function YouTubeShortsSection({
 
         {/* 3D Vertical Cards Grid */}
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6 lg:gap-8 max-w-6xl mx-auto">
-          {YOUTUBE_SHORTS_DATA.map((short, index) => {
+          {activeShorts.map((short, index) => {
             const isPlaying = activePlayId === short.id;
             const embedSrc = getYouTubeEmbedUrl(short.youtubeId, { autoplay: true, mute: false, loop: true });
             const thumbSrc = getYouTubeThumbnail(short.youtubeId);

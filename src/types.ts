@@ -37,6 +37,7 @@ export interface Product {
   videoUrl?: string;
   pinterestUrl?: string;
   pinterestImages?: string[];
+  hidden?: boolean;
 }
 
 export interface CartItem {
@@ -95,4 +96,23 @@ export interface Order {
   status: 'processing' | 'shipped' | 'delivered';
   itemsCount: number;
   items: CartItem[];
+}
+
+export interface ShortVideoItem {
+  id: string;
+  youtubeId: string;
+  shortsUrl: string;
+  titleAr: string;
+  titleEn: string;
+  captionAr: string;
+  captionEn: string;
+  viewsText: string;
+  productId: string;
+  productNameAr: string;
+  productNameEn: string;
+  productPrice: number;
+  productImage: string;
+  tagAr: string;
+  tagEn: string;
+  hidden?: boolean;
 }

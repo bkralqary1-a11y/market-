@@ -1,14 +1,15 @@
 import React, { useState } from 'react';
-import { Sparkles, MessageCircle, ExternalLink, X, Share2, Check } from 'lucide-react';
+import { Sparkles, MessageCircle, ExternalLink, X, Share2, Check, Lock } from 'lucide-react';
 import { Language } from '../types';
 import { OFFICIAL_SOCIAL_CHANNELS, SocialChannel } from '../data/socialMediaData';
 import { soundFX } from '../utils/audioEffects';
 
 interface FloatingSocialDockProps {
   language: Language;
+  onOpenAdmin?: () => void;
 }
 
-export default function FloatingSocialDock({ language }: FloatingSocialDockProps) {
+export default function FloatingSocialDock({ language, onOpenAdmin }: FloatingSocialDockProps) {
   const isAr = language === 'ar';
   const [isOpen, setIsOpen] = useState(false);
   const [copied, setCopied] = useState(false);
@@ -107,7 +108,21 @@ export default function FloatingSocialDock({ language }: FloatingSocialDockProps
 
           <div className="pt-2 border-t border-white/10 flex items-center justify-between text-[11px] text-gray-400">
             <span>{isAr ? 'خدمة عملاء فورية' : '24/7 Support'}</span>
-            <span className="font-mono text-emerald-400 font-bold">774102030</span>
+            <div className="flex items-center gap-2">
+              <span className="font-mono text-emerald-400 font-bold">774102030</span>
+              {onOpenAdmin && (
+                <button
+                  onClick={() => {
+                    setIsOpen(false);
+                    onOpenAdmin();
+                  }}
+                  title={isAr ? 'لوحة تحكم وإدارة المتجر' : 'Store Admin'}
+                  className="p-1 text-amber-400 hover:text-amber-300 hover:bg-white/10 rounded transition-colors cursor-pointer"
+                >
+                  <Lock className="w-3.5 h-3.5" />
+                </button>
+              )}
+            </div>
           </div>
         </div>
       )}

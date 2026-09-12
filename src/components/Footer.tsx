@@ -1,4 +1,4 @@
-import { Zap, ShieldCheck, Truck, RotateCcw, Headphones, Phone, Mail, MapPin, Building2, CheckCircle2, MessageCircle, ExternalLink } from 'lucide-react';
+import { Zap, ShieldCheck, Truck, RotateCcw, Headphones, Phone, Mail, MapPin, Building2, CheckCircle2, MessageCircle, ExternalLink, Lock } from 'lucide-react';
 import { Language, CategoryId, PageView } from '../types';
 import PaymentPointsSection from './PaymentPointsSection';
 import { soundFX } from '../utils/audioEffects';
@@ -7,9 +7,10 @@ interface FooterProps {
   language: Language;
   onSelectCategory: (catId: CategoryId) => void;
   onNavigate: (view: PageView) => void;
+  onOpenAdmin?: () => void;
 }
 
-export default function Footer({ language, onSelectCategory, onNavigate }: FooterProps) {
+export default function Footer({ language, onSelectCategory, onNavigate, onOpenAdmin }: FooterProps) {
   const isAr = language === 'ar';
 
   return (
@@ -218,6 +219,17 @@ export default function Footer({ language, onSelectCategory, onNavigate }: Foote
                   {isAr ? 'سياسة الضمان والاستبدال' : 'Warranty & Guarantee'}
                 </span>
               </li>
+              {onOpenAdmin && (
+                <li>
+                  <button
+                    onClick={onOpenAdmin}
+                    className="text-amber-400 hover:text-amber-300 transition-colors flex items-center gap-1.5 font-bold pt-1 cursor-pointer"
+                  >
+                    <Lock className="w-3.5 h-3.5" />
+                    <span>{isAr ? 'لوحة تحكم الإدارة (سري)' : 'Admin Control Panel'}</span>
+                  </button>
+                </li>
+              )}
             </ul>
           </div>
 
