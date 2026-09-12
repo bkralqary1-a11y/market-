@@ -34,6 +34,11 @@ import {
   Globe,
   Sliders,
   CheckCircle2,
+  Copy,
+  ArrowUp,
+  ArrowDown,
+  Cpu,
+  MessageSquare,
 } from 'lucide-react';
 import { Product, CategoryId, Language, Currency, HeroSlideItem, ShortVideoItem } from '../types';
 import {
@@ -56,11 +61,13 @@ import {
   StoreDiscountConfig,
   getStoredHeroSlides,
   saveStoredHeroSlides,
+  DEFAULT_HERO_SLIDES,
 } from '../utils/storeStorage';
 import { formatPrice } from '../data/mockData';
 import { getYouTubeId } from '../utils/videoUtils';
 import { compressAndConvertImageFile, sanitizeImageUrl, FALLBACK_PRODUCT_IMAGE } from '../utils/imageUtils';
 import { soundFX } from '../utils/audioEffects';
+import AdminMediaManager from './AdminMediaManager';
 
 interface AdminPageViewProps {
   products: Product[];
@@ -90,7 +97,7 @@ export default function AdminPageView({
   const [isVerifying, setIsVerifying] = useState(false);
 
   // 2. Active Tab
-  const [activeTab, setActiveTab] = useState<'products' | 'hero' | 'discounts' | 'videos' | 'security'>('products');
+  const [activeTab, setActiveTab] = useState<'products' | 'media' | 'hero' | 'discounts' | 'videos' | 'security'>('products');
 
   // 3. Products Filters & Search
   const [productSearch, setProductSearch] = useState('');
@@ -425,29 +432,71 @@ export default function AdminPageView({
     soundFX.playSuccess();
   };
 
-  // Add new hero slide
+  // Add new hero slide (up to 8 slides)
   const handleAddNewHeroSlide = () => {
-    if (heroSlides.length >= 5) {
-      alert(isAr ? 'الحد الأقصى لشرائح الواجهة العلوية هو 5 شرائح' : 'Maximum 5 hero slides allowed');
+    if (heroSlides.length >= 8) {
+      alert(isAr ? 'الحد الأقصى لشرائح الواجهة العلوية هو 8 شرائح' : 'Maximum 8 hero slides allowed');
       return;
     }
     const newSlide: HeroSlideItem = {
       id: `slide-${Date.now()}`,
-      badgeAr: 'عرض خاص • متجر صدام العقاري',
-      badgeEn: 'Special Offer • Saddam Al-Aqari',
-      titleAr: 'منتج أو عرض استثنائي جديد',
-      titleEn: 'New Flagship Offer',
-      subtitleAr: 'أقوى العروض والخصومات الفورية مع التوصيل لكافة المحافظات والضمان',
-      subtitleEn: 'Exclusive discounts and express delivery across all provinces',
+      badgeAr: 'عرض خاص 2026 • متجر صدام العقاري',
+      badgeEn: 'Special 2026 • Saddam Al-Aqari',
+      titleAr: 'جهاز أو عرض جديد وحصري',
+      titleEn: 'New Exclusive Flagship Device',
+      subtitleAr: 'أقوى أداء ومواصفات مع ضمان الوكالة والتوصيل الفوري لجميع المحافظات',
+      subtitleEn: 'Ultimate performance with official warranty and express delivery',
+      featureBadge1Ar: 'أجهزة أصلية 100%',
+      featureBadge2Ar: 'ضمان رسمي باليمن',
+      showBadges: true,
       mediaType: 'image',
-      imageUrl: 'https://images.unsplash.com/photo-1610945415295-d9bbf067e59c?q=85&w=1920&auto=format&fit=crop',
-      buttonTextAr: 'طلب فوري بالواتساب',
+      imageUrl: 'https://images.unsplash.com/photo-1592750475338-74b7b21085ab?q=85&w=1920&auto=format&fit=crop',
+      buttonTextAr: 'طلب فوري عبر واتساب',
       buttonLink: 'https://wa.me/967774102030',
+      secondaryButtonTextAr: 'الأقسام',
+      secondaryButtonLink: '',
+      whatsappCustomTextAr: '',
       enabled: true,
     };
     const updated = [...heroSlides, newSlide];
     handleSaveHeroSlides(updated);
     setEditingSlide(newSlide);
+  };
+
+  // Duplicate hero slide
+  const handleDuplicateHeroSlide = (slide: HeroSlideItem) => {
+    if (heroSlides.length >= 8) {
+      alert(isAr ? 'الحد الأقصى لشرائح الواجهة العلوية هو 8 شرائح' : 'Maximum 8 hero slides allowed');
+      return;
+    }
+    const cloned: HeroSlideItem = {
+      ...slide,
+      id: `slide-${Date.now()}`,
+      titleAr: `${slide.titleAr} (${isAr ? 'نسخة' : 'Copy'})`,
+    };
+    const updated = [...heroSlides, cloned];
+    handleSaveHeroSlides(updated);
+    setEditingSlide(cloned);
+  };
+
+  // Reorder slide up/down
+  const handleMoveHeroSlide = (index: number, direction: 'up' | 'down') => {
+    const targetIndex = direction === 'up' ? index - 1 : index + 1;
+    if (targetIndex < 0 || targetIndex >= heroSlides.length) return;
+    const newSlides = [...heroSlides];
+    const temp = newSlides[index];
+    newSlides[index] = newSlides[targetIndex];
+    newSlides[targetIndex] = temp;
+    handleSaveHeroSlides(newSlides);
+  };
+
+  // Reset to default slides
+  const handleResetHeroSlidesToDefault = () => {
+    if (!confirm(isAr ? 'هل أنت متأكد من استعادة الشرائح الافتراضية للواجهة العلوية؟' : 'Reset hero banners to factory default?')) {
+      return;
+    }
+    handleSaveHeroSlides(DEFAULT_HERO_SLIDES);
+    setEditingSlide(null);
   };
 
   // Delete hero slide
@@ -700,6 +749,23 @@ export default function AdminPageView({
         <button
           onClick={() => {
             soundFX.playClick();
+            setActiveTab('media');
+            setEditingProduct(null);
+            setIsAddingNewProduct(false);
+          }}
+          className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer whitespace-nowrap ${
+            activeTab === 'media'
+              ? 'bg-amber-500 text-neutral-950 shadow-md'
+              : 'text-neutral-400 hover:text-white hover:bg-neutral-800'
+          }`}
+        >
+          <Film className="w-4 h-4" />
+          <span>{isAr ? 'روابط الصور والفيديوهات للواجهة' : 'UI Media & External URLs'}</span>
+        </button>
+
+        <button
+          onClick={() => {
+            soundFX.playClick();
             setActiveTab('hero');
           }}
           className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer whitespace-nowrap ${
@@ -709,7 +775,7 @@ export default function AdminPageView({
           }`}
         >
           <ImageIcon className="w-4 h-4" />
-          <span>{isAr ? `الواجهة العلوية (السلايدر ${heroSlides.length}/5)` : `Hero Banners (${heroSlides.length}/5)`}</span>
+          <span>{isAr ? `الواجهة العلوية (السلايدر ${heroSlides.length}/8)` : `Hero Banners (${heroSlides.length}/8)`}</span>
         </button>
 
         <button
@@ -1363,36 +1429,162 @@ export default function AdminPageView({
         )}
 
         {/* ========================================================================= */}
-        {/* TAB 2: HERO SLIDER & BANNERS (UP TO 5 ITEMS: IMAGES OR VIDEOS) */}
+        {/* TAB: UI MEDIA & EXTERNAL URLS (DEDICATED SECTION) */}
+        {/* ========================================================================= */}
+        {activeTab === 'media' && (
+          <AdminMediaManager
+            language={language}
+            products={products}
+            onUpdateProducts={onUpdateProducts}
+            shorts={shorts}
+            onUpdateShorts={onUpdateShorts}
+            heroSlides={heroSlides}
+            onUpdateHeroSlides={(newSlides) => {
+              setHeroSlides(newSlides);
+              saveStoredHeroSlides(newSlides);
+            }}
+            onShowToast={(msg) => showToast(msg)}
+          />
+        )}
+
+        {/* ========================================================================= */}
+        {/* TAB 2: HERO SLIDER & BANNERS (FULL COMPREHENSIVE CONTROL - UP TO 8 ITEMS) */}
         {/* ========================================================================= */}
         {activeTab === 'hero' && (
           <div className="space-y-6 animate-fadeIn">
+            {/* Top Control Bar */}
             <div className="bg-neutral-900 border border-neutral-800 rounded-3xl p-5 sm:p-7 shadow-2xl space-y-6">
-              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-4 border-b border-neutral-800">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b border-neutral-800">
                 <div>
-                  <h2 className="text-base sm:text-lg font-black text-white flex items-center gap-2">
-                    <ImageIcon className="w-5 h-5 text-amber-400" />
-                    <span>{isAr ? 'التحكم في الواجهة العلوية (السلايدر والبصريات)' : 'Hero Slider Management'}</span>
-                  </h2>
-                  <p className="text-xs text-neutral-400">
-                    {isAr
-                      ? 'يمكنك إضافة حتى 5 شرائح في الواجهة العلوية: صور أو فيديوهات يوتيوب مع النصوص والروابط والمعاينة الفورية.'
-                      : 'Configure up to 5 hero banners with image or video background and links.'}
-                  </p>
+                  <div className="flex items-center gap-2.5">
+                    <span className="p-2 rounded-xl bg-amber-500/20 text-amber-400 border border-amber-500/30">
+                      <ImageIcon className="w-5 h-5" />
+                    </span>
+                    <div>
+                      <h2 className="text-base sm:text-lg font-black text-white flex items-center gap-2">
+                        <span>{isAr ? 'التحكم الشامل في واجهة السلايدر العلوية (Hero Banner)' : 'Comprehensive Hero Slider Management'}</span>
+                        <span className="text-xs font-mono font-bold px-2 py-0.5 rounded-full bg-amber-500/20 text-amber-300 border border-amber-500/40">
+                          {heroSlides.length}/8
+                        </span>
+                      </h2>
+                      <p className="text-xs text-neutral-400 mt-0.5">
+                        {isAr
+                          ? 'تحكم كامل ومباشر في كل عنصر: الشارة العلوية، العنوان الرئيسي، الوصف، شارات الضمان، أزرار الطلب، روابط الواتساب، وصور وفيديوهات الخلفية.'
+                          : 'Full control over top badges, headlines, subtitles, warranty pills, action buttons, WhatsApp prompts, and media backgrounds.'}
+                      </p>
+                    </div>
+                  </div>
                 </div>
 
-                {heroSlides.length < 5 && (
+                <div className="flex items-center gap-2 shrink-0">
                   <button
-                    onClick={handleAddNewHeroSlide}
-                    className="px-4 py-2 rounded-xl bg-gradient-to-r from-amber-500 to-orange-600 hover:from-amber-400 hover:to-orange-500 text-neutral-950 font-black text-xs shadow-md active:scale-95 transition-all cursor-pointer flex items-center gap-1.5 shrink-0"
+                    onClick={handleResetHeroSlidesToDefault}
+                    className="px-3 py-2 rounded-xl bg-neutral-800 hover:bg-neutral-700 text-neutral-300 hover:text-white font-bold text-xs border border-neutral-700 active:scale-95 transition-all cursor-pointer flex items-center gap-1.5"
+                    title={isAr ? 'استعادة الشرائح الافتراضية' : 'Reset to Default'}
                   >
-                    <Plus className="w-4 h-4" />
-                    <span>{isAr ? 'إضافة شريحة جديدة' : 'Add Slide'}</span>
+                    <RefreshCw className="w-3.5 h-3.5" />
+                    <span>{isAr ? 'استعادة الافتراضي' : 'Reset'}</span>
                   </button>
-                )}
+
+                  {heroSlides.length < 8 && (
+                    <button
+                      onClick={handleAddNewHeroSlide}
+                      className="px-4 py-2 rounded-xl bg-gradient-to-r from-amber-500 to-orange-600 hover:from-amber-400 hover:to-orange-500 text-neutral-950 font-black text-xs shadow-md active:scale-95 transition-all cursor-pointer flex items-center gap-1.5"
+                    >
+                      <Plus className="w-4 h-4" />
+                      <span>{isAr ? 'إضافة شريحة جديدة' : 'Add Slide'}</span>
+                    </button>
+                  )}
+                </div>
               </div>
 
-              {/* Slides List */}
+              {/* Live Mini Preview Box */}
+              {editingSlide && (
+                <div className="p-4 rounded-2xl bg-neutral-950 border border-amber-500/30 space-y-3">
+                  <div className="flex items-center justify-between text-xs">
+                    <span className="font-bold text-amber-400 flex items-center gap-1.5">
+                      <Sparkles className="w-3.5 h-3.5" />
+                      {isAr ? `معاينة فورية حية للشريحة قيد التحرير: "${editingSlide.titleAr}"` : `Live Preview: ${editingSlide.titleAr}`}
+                    </span>
+                    <span className="text-[11px] text-neutral-400">
+                      {isAr ? 'التعديلات أدناه تُحفظ فوراً وتظهر في الواجهة' : 'Changes update live'}
+                    </span>
+                  </div>
+
+                  {/* Simulated Hero Card */}
+                  <div className="relative rounded-2xl overflow-hidden border border-neutral-800 bg-neutral-900 min-h-[200px] flex flex-col justify-end p-5 text-white">
+                    {/* Background Preview */}
+                    <div className="absolute inset-0 z-0">
+                      {editingSlide.mediaType === 'image' ? (
+                        <img
+                          src={editingSlide.imageUrl || FALLBACK_PRODUCT_IMAGE}
+                          alt="preview"
+                          className="w-full h-full object-cover filter brightness-75"
+                          referrerPolicy="no-referrer"
+                        />
+                      ) : (
+                        <div className="w-full h-full bg-gradient-to-br from-neutral-900 via-neutral-950 to-black flex items-center justify-center text-neutral-500 text-xs">
+                          <span>🎥 {isAr ? 'خلفية فيديو نشطة' : 'Video Background Active'}</span>
+                        </div>
+                      )}
+                      <div className="absolute inset-0 bg-gradient-to-t from-black/90 via-black/50 to-transparent" />
+                    </div>
+
+                    {/* Content Layer */}
+                    <div className="relative z-10 space-y-2">
+                      {editingSlide.badgeAr && (
+                        <div className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-black/60 border border-amber-500/40 text-[11px] font-bold text-amber-300">
+                          <span className="w-1.5 h-1.5 rounded-full bg-amber-400 animate-pulse" />
+                          <span>{editingSlide.badgeAr}</span>
+                        </div>
+                      )}
+
+                      <h3 className="text-xl sm:text-2xl font-black text-white drop-shadow-md leading-tight">
+                        {editingSlide.titleAr}
+                      </h3>
+
+                      {editingSlide.subtitleAr && (
+                        <p className="text-xs text-gray-200/90 max-w-xl line-clamp-2">
+                          {editingSlide.subtitleAr}
+                        </p>
+                      )}
+
+                      {/* Feature Pills */}
+                      {editingSlide.showBadges !== false && (
+                        <div className="flex flex-wrap gap-2 pt-1">
+                          {editingSlide.featureBadge1Ar && (
+                            <span className="bg-black/50 border border-white/20 px-2.5 py-0.5 rounded-lg text-[10px] font-semibold text-gray-200 flex items-center gap-1">
+                              <Cpu className="w-3 h-3 text-orange-400" />
+                              <span>{editingSlide.featureBadge1Ar}</span>
+                            </span>
+                          )}
+                          {editingSlide.featureBadge2Ar && (
+                            <span className="bg-emerald-950/70 border border-emerald-500/40 px-2.5 py-0.5 rounded-lg text-[10px] font-bold text-emerald-300 flex items-center gap-1">
+                              <ShieldCheck className="w-3 h-3 text-emerald-400" />
+                              <span>{editingSlide.featureBadge2Ar}</span>
+                            </span>
+                          )}
+                        </div>
+                      )}
+
+                      {/* Buttons */}
+                      <div className="flex items-center gap-2 pt-2">
+                        <span className="bg-gradient-to-r from-orange-500 to-amber-600 text-white font-bold px-3 py-1.5 rounded-lg text-[11px] shadow-sm flex items-center gap-1">
+                          <span>{editingSlide.buttonTextAr || (isAr ? 'طلب فوري عبر واتساب' : 'Order Now')}</span>
+                        </span>
+                        <span className="bg-white/15 text-white font-medium px-2.5 py-1.5 rounded-lg text-[10px] border border-white/20">
+                          {editingSlide.secondaryButtonTextAr || (isAr ? 'الأقسام' : 'Categories')}
+                        </span>
+                        <span className="w-7 h-7 rounded-full bg-emerald-600 text-white flex items-center justify-center text-xs shadow-md">
+                          <MessageSquare className="w-3.5 h-3.5 fill-white" />
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* Slides List with Full Controls */}
               <div className="space-y-4">
                 {heroSlides.map((slide, idx) => {
                   const isEditingThis = editingSlide?.id === slide.id;
@@ -1400,23 +1592,86 @@ export default function AdminPageView({
                   return (
                     <div
                       key={slide.id || idx}
-                      className="p-4 rounded-2xl bg-neutral-950 border border-neutral-800 space-y-4 transition-all"
+                      className={`p-4 sm:p-5 rounded-2xl bg-neutral-950 border transition-all ${
+                        isEditingThis
+                          ? 'border-amber-500 shadow-[0_0_20px_rgba(245,158,11,0.15)] ring-1 ring-amber-500/50'
+                          : 'border-neutral-800 hover:border-neutral-700'
+                      }`}
                     >
-                      {/* Top bar of slide card */}
-                      <div className="flex items-center justify-between">
+                      {/* Top Summary Bar of Slide Card */}
+                      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
                         <div className="flex items-center gap-3">
-                          <span className="w-6 h-6 rounded-full bg-amber-500/20 border border-amber-500/40 text-amber-400 text-xs font-mono font-bold flex items-center justify-center">
+                          {/* Slide Number */}
+                          <span className="w-7 h-7 rounded-xl bg-amber-500/20 border border-amber-500/40 text-amber-400 text-xs font-mono font-black flex items-center justify-center shrink-0">
                             {idx + 1}
                           </span>
-                          <div>
-                            <h4 className="font-bold text-sm text-white">{slide.titleAr}</h4>
-                            <span className="text-[10px] text-neutral-400">
-                              {slide.mediaType === 'video' ? (isAr ? '🎥 خلفية فيديو' : 'Video') : (isAr ? '🖼️ خلفية صورة' : 'Image')}
+
+                          {/* Thumbnail preview */}
+                          <div className="w-12 h-12 rounded-xl overflow-hidden bg-neutral-900 border border-neutral-800 shrink-0 relative">
+                            {slide.mediaType === 'image' ? (
+                              <img
+                                src={slide.imageUrl || FALLBACK_PRODUCT_IMAGE}
+                                alt="thumb"
+                                className="w-full h-full object-cover"
+                                referrerPolicy="no-referrer"
+                              />
+                            ) : (
+                              <div className="w-full h-full flex items-center justify-center text-xs bg-neutral-800 text-amber-400">
+                                <Video className="w-5 h-5" />
+                              </div>
+                            )}
+                          </div>
+
+                          {/* Title & Tag */}
+                          <div className="min-w-0">
+                            <div className="flex items-center gap-2">
+                              <h4 className="font-black text-sm text-white truncate max-w-xs sm:max-w-md">
+                                {slide.titleAr || (isAr ? 'شريحة بدون عنوان' : 'Untitled')}
+                              </h4>
+                              {!slide.enabled && (
+                                <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-neutral-800 text-neutral-400">
+                                  {isAr ? 'معطل' : 'Disabled'}
+                                </span>
+                              )}
+                            </div>
+                            <span className="text-[11px] text-amber-400/90 font-medium truncate block">
+                              🏷️ {slide.badgeAr || (isAr ? 'بدون شارة' : 'No badge')}
                             </span>
                           </div>
                         </div>
 
-                        <div className="flex items-center gap-2">
+                        {/* Action Buttons */}
+                        <div className="flex items-center gap-1.5 flex-wrap self-end sm:self-center">
+                          {/* Reorder Up */}
+                          <button
+                            disabled={idx === 0}
+                            onClick={() => handleMoveHeroSlide(idx, 'up')}
+                            className="p-1.5 rounded-lg bg-neutral-900 hover:bg-neutral-800 text-neutral-400 hover:text-white disabled:opacity-30 disabled:pointer-events-none transition-colors cursor-pointer"
+                            title={isAr ? 'تحريك لأعلى' : 'Move Up'}
+                          >
+                            <ArrowUp className="w-4 h-4" />
+                          </button>
+
+                          {/* Reorder Down */}
+                          <button
+                            disabled={idx === heroSlides.length - 1}
+                            onClick={() => handleMoveHeroSlide(idx, 'down')}
+                            className="p-1.5 rounded-lg bg-neutral-900 hover:bg-neutral-800 text-neutral-400 hover:text-white disabled:opacity-30 disabled:pointer-events-none transition-colors cursor-pointer"
+                            title={isAr ? 'تحريك لأسفل' : 'Move Down'}
+                          >
+                            <ArrowDown className="w-4 h-4" />
+                          </button>
+
+                          {/* Duplicate */}
+                          <button
+                            onClick={() => handleDuplicateHeroSlide(slide)}
+                            className="p-1.5 rounded-lg bg-neutral-900 hover:bg-neutral-800 text-neutral-400 hover:text-amber-300 transition-colors cursor-pointer"
+                            title={isAr ? 'نسخ الشريحة' : 'Duplicate Slide'}
+                          >
+                            <Copy className="w-4 h-4" />
+                          </button>
+
+                          {/* Toggle Active */}
                           <button
                             onClick={() => {
                               const updated = heroSlides.map((s) =>
@@ -1429,147 +1684,347 @@ export default function AdminPageView({
                                 ? 'bg-emerald-950/40 border-emerald-800 text-emerald-400'
                                 : 'bg-neutral-800 border-neutral-700 text-neutral-400'
                             }`}
+                            title={slide.enabled ? (isAr ? 'انقر للتعطيل' : 'Disable') : (isAr ? 'انقر للتفعيل' : 'Enable')}
                           >
                             {slide.enabled ? (isAr ? 'مفعل' : 'Active') : (isAr ? 'معطل' : 'Disabled')}
                           </button>
 
+                          {/* Expand/Collapse Edit */}
                           <button
-                            onClick={() => setEditingSlide(isEditingThis ? null : slide)}
-                            className="p-1.5 rounded-lg bg-neutral-800 hover:bg-neutral-700 text-neutral-300 hover:text-amber-400 transition-colors cursor-pointer"
+                            onClick={() => {
+                              soundFX.playClick();
+                              setEditingSlide(isEditingThis ? null : slide);
+                            }}
+                            className={`px-3 py-1 rounded-lg text-xs font-bold transition-all cursor-pointer flex items-center gap-1 ${
+                              isEditingThis
+                                ? 'bg-amber-500 text-neutral-950 shadow'
+                                : 'bg-neutral-800 hover:bg-neutral-700 text-neutral-200'
+                            }`}
                           >
-                            <Edit className="w-4 h-4" />
+                            <Edit className="w-3.5 h-3.5" />
+                            <span>{isEditingThis ? (isAr ? 'إغلاق' : 'Close') : (isAr ? 'تعديل كامل' : 'Edit')}</span>
                           </button>
 
+                          {/* Delete */}
                           <button
                             onClick={() => handleDeleteHeroSlide(slide.id)}
-                            className="p-1.5 rounded-lg bg-neutral-800 hover:bg-red-950 text-neutral-400 hover:text-red-400 transition-colors cursor-pointer"
+                            className="p-1.5 rounded-lg bg-neutral-900 hover:bg-red-950 text-neutral-500 hover:text-red-400 transition-colors cursor-pointer"
+                            title={isAr ? 'حذف الشريحة' : 'Delete Slide'}
                           >
                             <Trash2 className="w-4 h-4" />
                           </button>
                         </div>
                       </div>
 
-                      {/* Editing Slide Details */}
+                      {/* COMPREHENSIVE SLIDE EDITOR (EXPANDED) */}
                       {isEditingThis && (
-                        <div className="pt-3 border-t border-neutral-800 grid grid-cols-1 sm:grid-cols-2 gap-4 text-xs">
-                          {/* Media Type */}
-                          <div>
-                            <label className="block font-bold text-neutral-300 mb-1">{isAr ? 'نوع الوسائط' : 'Media Type'}</label>
-                            <select
-                              value={slide.mediaType}
-                              onChange={(e) => {
-                                const val = e.target.value as 'image' | 'video';
-                                const updated = heroSlides.map((s) => (s.id === slide.id ? { ...s, mediaType: val } : s));
-                                handleSaveHeroSlides(updated);
-                              }}
-                              className="w-full px-3 py-1.5 rounded-xl bg-neutral-900 border border-neutral-700 text-neutral-200"
-                            >
-                              <option value="image">{isAr ? 'صورة عالية الجودة' : 'Image'}</option>
-                              <option value="video">{isAr ? 'فيديو (يوتيوب أو رابط مباشر)' : 'Video'}</option>
-                            </select>
-                          </div>
+                        <div className="pt-5 mt-4 border-t border-neutral-800 space-y-6 text-xs">
+                          {/* 1. Header & Text Content */}
+                          <div className="space-y-3">
+                            <h5 className="font-black text-white text-xs flex items-center gap-1.5 text-amber-400">
+                              <Tag className="w-3.5 h-3.5" />
+                              <span>{isAr ? '1. النصوص والشارات الرئيسية' : '1. Headings & Badges'}</span>
+                            </h5>
 
-                          {/* Media URL */}
-                          <div>
-                            <label className="block font-bold text-neutral-300 mb-1">
-                              {slide.mediaType === 'video' ? (isAr ? 'رابط الفيديو' : 'Video URL') : (isAr ? 'رابط الصورة' : 'Image URL')}
-                            </label>
-                            <div className="flex items-center gap-2">
-                              <input
-                                type="text"
-                                value={slide.mediaType === 'video' ? (slide.videoUrl || '') : (slide.imageUrl || '')}
+                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                              {/* Top Badge */}
+                              <div>
+                                <label className="block font-bold text-neutral-300 mb-1">
+                                  {isAr ? 'الشارة الترويجية العلوية (Top Badge)' : 'Top Badge Tag'}
+                                </label>
+                                <input
+                                  type="text"
+                                  value={slide.badgeAr || ''}
+                                  onChange={(e) => {
+                                    const val = e.target.value;
+                                    const updated = heroSlides.map((s) => (s.id === slide.id ? { ...s, badgeAr: val } : s));
+                                    handleSaveHeroSlides(updated);
+                                  }}
+                                  placeholder={isAr ? 'مثال: الجيل الجديد 2026 • متجر صدام العقاري' : 'e.g. Next-Gen 2026'}
+                                  className="w-full px-3 py-2 rounded-xl bg-neutral-900 border border-neutral-700 text-neutral-100 font-bold focus:border-amber-500 focus:outline-none"
+                                />
+                              </div>
+
+                              {/* Main Headline */}
+                              <div>
+                                <label className="block font-bold text-neutral-300 mb-1">
+                                  {isAr ? 'العنوان الرئيسي للشريحة (Headline)' : 'Main Headline'}
+                                </label>
+                                <input
+                                  type="text"
+                                  value={slide.titleAr}
+                                  onChange={(e) => {
+                                    const val = e.target.value;
+                                    const updated = heroSlides.map((s) => (s.id === slide.id ? { ...s, titleAr: val } : s));
+                                    handleSaveHeroSlides(updated);
+                                  }}
+                                  placeholder={isAr ? 'مثال: آبل آيفون 16 برو ماكس' : 'e.g. Apple iPhone 16 Pro Max'}
+                                  className="w-full px-3 py-2 rounded-xl bg-neutral-900 border border-neutral-700 text-neutral-100 font-black text-sm focus:border-amber-500 focus:outline-none"
+                                />
+                              </div>
+                            </div>
+
+                            {/* Paragraph Subtitle Description */}
+                            <div>
+                              <label className="block font-bold text-neutral-300 mb-1">
+                                {isAr ? 'الوصف الترويجي والمواصفات (Subtitle)' : 'Subtitle Description'}
+                              </label>
+                              <textarea
+                                rows={2}
+                                value={slide.subtitleAr}
                                 onChange={(e) => {
                                   const val = e.target.value;
-                                  const updated = heroSlides.map((s) =>
-                                    s.id === slide.id
-                                      ? slide.mediaType === 'video'
-                                        ? { ...s, videoUrl: val }
-                                        : { ...s, imageUrl: val }
-                                      : s
-                                  );
+                                  const updated = heroSlides.map((s) => (s.id === slide.id ? { ...s, subtitleAr: val } : s));
                                   handleSaveHeroSlides(updated);
                                 }}
-                                className="flex-1 px-3 py-1.5 rounded-xl bg-neutral-900 border border-neutral-700 font-mono text-xs"
+                                placeholder={isAr ? 'مثال: قوة التيتانيوم الصحراوي، معالج A18 Pro الخارق وشاشة ريتينا 6.9 XDR إنش مع ضمان الوكالة' : 'Describe the flagship phone or offer...'}
+                                className="w-full px-3 py-2 rounded-xl bg-neutral-900 border border-neutral-700 text-neutral-100 leading-relaxed focus:border-amber-500 focus:outline-none"
                               />
-                              {slide.mediaType === 'image' && (
-                                <label className="px-2.5 py-1.5 rounded-xl bg-neutral-800 hover:bg-neutral-700 text-neutral-300 text-xs font-bold border border-neutral-600 cursor-pointer shrink-0">
-                                  <span>{isAr ? '📸 رفع' : 'Upload'}</span>
-                                  <input
-                                    type="file"
-                                    accept="image/*"
-                                    className="hidden"
-                                    onChange={async (e) => {
-                                      const file = e.target.files?.[0];
-                                      if (!file) return;
-                                      const dataUrl = await compressAndConvertImageFile(file, 1920, 0.85);
-                                      const updated = heroSlides.map((s) => (s.id === slide.id ? { ...s, imageUrl: dataUrl } : s));
-                                      handleSaveHeroSlides(updated);
-                                    }}
-                                  />
-                                </label>
-                              )}
                             </div>
                           </div>
 
-                          {/* Headline Arabic */}
-                          <div>
-                            <label className="block font-bold text-neutral-300 mb-1">{isAr ? 'العنوان الرئيسي' : 'Headline'}</label>
-                            <input
-                              type="text"
-                              value={slide.titleAr}
-                              onChange={(e) => {
-                                const val = e.target.value;
-                                const updated = heroSlides.map((s) => (s.id === slide.id ? { ...s, titleAr: val } : s));
-                                handleSaveHeroSlides(updated);
-                              }}
-                              className="w-full px-3 py-1.5 rounded-xl bg-neutral-900 border border-neutral-700"
-                            />
+                          {/* 2. Feature Badges & Warranty Pills */}
+                          <div className="space-y-3 pt-4 border-t border-neutral-800/80">
+                            <div className="flex items-center justify-between">
+                              <h5 className="font-black text-white text-xs flex items-center gap-1.5 text-emerald-400">
+                                <ShieldCheck className="w-3.5 h-3.5" />
+                                <span>{isAr ? '2. شارات الضمان والمميزات (Badges)' : '2. Feature & Warranty Badges'}</span>
+                              </h5>
+
+                              {/* Toggle show/hide badges */}
+                              <label className="flex items-center gap-2 cursor-pointer select-none">
+                                <input
+                                  type="checkbox"
+                                  checked={slide.showBadges !== false}
+                                  onChange={(e) => {
+                                    const val = e.target.checked;
+                                    const updated = heroSlides.map((s) => (s.id === slide.id ? { ...s, showBadges: val } : s));
+                                    handleSaveHeroSlides(updated);
+                                  }}
+                                  className="accent-amber-500 w-4 h-4 rounded cursor-pointer"
+                                />
+                                <span className="text-neutral-300 font-bold">
+                                  {isAr ? 'إظهار الشارات في الشريحة' : 'Show badges on slide'}
+                                </span>
+                              </label>
+                            </div>
+
+                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                              <div>
+                                <label className="block font-bold text-neutral-300 mb-1">
+                                  {isAr ? 'شارة الميزة الأولى (Feature Badge 1)' : 'Feature Badge 1'}
+                                </label>
+                                <div className="flex items-center gap-2">
+                                  <span className="p-2 rounded-xl bg-neutral-900 border border-neutral-700 text-orange-400">
+                                    <Cpu className="w-4 h-4" />
+                                  </span>
+                                  <input
+                                    type="text"
+                                    value={slide.featureBadge1Ar ?? 'أجهزة أصلية 100%'}
+                                    onChange={(e) => {
+                                      const val = e.target.value;
+                                      const updated = heroSlides.map((s) => (s.id === slide.id ? { ...s, featureBadge1Ar: val } : s));
+                                      handleSaveHeroSlides(updated);
+                                    }}
+                                    placeholder={isAr ? 'مثال: أجهزة أصلية 100%' : '100% Genuine'}
+                                    className="flex-1 px-3 py-2 rounded-xl bg-neutral-900 border border-neutral-700 text-neutral-100 font-semibold focus:border-amber-500 focus:outline-none"
+                                  />
+                                </div>
+                              </div>
+
+                              <div>
+                                <label className="block font-bold text-neutral-300 mb-1">
+                                  {isAr ? 'شارة الميزة الثانية (Feature Badge 2)' : 'Feature Badge 2'}
+                                </label>
+                                <div className="flex items-center gap-2">
+                                  <span className="p-2 rounded-xl bg-neutral-900 border border-neutral-700 text-emerald-400">
+                                    <ShieldCheck className="w-4 h-4" />
+                                  </span>
+                                  <input
+                                    type="text"
+                                    value={slide.featureBadge2Ar ?? 'ضمان رسمي باليمن'}
+                                    onChange={(e) => {
+                                      const val = e.target.value;
+                                      const updated = heroSlides.map((s) => (s.id === slide.id ? { ...s, featureBadge2Ar: val } : s));
+                                      handleSaveHeroSlides(updated);
+                                    }}
+                                    placeholder={isAr ? 'مثال: ضمان رسمي باليمن' : 'Official Warranty'}
+                                    className="flex-1 px-3 py-2 rounded-xl bg-neutral-900 border border-neutral-700 text-neutral-100 font-semibold focus:border-amber-500 focus:outline-none"
+                                  />
+                                </div>
+                              </div>
+                            </div>
                           </div>
 
-                          {/* Subtitle Arabic */}
-                          <div>
-                            <label className="block font-bold text-neutral-300 mb-1">{isAr ? 'الوصف الترويجي' : 'Subtitle'}</label>
-                            <input
-                              type="text"
-                              value={slide.subtitleAr}
-                              onChange={(e) => {
-                                const val = e.target.value;
-                                const updated = heroSlides.map((s) => (s.id === slide.id ? { ...s, subtitleAr: val } : s));
-                                handleSaveHeroSlides(updated);
-                              }}
-                              className="w-full px-3 py-1.5 rounded-xl bg-neutral-900 border border-neutral-700"
-                            />
+                          {/* 3. Action Buttons & WhatsApp Routing */}
+                          <div className="space-y-3 pt-4 border-t border-neutral-800/80">
+                            <h5 className="font-black text-white text-xs flex items-center gap-1.5 text-orange-400">
+                              <ExternalLink className="w-3.5 h-3.5" />
+                              <span>{isAr ? '3. الأزرار والتفاعل والواتساب' : '3. Action Buttons & WhatsApp Routing'}</span>
+                            </h5>
+
+                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                              {/* Primary Button */}
+                              <div>
+                                <label className="block font-bold text-neutral-300 mb-1">
+                                  {isAr ? 'نص الزر الأساسي (Primary Button)' : 'Primary Button Label'}
+                                </label>
+                                <input
+                                  type="text"
+                                  value={slide.buttonTextAr || ''}
+                                  onChange={(e) => {
+                                    const val = e.target.value;
+                                    const updated = heroSlides.map((s) => (s.id === slide.id ? { ...s, buttonTextAr: val } : s));
+                                    handleSaveHeroSlides(updated);
+                                  }}
+                                  placeholder={isAr ? 'مثال: طلب فوري عبر واتساب' : 'Order Now'}
+                                  className="w-full px-3 py-2 rounded-xl bg-neutral-900 border border-neutral-700 text-neutral-100 font-bold focus:border-amber-500 focus:outline-none"
+                                />
+                              </div>
+
+                              <div>
+                                <label className="block font-bold text-neutral-300 mb-1">
+                                  {isAr ? 'رابط الزر الأساسي (WhatsApp أو رابط صفحة)' : 'Primary Button Link'}
+                                </label>
+                                <input
+                                  type="text"
+                                  value={slide.buttonLink || ''}
+                                  onChange={(e) => {
+                                    const val = e.target.value;
+                                    const updated = heroSlides.map((s) => (s.id === slide.id ? { ...s, buttonLink: val } : s));
+                                    handleSaveHeroSlides(updated);
+                                  }}
+                                  placeholder="https://wa.me/967774102030"
+                                  className="w-full px-3 py-2 rounded-xl bg-neutral-900 border border-neutral-700 font-mono text-xs text-neutral-100 focus:border-amber-500 focus:outline-none"
+                                />
+                              </div>
+
+                              {/* Secondary Button */}
+                              <div>
+                                <label className="block font-bold text-neutral-300 mb-1">
+                                  {isAr ? 'نص الزر الثانوي (Secondary Button)' : 'Secondary Button Label'}
+                                </label>
+                                <input
+                                  type="text"
+                                  value={slide.secondaryButtonTextAr || ''}
+                                  onChange={(e) => {
+                                    const val = e.target.value;
+                                    const updated = heroSlides.map((s) => (s.id === slide.id ? { ...s, secondaryButtonTextAr: val } : s));
+                                    handleSaveHeroSlides(updated);
+                                  }}
+                                  placeholder={isAr ? 'مثال: الأقسام' : 'Categories'}
+                                  className="w-full px-3 py-2 rounded-xl bg-neutral-900 border border-neutral-700 text-neutral-100 focus:border-amber-500 focus:outline-none"
+                                />
+                              </div>
+
+                              <div>
+                                <label className="block font-bold text-neutral-300 mb-1">
+                                  {isAr ? 'رابط الزر الثانوي (اختياري، افتراضياً يفتح الأقسام)' : 'Secondary Button Link (Optional)'}
+                                </label>
+                                <input
+                                  type="text"
+                                  value={slide.secondaryButtonLink || ''}
+                                  onChange={(e) => {
+                                    const val = e.target.value;
+                                    const updated = heroSlides.map((s) => (s.id === slide.id ? { ...s, secondaryButtonLink: val } : s));
+                                    handleSaveHeroSlides(updated);
+                                  }}
+                                  placeholder={isAr ? 'مثال: #categories أو رابط مخصص' : '#categories'}
+                                  className="w-full px-3 py-2 rounded-xl bg-neutral-900 border border-neutral-700 font-mono text-xs text-neutral-100 focus:border-amber-500 focus:outline-none"
+                                />
+                              </div>
+                            </div>
+
+                            {/* Custom WhatsApp pre-filled message */}
+                            <div>
+                              <label className="block font-bold text-neutral-300 mb-1">
+                                {isAr ? 'نص رسالة الواتساب التلقائية عند النقر على أيقونة الواتساب' : 'Custom WhatsApp Pre-filled Message'}
+                              </label>
+                              <input
+                                type="text"
+                                value={slide.whatsappCustomTextAr || ''}
+                                onChange={(e) => {
+                                  const val = e.target.value;
+                                  const updated = heroSlides.map((s) => (s.id === slide.id ? { ...s, whatsappCustomTextAr: val } : s));
+                                  handleSaveHeroSlides(updated);
+                                }}
+                                placeholder={isAr ? `السلام عليكم متجر صدام العقاري، أود الاستفسار والطلب: ${slide.titleAr}` : 'Pre-filled WhatsApp message...'}
+                                className="w-full px-3 py-2 rounded-xl bg-neutral-900 border border-neutral-700 text-neutral-100 focus:border-amber-500 focus:outline-none"
+                              />
+                            </div>
                           </div>
 
-                          {/* Button Text & Link */}
-                          <div>
-                            <label className="block font-bold text-neutral-300 mb-1">{isAr ? 'نص زر الشريحة' : 'Button Text'}</label>
-                            <input
-                              type="text"
-                              value={slide.buttonTextAr || ''}
-                              onChange={(e) => {
-                                const val = e.target.value;
-                                const updated = heroSlides.map((s) => (s.id === slide.id ? { ...s, buttonTextAr: val } : s));
-                                handleSaveHeroSlides(updated);
-                              }}
-                              placeholder={isAr ? 'مثال: طلب فوري عبر واتساب' : 'e.g. Order Now'}
-                              className="w-full px-3 py-1.5 rounded-xl bg-neutral-900 border border-neutral-700"
-                            />
-                          </div>
+                          {/* 4. Media & Background (Image or Video) */}
+                          <div className="space-y-3 pt-4 border-t border-neutral-800/80">
+                            <h5 className="font-black text-white text-xs flex items-center gap-1.5 text-cyan-400">
+                              <ImageIcon className="w-3.5 h-3.5" />
+                              <span>{isAr ? '4. وسائط وخلفية الشريحة (صورة أو فيديو)' : '4. Media & Background'}</span>
+                            </h5>
 
-                          <div>
-                            <label className="block font-bold text-neutral-300 mb-1">{isAr ? 'رابط الزر (واتساب أو رابط داخلي)' : 'Button Link'}</label>
-                            <input
-                              type="text"
-                              value={slide.buttonLink || ''}
-                              onChange={(e) => {
-                                const val = e.target.value;
-                                const updated = heroSlides.map((s) => (s.id === slide.id ? { ...s, buttonLink: val } : s));
-                                handleSaveHeroSlides(updated);
-                              }}
-                              placeholder="https://wa.me/967774102030"
-                              className="w-full px-3 py-1.5 rounded-xl bg-neutral-900 border border-neutral-700 font-mono text-xs"
-                            />
+                            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                              {/* Media Type */}
+                              <div>
+                                <label className="block font-bold text-neutral-300 mb-1">{isAr ? 'نوع الوسائط' : 'Media Type'}</label>
+                                <select
+                                  value={slide.mediaType}
+                                  onChange={(e) => {
+                                    const val = e.target.value as 'image' | 'video';
+                                    const updated = heroSlides.map((s) => (s.id === slide.id ? { ...s, mediaType: val } : s));
+                                    handleSaveHeroSlides(updated);
+                                  }}
+                                  className="w-full px-3 py-2 rounded-xl bg-neutral-900 border border-neutral-700 text-neutral-100 font-bold focus:border-amber-500 focus:outline-none"
+                                >
+                                  <option value="image">{isAr ? '🖼️ صورة فائقة الدقة (مستحسن)' : 'Image'}</option>
+                                  <option value="video">{isAr ? '🎥 فيديو (يوتيوب أو رابط مباشر)' : 'Video'}</option>
+                                </select>
+                              </div>
+
+                              {/* Media URL + Upload */}
+                              <div className="sm:col-span-2">
+                                <label className="block font-bold text-neutral-300 mb-1">
+                                  {slide.mediaType === 'video'
+                                    ? (isAr ? 'رابط الفيديو (يوتيوب أو MP4 مباشر)' : 'Video URL')
+                                    : (isAr ? 'رابط الصورة أو رفعها من المعرض' : 'Image URL or Upload')}
+                                </label>
+                                <div className="flex items-center gap-2">
+                                  <input
+                                    type="text"
+                                    value={slide.mediaType === 'video' ? (slide.videoUrl || '') : (slide.imageUrl || '')}
+                                    onChange={(e) => {
+                                      const val = e.target.value;
+                                      const updated = heroSlides.map((s) =>
+                                        s.id === slide.id
+                                          ? slide.mediaType === 'video'
+                                            ? { ...s, videoUrl: val }
+                                            : { ...s, imageUrl: val }
+                                          : s
+                                      );
+                                      handleSaveHeroSlides(updated);
+                                    }}
+                                    placeholder={slide.mediaType === 'video' ? 'https://youtube.com/watch?v=...' : 'https://images.unsplash.com/...'}
+                                    className="flex-1 px-3 py-2 rounded-xl bg-neutral-900 border border-neutral-700 font-mono text-xs text-neutral-100 focus:border-amber-500 focus:outline-none"
+                                  />
+                                  {slide.mediaType === 'image' && (
+                                    <label className="px-3 py-2 rounded-xl bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-400 hover:to-orange-400 text-neutral-950 text-xs font-black shadow-md cursor-pointer shrink-0 active:scale-95 transition-all flex items-center gap-1">
+                                      <Camera className="w-3.5 h-3.5" />
+                                      <span>{isAr ? 'رفع صورة' : 'Upload'}</span>
+                                      <input
+                                        type="file"
+                                        accept="image/*"
+                                        className="hidden"
+                                        onChange={async (e) => {
+                                          const file = e.target.files?.[0];
+                                          if (!file) return;
+                                          const dataUrl = await compressAndConvertImageFile(file, 1920, 0.85);
+                                          const updated = heroSlides.map((s) => (s.id === slide.id ? { ...s, imageUrl: dataUrl } : s));
+                                          handleSaveHeroSlides(updated);
+                                        }}
+                                      />
+                                    </label>
+                                  )}
+                                </div>
+                              </div>
+                            </div>
                           </div>
                         </div>
                       )}

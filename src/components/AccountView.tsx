@@ -8,10 +8,9 @@ interface AccountViewProps {
   currency: Currency;
   onBackToStore: () => void;
   onSelectProduct: (product: any) => void;
-  onOpenAdmin?: () => void;
 }
 
-export default function AccountView({ language, currency, onBackToStore, onSelectProduct, onOpenAdmin }: AccountViewProps) {
+export default function AccountView({ language, currency, onBackToStore, onSelectProduct }: AccountViewProps) {
   const isAr = language === 'ar';
   const [activeTab, setActiveTab] = useState<'orders' | 'addresses' | 'warranty'>('orders');
 

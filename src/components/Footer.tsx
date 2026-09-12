@@ -7,10 +7,9 @@ interface FooterProps {
   language: Language;
   onSelectCategory: (catId: CategoryId) => void;
   onNavigate: (view: PageView) => void;
-  onOpenAdmin?: () => void;
 }
 
-export default function Footer({ language, onSelectCategory, onNavigate, onOpenAdmin }: FooterProps) {
+export default function Footer({ language, onSelectCategory, onNavigate }: FooterProps) {
   const isAr = language === 'ar';
 
   return (

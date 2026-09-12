@@ -1,5 +1,5 @@
-import { useState } from 'react';
-import { Sparkles, MessageCircle, ExternalLink, X, Shield } from 'lucide-react';
+import React, { useState, useRef, useEffect } from 'react';
+import { Sparkles, MessageCircle, ExternalLink, X } from 'lucide-react';
 import { Language } from '../types';
 import { OFFICIAL_SOCIAL_CHANNELS } from '../data/socialMediaData';
 import { soundFX } from '../utils/audioEffects';
@@ -13,10 +13,91 @@ export default function FloatingSocialDock({ language, onOpenAdmin }: FloatingSo
   const isAr = language === 'ar';
   const [isOpen, setIsOpen] = useState(false);
 
-  const toggleOpen = () => {
+  // Stealth 15-second hold entrance to Admin
+  // ZERO hints, ZERO vibration, ZERO counting, completely natural appearance
+  const holdTimerRef = useRef<NodeJS.Timeout | null>(null);
+  const holdStartRef = useRef<number | null>(null);
+  const startCoordsRef = useRef<{ x: number; y: number } | null>(null);
+  const adminTriggeredRef = useRef<boolean>(false);
+  const wasLongHoldRef = useRef<boolean>(false);
+
+  const clearHoldTimer = () => {
+    if (holdTimerRef.current) {
+      clearTimeout(holdTimerRef.current);
+      holdTimerRef.current = null;
+    }
+  };
+
+  const startHold = (clientX?: number, clientY?: number) => {
+    clearHoldTimer();
+    holdStartRef.current = Date.now();
+    adminTriggeredRef.current = false;
+    wasLongHoldRef.current = false;
+
+    if (clientX !== undefined && clientY !== undefined) {
+      startCoordsRef.current = { x: clientX, y: clientY };
+    } else {
+      startCoordsRef.current = null;
+    }
+
+    // 15 seconds (15000 ms) silent timer
+    // Absolutely NO vibration, NO countdown, NO visual changes, NO hints
+    holdTimerRef.current = setTimeout(() => {
+      adminTriggeredRef.current = true;
+      holdTimerRef.current = null;
+      holdStartRef.current = null;
+      setIsOpen(false);
+      if (onOpenAdmin) {
+        onOpenAdmin();
+      }
+    }, 15000);
+  };
+
+  const endHold = () => {
+    clearHoldTimer();
+    const elapsed = holdStartRef.current ? Date.now() - holdStartRef.current : 0;
+    holdStartRef.current = null;
+
+    if (adminTriggeredRef.current) {
+      // Just triggered admin; consume event quietly
+      adminTriggeredRef.current = false;
+      wasLongHoldRef.current = true;
+      return;
+    }
+
+    // If held for longer than a quick tap (> 400ms) but under 15s, user was attempting secret hold
+    // Don't open the social modal in this case
+    if (elapsed > 400) {
+      wasLongHoldRef.current = true;
+      return;
+    }
+
+    wasLongHoldRef.current = false;
+  };
+
+  const cancelHold = () => {
+    clearHoldTimer();
+    holdStartRef.current = null;
+    adminTriggeredRef.current = false;
+    wasLongHoldRef.current = false;
+  };
+
+  const handleClick = (e: React.MouseEvent) => {
+    e.preventDefault();
+    if (adminTriggeredRef.current || wasLongHoldRef.current) {
+      adminTriggeredRef.current = false;
+      wasLongHoldRef.current = false;
+      return;
+    }
     soundFX.playClick();
     setIsOpen((prev) => !prev);
   };
+
+  useEffect(() => {
+    return () => {
+      clearHoldTimer();
+    };
+  }, []);
 
   const getPlatformIcon = (platform: string, className: string = 'w-4 h-4') => {
     switch (platform) {
@@ -106,29 +187,43 @@ export default function FloatingSocialDock({ language, onOpenAdmin }: FloatingSo
             <span>{isAr ? 'خدمة عملاء فورية' : '24/7 Support'}</span>
             <span className="font-mono text-emerald-400 font-bold">774102030</span>
           </div>
-
-          {/* Discreet Admin Entrance Link */}
-          {onOpenAdmin && (
-            <div className="pt-2 border-t border-white/5 text-center">
-              <button
-                onClick={() => {
-                  setIsOpen(false);
-                  onOpenAdmin();
-                }}
-                className="text-[11px] text-zinc-400 hover:text-amber-400 transition-colors inline-flex items-center gap-1.5 py-1 px-3 rounded-lg hover:bg-white/5 cursor-pointer"
-              >
-                <Shield className="w-3 h-3 text-amber-400" />
-                <span>{isAr ? 'لوحة تحكم إدارة المتجر' : 'Store Admin Dashboard'}</span>
-              </button>
-            </div>
-          )}
         </div>
       )}
 
-      {/* Floating Yellow/Amber Social Button - Clean, Natural, No Timer Boxes */}
+      {/* Floating Yellow/Amber Social Button - Clean, Natural, 100% Stealth */}
       <button
         id="saddam-floating-social-button"
-        onClick={toggleOpen}
+        onClick={handleClick}
+        onMouseDown={(e) => {
+          if (e.button === 0) {
+            startHold(e.clientX, e.clientY);
+          }
+        }}
+        onMouseUp={(e) => {
+          if (e.button === 0) {
+            endHold();
+          }
+        }}
+        onMouseLeave={cancelHold}
+        onTouchStart={(e) => {
+          const touch = e.touches[0];
+          startHold(touch?.clientX, touch?.clientY);
+        }}
+        onTouchMove={(e) => {
+          if (startCoordsRef.current && e.touches[0]) {
+            const dx = Math.abs(e.touches[0].clientX - startCoordsRef.current.x);
+            const dy = Math.abs(e.touches[0].clientY - startCoordsRef.current.y);
+            if (dx > 35 || dy > 35) {
+              cancelHold();
+            }
+          }
+        }}
+        onTouchEnd={() => {
+          endHold();
+        }}
+        onTouchCancel={cancelHold}
+        onContextMenu={(e) => e.preventDefault()}
+        style={{ WebkitTouchCallout: 'none', userSelect: 'none' }}
         className="group relative flex items-center gap-2.5 bg-gradient-to-r from-amber-500 via-orange-500 to-amber-600 hover:from-amber-400 hover:to-orange-500 text-gray-950 font-black px-4 py-3 rounded-full shadow-[0_8px_30px_rgb(245,158,11,0.45)] border-2 border-white/50 backdrop-blur-md transition-all cursor-pointer select-none active:scale-95"
         title={isAr ? 'حساباتنا الرسمية' : 'Official Social Channels'}
       >

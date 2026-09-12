@@ -101,27 +101,6 @@ export default function App() {
     window.scrollTo({ top: 0, behavior: 'smooth' });
   }, [currentView]);
 
-  // Global listener for Admin Control Panel (Ctrl+Shift+A, Alt+A, or custom event)
-  useEffect(() => {
-    const handleKeyDown = (e: KeyboardEvent) => {
-      if ((e.ctrlKey && e.shiftKey && e.key.toLowerCase() === 'a') || (e.altKey && e.key.toLowerCase() === 'a')) {
-        e.preventDefault();
-        soundFX.playModalOpen();
-        setCurrentView((prev) => (prev === 'admin' ? 'home' : 'admin'));
-      }
-    };
-    const handleAdminEvent = () => {
-      soundFX.playModalOpen();
-      setCurrentView('admin');
-    };
-    window.addEventListener('keydown', handleKeyDown);
-    window.addEventListener('open-admin-panel', handleAdminEvent);
-    return () => {
-      window.removeEventListener('keydown', handleKeyDown);
-      window.removeEventListener('open-admin-panel', handleAdminEvent);
-    };
-  }, []);
-
   const isAr = language === 'ar';
 
   // Cart operations
@@ -304,7 +283,6 @@ export default function App() {
         setCurrency={setCurrency}
         onOpenSearch={() => setSearchOpen(true)}
         onOpenAuth={() => setAuthOpen(true)}
-        onOpenAdmin={() => setCurrentView('admin')}
       />
 
       {/* Store-wide Promo & Discount Announcement Banner (Controlled from Admin Panel) */}
@@ -614,7 +592,6 @@ export default function App() {
             currency={currency}
             onBackToStore={() => setCurrentView('home')}
             onSelectProduct={handleSelectProduct}
-            onOpenAdmin={() => setCurrentView('admin')}
           />
         )}
 
@@ -771,7 +748,6 @@ export default function App() {
           if (view === 'shop') setSelectedCategory('all');
           setCurrentView(view);
         }}
-        onOpenAdmin={() => setCurrentView('admin')}
       />
     </div>
   );

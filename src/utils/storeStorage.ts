@@ -24,10 +24,14 @@ export const DEFAULT_HERO_SLIDES: HeroSlideItem[] = [
     titleEn: 'Apple iPhone 16 Pro Max',
     subtitleAr: 'قوة التيتانيوم الصحراوي، معالج A18 Pro الخارق وشاشة ريتينا XDR 6.9 إنش مع ضمان الوكالة',
     subtitleEn: 'Titanium Grade 5 with A18 Pro Bionic, Camera Control & 6.9" ProMotion Display',
+    featureBadge1Ar: 'أجهزة أصلية 100%',
+    featureBadge2Ar: 'ضمان رسمي باليمن',
+    showBadges: true,
     mediaType: 'image',
     imageUrl: 'https://images.unsplash.com/photo-1695048133142-1a20484d2569?q=85&w=1920&auto=format&fit=crop',
     buttonTextAr: 'طلب فوري عبر واتساب',
     buttonLink: 'https://wa.me/967774102030',
+    secondaryButtonTextAr: 'الأقسام',
     enabled: true,
   },
   {
@@ -38,10 +42,14 @@ export const DEFAULT_HERO_SLIDES: HeroSlideItem[] = [
     titleEn: 'Samsung Galaxy S25 Ultra 5G',
     subtitleAr: 'معالج Snapdragon 8 Elite الخارق، كاميرا 200 ميجابكسل الأسطورية وقلم S-Pen مدمج',
     subtitleEn: 'Snapdragon 8 Elite with 200MP Space Zoom Camera & Integrated S-Pen',
+    featureBadge1Ar: 'أجهزة أصلية 100%',
+    featureBadge2Ar: 'ضمان رسمي باليمن',
+    showBadges: true,
     mediaType: 'image',
     imageUrl: 'https://images.unsplash.com/photo-1610945415295-d9bbf067e59c?q=85&w=1920&auto=format&fit=crop',
     buttonTextAr: 'استعراض الأجهزة',
     buttonLink: '#shop',
+    secondaryButtonTextAr: 'الأقسام',
     enabled: true,
   },
   {
@@ -52,10 +60,14 @@ export const DEFAULT_HERO_SLIDES: HeroSlideItem[] = [
     titleEn: 'Anker GaN & Sony / Apple Audio',
     subtitleAr: 'شواحن سريعة حتى 65W ومنصات MagSafe اللاسلكية وسماعات العزل الأسطورية بضمان كامل',
     subtitleEn: 'High-speed 65W GaN Chargers, MagSafe Stands & World-Class Active Noise Canceling',
+    featureBadge1Ar: 'أجهزة أصلية 100%',
+    featureBadge2Ar: 'ضمان رسمي باليمن',
+    showBadges: true,
     mediaType: 'image',
     imageUrl: 'https://images.unsplash.com/photo-1505740420928-5e560c06d30e?q=85&w=1920&auto=format&fit=crop',
     buttonTextAr: 'تسوق الملحقات',
     buttonLink: '#shop',
+    secondaryButtonTextAr: 'الأقسام',
     enabled: true,
   },
 ];
@@ -79,6 +91,54 @@ export function saveStoredHeroSlides(slides: HeroSlideItem[]): void {
   } catch (e) {
     console.error('Failed to save hero slides', e);
   }
+}
+
+export interface CategoryImagesConfig {
+  phones: string;
+  audio: string;
+  cases: string;
+  chargers: string;
+  cables: string;
+}
+
+export const DEFAULT_CATEGORY_IMAGES: CategoryImagesConfig = {
+  phones: 'https://images.unsplash.com/photo-1695048133142-1a20484d2569?q=80&w=1000&auto=format&fit=crop',
+  audio: 'https://images.unsplash.com/photo-1505740420928-5e560c06d30e?q=80&w=1000&auto=format&fit=crop',
+  cases: 'https://images.unsplash.com/photo-1601784551446-20c9e07cdbdb?q=80&w=1000&auto=format&fit=crop',
+  chargers: 'https://images.unsplash.com/photo-1622445262464-84b1456045b6?q=80&w=1000&auto=format&fit=crop',
+  cables: 'https://images.unsplash.com/photo-1588508065123-287b28e013da?q=80&w=1000&auto=format&fit=crop',
+};
+
+const CATEGORY_IMAGES_STORAGE_KEY = 'saddam_store_category_images_v1';
+
+export function getStoredCategoryImages(): CategoryImagesConfig {
+  try {
+    const data = localStorage.getItem(CATEGORY_IMAGES_STORAGE_KEY);
+    if (!data) return DEFAULT_CATEGORY_IMAGES;
+    const parsed = JSON.parse(data);
+    return { ...DEFAULT_CATEGORY_IMAGES, ...parsed };
+  } catch {
+    return DEFAULT_CATEGORY_IMAGES;
+  }
+}
+
+export function saveStoredCategoryImages(images: CategoryImagesConfig): void {
+  try {
+    localStorage.setItem(CATEGORY_IMAGES_STORAGE_KEY, JSON.stringify(images));
+    window.dispatchEvent(new CustomEvent('saddam-category-images-updated', { detail: images }));
+  } catch (e) {
+    console.error('Failed to save category images', e);
+  }
+}
+
+export function resetStoredCategoryImages(): CategoryImagesConfig {
+  try {
+    localStorage.removeItem(CATEGORY_IMAGES_STORAGE_KEY);
+    window.dispatchEvent(new CustomEvent('saddam-category-images-updated', { detail: DEFAULT_CATEGORY_IMAGES }));
+  } catch (e) {
+    console.error('Failed to reset category images', e);
+  }
+  return DEFAULT_CATEGORY_IMAGES;
 }
 
 export interface StoreDiscountConfig {

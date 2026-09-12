@@ -2,6 +2,7 @@ import { useState, useEffect, useRef, type ReactNode } from 'react';
 import { Smartphone, Headphones, Shield, Zap, Cable, ArrowRight, ArrowLeft, Layers } from 'lucide-react';
 import { CategoryId, Language } from '../types';
 import { mockCategories } from '../data/mockData';
+import { getStoredCategoryImages, CategoryImagesConfig } from '../utils/storeStorage';
 import Tilt3D from './Tilt3D';
 import { soundFX } from '../utils/audioEffects';
 
@@ -20,6 +21,18 @@ export default function CategoriesSection({
   const scrollContainerRef = useRef<HTMLDivElement>(null);
   const [isPaused, setIsPaused] = useState(false);
   const [currentIndex, setCurrentIndex] = useState(0);
+  const [categoryImages, setCategoryImages] = useState<CategoryImagesConfig>(() => getStoredCategoryImages());
+
+  useEffect(() => {
+    const handleImagesUpdate = (e: Event) => {
+      const customEvent = e as CustomEvent<CategoryImagesConfig>;
+      if (customEvent.detail) {
+        setCategoryImages(customEvent.detail);
+      }
+    };
+    window.addEventListener('saddam-category-images-updated', handleImagesUpdate);
+    return () => window.removeEventListener('saddam-category-images-updated', handleImagesUpdate);
+  }, []);
 
   const categoryIcons: Record<string, ReactNode> = {
     phones: <Smartphone className="w-5 h-5 text-white" />,
@@ -27,15 +40,6 @@ export default function CategoriesSection({
     cases: <Shield className="w-5 h-5 text-white" />,
     chargers: <Zap className="w-5 h-5 text-white" />,
     cables: <Cable className="w-5 h-5 text-white" />,
-  };
-
-  // High quality Pinterest-style catalog background images for each category
-  const categoryImages: Record<string, string> = {
-    phones: 'https://images.unsplash.com/photo-1695048133142-1a20484d2569?q=80&w=1000&auto=format&fit=crop',
-    audio: 'https://images.unsplash.com/photo-1505740420928-5e560c06d30e?q=80&w=1000&auto=format&fit=crop',
-    cases: 'https://images.unsplash.com/photo-1601784551446-20c9e07cdbdb?q=80&w=1000&auto=format&fit=crop',
-    chargers: 'https://images.unsplash.com/photo-1622445262464-84b1456045b6?q=80&w=1000&auto=format&fit=crop',
-    cables: 'https://images.unsplash.com/photo-1588508065123-287b28e013da?q=80&w=1000&auto=format&fit=crop',
   };
 
   // Auto-slide to the right every 2 seconds as requested

@@ -106,7 +106,17 @@ export interface HeroSlideItem {
   imageUrl: string;
   videoUrl?: string;
   buttonTextAr?: string;
+  buttonTextEn?: string;
   buttonLink?: string;
+  secondaryButtonTextAr?: string;
+  secondaryButtonTextEn?: string;
+  secondaryButtonLink?: string;
+  featureBadge1Ar?: string;
+  featureBadge1En?: string;
+  featureBadge2Ar?: string;
+  featureBadge2En?: string;
+  showBadges?: boolean;
+  whatsappCustomTextAr?: string;
   enabled?: boolean;
 }
 

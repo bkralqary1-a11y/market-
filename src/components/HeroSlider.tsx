@@ -194,16 +194,30 @@ export default function HeroSlider({
           )}
 
           {/* Badges / Tech specs pills */}
-          <div className="flex flex-wrap items-center gap-2 pt-1">
-            <span className="bg-black/40 backdrop-blur-md border border-white/20 px-3 py-1 rounded-xl text-xs font-semibold text-gray-100 flex items-center gap-1.5 shadow-sm">
-              <Cpu className="w-3 h-3 text-orange-400" />
-              <span>{isAr ? 'أجهزة أصلية 100%' : '100% Genuine'}</span>
-            </span>
-            <span className="bg-emerald-950/60 backdrop-blur-md border border-emerald-500/40 px-3 py-1 rounded-xl text-xs font-bold text-emerald-300 flex items-center gap-1 shadow-sm">
-              <ShieldCheck className="w-3 h-3 text-emerald-400" />
-              <span>{isAr ? 'ضمان رسمي باليمن' : 'Official Warranty'}</span>
-            </span>
-          </div>
+          {slide.showBadges !== false && (
+            <div className="flex flex-wrap items-center gap-2 pt-1">
+              {(slide.featureBadge1Ar || !slide.featureBadge2Ar) && (
+                <span className="bg-black/40 backdrop-blur-md border border-white/20 px-3 py-1 rounded-xl text-xs font-semibold text-gray-100 flex items-center gap-1.5 shadow-sm">
+                  <Cpu className="w-3 h-3 text-orange-400" />
+                  <span>
+                    {isAr
+                      ? (slide.featureBadge1Ar || 'أجهزة أصلية 100%')
+                      : (slide.featureBadge1En || slide.featureBadge1Ar || '100% Genuine')}
+                  </span>
+                </span>
+              )}
+              {slide.featureBadge2Ar !== '' && (
+                <span className="bg-emerald-950/60 backdrop-blur-md border border-emerald-500/40 px-3 py-1 rounded-xl text-xs font-bold text-emerald-300 flex items-center gap-1 shadow-sm">
+                  <ShieldCheck className="w-3 h-3 text-emerald-400" />
+                  <span>
+                    {isAr
+                      ? (slide.featureBadge2Ar || 'ضمان رسمي باليمن')
+                      : (slide.featureBadge2En || slide.featureBadge2Ar || 'Official Warranty')}
+                  </span>
+                </span>
+              )}
+            </div>
+          )}
 
           {/* Action Buttons */}
           <div className="flex items-center gap-2 pt-2.5">
@@ -214,7 +228,7 @@ export default function HeroSlider({
                 onClick={() => soundFX.playClick()}
                 className="bg-gradient-to-r from-orange-500 to-amber-600 hover:from-orange-600 hover:to-amber-700 text-white font-bold px-3.5 sm:px-4 py-1.5 sm:py-2 rounded-lg shadow-md active:scale-95 transition-all text-xs flex items-center gap-1.5 border border-orange-400/30 cursor-pointer shrink-0"
               >
-                <span>{isAr ? (slide.buttonTextAr || 'طلب واستعراض') : (slide.buttonTextEn || 'Order & Explore')}</span>
+                <span>{isAr ? (slide.buttonTextAr || 'طلب واستعراض') : (slide.buttonTextEn || slide.buttonTextAr || 'Order & Explore')}</span>
                 {isAr ? <ArrowLeft className="w-3.5 h-3.5" /> : <ArrowRight className="w-3.5 h-3.5" />}
               </a>
             ) : (
@@ -225,29 +239,44 @@ export default function HeroSlider({
                 }}
                 className="bg-gradient-to-r from-orange-500 to-amber-600 hover:from-orange-600 hover:to-amber-700 text-white font-bold px-3.5 sm:px-4 py-1.5 sm:py-2 rounded-lg shadow-md active:scale-95 transition-all text-xs flex items-center gap-1.5 border border-orange-400/30 cursor-pointer shrink-0"
               >
-                <span>{isAr ? (slide.buttonTextAr || 'تسوق الآن') : (slide.buttonTextEn || 'Shop Now')}</span>
+                <span>{isAr ? (slide.buttonTextAr || 'تسوق الآن') : (slide.buttonTextEn || slide.buttonTextAr || 'Shop Now')}</span>
                 {isAr ? <ArrowLeft className="w-3.5 h-3.5" /> : <ArrowRight className="w-3.5 h-3.5" />}
               </button>
             )}
 
-            {/* Secondary button: browse categories */}
-            <button
-              onClick={() => {
-                soundFX.playClick();
-                onExplore();
-              }}
-              className="bg-white/15 hover:bg-white/25 text-white/90 font-medium px-2.5 sm:px-3 py-1 sm:py-1.5 rounded-lg border border-white/25 backdrop-blur-md transition-all text-[11px] sm:text-xs text-center cursor-pointer shrink-0"
-              title={isAr ? 'استعراض كل الأقسام' : 'Browse Categories'}
-            >
-              {isAr ? 'الأقسام' : 'Categories'}
-            </button>
+            {/* Secondary button: browse categories or custom link */}
+            {slide.secondaryButtonLink ? (
+              <a
+                href={slide.secondaryButtonLink}
+                onClick={() => soundFX.playClick()}
+                className="bg-white/15 hover:bg-white/25 text-white/90 font-medium px-2.5 sm:px-3 py-1 sm:py-1.5 rounded-lg border border-white/25 backdrop-blur-md transition-all text-[11px] sm:text-xs text-center cursor-pointer shrink-0"
+              >
+                {isAr
+                  ? (slide.secondaryButtonTextAr || 'الأقسام')
+                  : (slide.secondaryButtonTextEn || slide.secondaryButtonTextAr || 'Categories')}
+              </a>
+            ) : (
+              <button
+                onClick={() => {
+                  soundFX.playClick();
+                  onExplore();
+                }}
+                className="bg-white/15 hover:bg-white/25 text-white/90 font-medium px-2.5 sm:px-3 py-1 sm:py-1.5 rounded-lg border border-white/25 backdrop-blur-md transition-all text-[11px] sm:text-xs text-center cursor-pointer shrink-0"
+                title={isAr ? 'استعراض كل الأقسام' : 'Browse Categories'}
+              >
+                {isAr
+                  ? (slide.secondaryButtonTextAr || 'الأقسام')
+                  : (slide.secondaryButtonTextEn || slide.secondaryButtonTextAr || 'Categories')}
+              </button>
+            )}
 
             {/* Direct WhatsApp circular button */}
             <a
               href={`https://wa.me/967774102030?text=${encodeURIComponent(
-                isAr
-                  ? `السلام عليكم متجر صدام العقاري، أود الاستفسار والطلب: ${slide.titleAr}`
-                  : `Hello Saddam Al-Aqari Store, I would like to inquire about: ${slide.titleEn}`
+                slide.whatsappCustomTextAr ||
+                  (isAr
+                    ? `السلام عليكم متجر صدام العقاري، أود الاستفسار والطلب: ${slide.titleAr}`
+                    : `Hello Saddam Al-Aqari Store, I would like to inquire about: ${slide.titleEn || slide.titleAr}`)
               )}`}
               target="_blank"
               rel="noopener noreferrer"

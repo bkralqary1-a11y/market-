@@ -1,4 +1,4 @@
-import { useState, useEffect, type ReactNode } from 'react';
+import React, { useState, useEffect, useRef, type ReactNode } from 'react';
 import { createPortal } from 'react-dom';
 import {
   Search,
@@ -18,7 +18,6 @@ import {
   CheckCircle,
   CreditCard,
   Building2,
-  Lock,
   Settings,
 } from 'lucide-react';
 import { PageView, Language, Currency, CategoryId } from '../types';
@@ -42,7 +41,6 @@ interface HeaderProps {
   setCurrency: (curr: Currency) => void;
   onOpenSearch: () => void;
   onOpenAuth: () => void;
-  onOpenAdmin?: () => void;
 }
 
 export default function Header({
@@ -62,7 +60,6 @@ export default function Header({
   setCurrency,
   onOpenSearch,
   onOpenAuth,
-  onOpenAdmin,
 }: HeaderProps) {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [currencyDropdownOpen, setCurrencyDropdownOpen] = useState(false);
@@ -193,13 +190,21 @@ export default function Header({
             </button>
 
             {/* Saddam Al-Aqari Store Logo */}
-            <div
-              onClick={() => setCurrentView('home')}
-              className="cursor-pointer flex items-center gap-2.5 group"
+            <button
+              onClick={() => {
+                soundFX.playClick();
+                setCurrentView('home');
+              }}
+              className="relative cursor-pointer flex items-center gap-2.5 group select-none text-right"
+              title={isAr ? 'متجر صدام العقاري للهواتف' : 'Saddam Al-Aqari Store'}
             >
-              <div className="w-10 h-10 sm:w-11 sm:h-11 rounded-2xl bg-gradient-to-br from-orange-500 to-amber-600 text-white flex items-center justify-center font-black text-lg shadow-[0_4px_12px_rgba(249,115,22,0.35)] group-hover:scale-105 transition-transform border border-orange-300/40">
-                <Smartphone className="w-5 h-5 text-white" />
+              <div className="relative">
+                {/* Vibrant Yellow/Amber Logo Box */}
+                <div className="w-10 h-10 sm:w-11 sm:h-11 rounded-2xl bg-gradient-to-br from-amber-400 via-yellow-400 to-amber-500 text-gray-950 flex items-center justify-center font-black text-lg shadow-[0_4px_16px_rgba(245,158,11,0.45)] border-2 border-yellow-200 group-hover:scale-105 transition-all">
+                  <Smartphone className="w-5 h-5 text-gray-950" />
+                </div>
               </div>
+
               <div className="flex flex-col">
                 <div className="flex items-center gap-1.5">
                   <span className="font-extrabold text-lg sm:text-xl md:text-2xl tracking-tight text-gray-dark font-display leading-tight">
@@ -221,7 +226,7 @@ export default function Header({
                   {isAr ? 'للهواتف الذكية ومستلزماتها الأصلية' : 'Smartphones & Genuine Accessories'}
                 </span>
               </div>
-            </div>
+            </button>
           </div>
 
           {/* Desktop Search Bar (Direct Search Trigger) */}
@@ -432,9 +437,18 @@ export default function Header({
                   </div>
 
                   {/* Store Branding over image */}
-                  <div className="flex items-center gap-2.5">
-                    <div className="w-10 h-10 rounded-2xl bg-gradient-to-br from-orange-500 to-amber-600 text-white flex items-center justify-center font-bold shadow-lg border border-white/20">
-                      <Smartphone className="w-5 h-5 text-white" />
+                  <button
+                    onClick={() => {
+                      soundFX.playClick();
+                      setCurrentView('home');
+                      setMobileMenuOpen(false);
+                    }}
+                    className="flex items-center gap-2.5 cursor-pointer select-none relative text-right"
+                  >
+                    <div className="relative">
+                      <div className="w-10 h-10 rounded-2xl bg-gradient-to-br from-amber-400 via-yellow-400 to-amber-500 text-gray-950 flex items-center justify-center font-bold shadow-lg border-2 border-yellow-200">
+                        <Smartphone className="w-5 h-5 text-gray-950" />
+                      </div>
                     </div>
                     <div>
                       <span className="font-black text-base text-white font-display block leading-none drop-shadow-md">
@@ -444,7 +458,7 @@ export default function Header({
                         {isAr ? 'للهواتف الذكية ومستلزماتها' : 'Smartphones & Gear'}
                       </span>
                     </div>
-                  </div>
+                  </button>
                 </div>
               </div>
 
