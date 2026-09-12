@@ -23,6 +23,8 @@ export interface Product {
   warrantyYears: number;
   isTrending?: boolean;
   isPopular?: boolean;
+  isFeatured?: boolean;
+  condition?: string;
   colors: string[];
   colorNamesAr?: string[];
   variants: {
@@ -85,11 +87,28 @@ export type PageView =
   | 'checkout'
   | 'compare'
   | 'account'
-  | 'wholesale';
+  | 'wholesale'
+  | 'admin';
 
 export type Language = 'ar' | 'en';
 
 export type Currency = 'YER';
+
+export interface HeroSlideItem {
+  id: string;
+  badgeAr: string;
+  badgeEn?: string;
+  titleAr: string;
+  titleEn?: string;
+  subtitleAr: string;
+  subtitleEn?: string;
+  mediaType: 'image' | 'video';
+  imageUrl: string;
+  videoUrl?: string;
+  buttonTextAr?: string;
+  buttonLink?: string;
+  enabled?: boolean;
+}
 
 export interface Order {
   id: string;

@@ -1,4 +1,4 @@
-import { Product } from '../types';
+import { Product, HeroSlideItem } from '../types';
 import { ShortVideoItem } from '../types';
 import { YOUTUBE_SHORTS_DATA } from '../components/YouTubeShortsSection';
 import {
@@ -13,6 +13,73 @@ import {
 const PRODUCTS_STORAGE_KEY = 'saddam_store_products_v4';
 const SHORTS_STORAGE_KEY = 'saddam_store_shorts_v4';
 const STORE_DISCOUNT_CONFIG_KEY = 'saddam_store_discounts_v1';
+const HERO_SLIDES_STORAGE_KEY = 'saddam_store_hero_slides_v1';
+
+export const DEFAULT_HERO_SLIDES: HeroSlideItem[] = [
+  {
+    id: 'slide-1',
+    badgeAr: 'الجيل الجديد 2026 • متجر صدام العقاري',
+    badgeEn: 'Next-Gen 2026 • Saddam Al-Aqari Store',
+    titleAr: 'آبل آيفون 16 برو ماكس',
+    titleEn: 'Apple iPhone 16 Pro Max',
+    subtitleAr: 'قوة التيتانيوم الصحراوي، معالج A18 Pro الخارق وشاشة ريتينا XDR 6.9 إنش مع ضمان الوكالة',
+    subtitleEn: 'Titanium Grade 5 with A18 Pro Bionic, Camera Control & 6.9" ProMotion Display',
+    mediaType: 'image',
+    imageUrl: 'https://images.unsplash.com/photo-1695048133142-1a20484d2569?q=85&w=1920&auto=format&fit=crop',
+    buttonTextAr: 'طلب فوري عبر واتساب',
+    buttonLink: 'https://wa.me/967774102030',
+    enabled: true,
+  },
+  {
+    id: 'slide-2',
+    badgeAr: 'ذكاء اصطناعي Galaxy AI • الأقوى عالمياً',
+    badgeEn: 'Galaxy AI Inside • Flagship Android',
+    titleAr: 'سامسونج جالكسي S25 ألترا 5G',
+    titleEn: 'Samsung Galaxy S25 Ultra 5G',
+    subtitleAr: 'معالج Snapdragon 8 Elite الخارق، كاميرا 200 ميجابكسل الأسطورية وقلم S-Pen مدمج',
+    subtitleEn: 'Snapdragon 8 Elite with 200MP Space Zoom Camera & Integrated S-Pen',
+    mediaType: 'image',
+    imageUrl: 'https://images.unsplash.com/photo-1610945415295-d9bbf067e59c?q=85&w=1920&auto=format&fit=crop',
+    buttonTextAr: 'استعراض الأجهزة',
+    buttonLink: '#shop',
+    enabled: true,
+  },
+  {
+    id: 'slide-3',
+    badgeAr: 'شواحن GaN فائقة وسماعات أصلية',
+    badgeEn: 'GaN Power & Pro Audio Gear',
+    titleAr: 'شواحن أنكر وسماعات سوني وآبل',
+    titleEn: 'Anker GaN & Sony / Apple Audio',
+    subtitleAr: 'شواحن سريعة حتى 65W ومنصات MagSafe اللاسلكية وسماعات العزل الأسطورية بضمان كامل',
+    subtitleEn: 'High-speed 65W GaN Chargers, MagSafe Stands & World-Class Active Noise Canceling',
+    mediaType: 'image',
+    imageUrl: 'https://images.unsplash.com/photo-1505740420928-5e560c06d30e?q=85&w=1920&auto=format&fit=crop',
+    buttonTextAr: 'تسوق الملحقات',
+    buttonLink: '#shop',
+    enabled: true,
+  },
+];
+
+export function getStoredHeroSlides(): HeroSlideItem[] {
+  try {
+    const data = localStorage.getItem(HERO_SLIDES_STORAGE_KEY);
+    if (!data) return DEFAULT_HERO_SLIDES;
+    const parsed = JSON.parse(data);
+    if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+    return DEFAULT_HERO_SLIDES;
+  } catch {
+    return DEFAULT_HERO_SLIDES;
+  }
+}
+
+export function saveStoredHeroSlides(slides: HeroSlideItem[]): void {
+  try {
+    localStorage.setItem(HERO_SLIDES_STORAGE_KEY, JSON.stringify(slides));
+    window.dispatchEvent(new CustomEvent('saddam-hero-slides-updated', { detail: slides }));
+  } catch (e) {
+    console.error('Failed to save hero slides', e);
+  }
+}
 
 export interface StoreDiscountConfig {
   enabled: boolean;
@@ -190,13 +257,15 @@ export function exportStoreBackupJSON(): string {
   const products = getStoredProducts();
   const shorts = getStoredShorts();
   const discounts = getStoredDiscountConfig();
+  const heroSlides = getStoredHeroSlides();
   const backup = {
     storeName: 'محلات صدام العقاري',
     exportedAt: new Date().toISOString(),
-    version: '4.0',
+    version: '4.1',
     products,
     shorts,
     discounts,
+    heroSlides,
   };
   return JSON.stringify(backup, null, 2);
 }
@@ -219,6 +288,10 @@ export function importStoreBackupJSON(jsonStr: string): { success: boolean; mess
 
     if (parsed.discounts) {
       saveStoredDiscountConfig(parsed.discounts);
+    }
+
+    if (parsed.heroSlides && Array.isArray(parsed.heroSlides)) {
+      saveStoredHeroSlides(parsed.heroSlides);
     }
 
     if (importedProducts === 0 && importedShorts === 0) {

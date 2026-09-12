@@ -1,7 +1,7 @@
-import React, { useState, useRef, useEffect, useCallback } from 'react';
-import { Sparkles, MessageCircle, ExternalLink, X, Shield, Lock } from 'lucide-react';
+import { useState } from 'react';
+import { Sparkles, MessageCircle, ExternalLink, X, Shield } from 'lucide-react';
 import { Language } from '../types';
-import { OFFICIAL_SOCIAL_CHANNELS, SocialChannel } from '../data/socialMediaData';
+import { OFFICIAL_SOCIAL_CHANNELS } from '../data/socialMediaData';
 import { soundFX } from '../utils/audioEffects';
 
 interface FloatingSocialDockProps {
@@ -9,101 +9,14 @@ interface FloatingSocialDockProps {
   onOpenAdmin?: () => void;
 }
 
-const REQUIRED_HOLD_TIME_MS = 10000; // 10 seconds continuous hold
-
 export default function FloatingSocialDock({ language, onOpenAdmin }: FloatingSocialDockProps) {
   const isAr = language === 'ar';
   const [isOpen, setIsOpen] = useState(false);
 
-  // Secret 10-second hold state
-  const [holdProgress, setHoldProgress] = useState(0); // 0 to 100
-  const [holdSecondsRemaining, setHoldSecondsRemaining] = useState(10);
-  const [isHolding, setIsHolding] = useState(false);
-
-  const holdTimerRef = useRef<NodeJS.Timeout | null>(null);
-  const pressStartTimeRef = useRef<number>(0);
-  const didTriggerAdminRef = useRef<boolean>(false);
-
-  const clearHold = useCallback(() => {
-    if (holdTimerRef.current) {
-      clearInterval(holdTimerRef.current);
-      holdTimerRef.current = null;
-    }
-    setHoldProgress(0);
-    setIsHolding(false);
-    setHoldSecondsRemaining(10);
-  }, []);
-
-  const handlePointerDown = (e: React.PointerEvent | React.TouchEvent | React.MouseEvent) => {
-    // Only proceed if admin callback exists
-    if (!onOpenAdmin) return;
-
-    // Prevent default context menu or drag behavior on long press
-    pressStartTimeRef.current = Date.now();
-    didTriggerAdminRef.current = false;
-    setIsHolding(true);
-
-    if (holdTimerRef.current) clearInterval(holdTimerRef.current);
-
-    holdTimerRef.current = setInterval(() => {
-      const elapsed = Date.now() - pressStartTimeRef.current;
-      const progress = Math.min(100, (elapsed / REQUIRED_HOLD_TIME_MS) * 100);
-      const remainingSec = Math.max(1, Math.ceil((REQUIRED_HOLD_TIME_MS - elapsed) / 1000));
-
-      setHoldProgress(progress);
-      setHoldSecondsRemaining(remainingSec);
-
-      // Successfully reached 10 seconds!
-      if (elapsed >= REQUIRED_HOLD_TIME_MS) {
-        clearInterval(holdTimerRef.current!);
-        holdTimerRef.current = null;
-        didTriggerAdminRef.current = true;
-        setHoldProgress(100);
-        setIsHolding(false);
-
-        // Haptic feedback & unlock sound
-        if (typeof window !== 'undefined' && 'vibrate' in navigator) {
-          try {
-            navigator.vibrate([120, 60, 200]);
-          } catch {
-            // ignore
-          }
-        }
-        soundFX.playSuccess();
-
-        // Trigger encrypted Admin authentication
-        onOpenAdmin();
-      }
-    }, 50);
+  const toggleOpen = () => {
+    soundFX.playClick();
+    setIsOpen((prev) => !prev);
   };
-
-  const handlePointerUp = () => {
-    const elapsed = Date.now() - pressStartTimeRef.current;
-    clearHold();
-
-    // If admin was already triggered, don't toggle dock
-    if (didTriggerAdminRef.current) {
-      didTriggerAdminRef.current = false;
-      return;
-    }
-
-    // If pressed quickly (< 450ms), treat as normal click to toggle social dock
-    if (elapsed < 450) {
-      soundFX.playClick();
-      setIsOpen((prev) => !prev);
-    }
-  };
-
-  const handlePointerLeave = () => {
-    clearHold();
-  };
-
-  // Clean up timer on unmount
-  useEffect(() => {
-    return () => {
-      if (holdTimerRef.current) clearInterval(holdTimerRef.current);
-    };
-  }, []);
 
   const getPlatformIcon = (platform: string, className: string = 'w-4 h-4') => {
     switch (platform) {
@@ -141,7 +54,7 @@ export default function FloatingSocialDock({ language, onOpenAdmin }: FloatingSo
   return (
     <div className="fixed bottom-6 left-6 z-40 select-none">
       {/* Expanded Luxury VIP Social Popover (Regular Click) */}
-      {isOpen && !isHolding && (
+      {isOpen && (
         <div className="mb-3 w-72 sm:w-80 rounded-3xl bg-gray-950/95 backdrop-blur-2xl border border-white/20 p-4 shadow-2xl text-white animate-fadeIn space-y-3">
           {/* Header */}
           <div className="flex items-center justify-between pb-2.5 border-b border-white/10">
@@ -153,28 +66,25 @@ export default function FloatingSocialDock({ language, onOpenAdmin }: FloatingSo
             </div>
             <button
               onClick={() => setIsOpen(false)}
-              className="p-1 rounded-lg text-gray-400 hover:text-white transition-colors"
+              className="p-1 rounded-lg text-gray-400 hover:text-white transition-colors cursor-pointer"
             >
               <X className="w-4 h-4" />
             </button>
           </div>
 
-          {/* Channels List */}
+          {/* Social Links */}
           <div className="space-y-2">
-            {OFFICIAL_SOCIAL_CHANNELS.map((channel: SocialChannel) => (
+            {OFFICIAL_SOCIAL_CHANNELS.map((channel) => (
               <a
                 key={channel.id}
                 href={channel.url}
                 target="_blank"
                 rel="noopener noreferrer"
                 onClick={() => soundFX.playClick()}
-                className="flex items-center justify-between p-2.5 rounded-2xl bg-white/5 hover:bg-white/15 border border-white/10 transition-all duration-200 group"
+                className="flex items-center justify-between p-2.5 rounded-2xl bg-white/5 hover:bg-white/10 border border-white/10 hover:border-amber-400/40 transition-all group active:scale-95 cursor-pointer"
               >
-                <div className="flex items-center gap-2.5">
-                  <div
-                    className="w-8 h-8 rounded-xl flex items-center justify-center text-white shadow-sm transition-transform group-hover:scale-110"
-                    style={{ backgroundColor: channel.color }}
-                  >
+                <div className="flex items-center gap-3">
+                  <div className={`w-8 h-8 rounded-xl flex items-center justify-center text-white bg-gradient-to-r ${channel.gradient} shadow-md`}>
                     {getPlatformIcon(channel.id, 'w-4 h-4')}
                   </div>
                   <div>
@@ -196,90 +106,49 @@ export default function FloatingSocialDock({ language, onOpenAdmin }: FloatingSo
             <span>{isAr ? 'خدمة عملاء فورية' : '24/7 Support'}</span>
             <span className="font-mono text-emerald-400 font-bold">774102030</span>
           </div>
+
+          {/* Discreet Admin Entrance Link */}
+          {onOpenAdmin && (
+            <div className="pt-2 border-t border-white/5 text-center">
+              <button
+                onClick={() => {
+                  setIsOpen(false);
+                  onOpenAdmin();
+                }}
+                className="text-[11px] text-zinc-400 hover:text-amber-400 transition-colors inline-flex items-center gap-1.5 py-1 px-3 rounded-lg hover:bg-white/5 cursor-pointer"
+              >
+                <Shield className="w-3 h-3 text-amber-400" />
+                <span>{isAr ? 'لوحة تحكم إدارة المتجر' : 'Store Admin Dashboard'}</span>
+              </button>
+            </div>
+          )}
         </div>
       )}
 
-      {/* Secret Long-Hold Indicator Popup */}
-      {isHolding && holdProgress > 5 && (
-        <div className="mb-3 p-3 bg-zinc-950/95 backdrop-blur-xl rounded-2xl border border-amber-500/40 text-white shadow-2xl text-xs space-y-1.5 animate-fadeIn w-60">
-          <div className="flex items-center justify-between">
-            <span className="font-mono font-black text-amber-400 text-xs flex items-center gap-1.5">
-              <Lock className="w-3.5 h-3.5 animate-pulse text-amber-400" />
-              <span>{isAr ? 'التحقق الأمني المشفر' : 'Encrypted Security'}</span>
-            </span>
-            <span className="font-mono font-bold text-amber-300 bg-amber-950/80 px-2 py-0.5 rounded text-[11px] border border-amber-500/30">
-              {holdSecondsRemaining}s
-            </span>
-          </div>
-
-          <p className="text-[10px] text-zinc-400 leading-tight">
-            {isAr
-              ? 'استمر بالضغط لمدة 10 ثوانٍ لفتح بوابة الإدارة المشفرة...'
-              : 'Hold for 10 seconds to unlock encrypted portal...'}
-          </p>
-
-          {/* Progress bar */}
-          <div className="w-full bg-zinc-800 rounded-full h-1.5 overflow-hidden">
-            <div
-              className="h-full bg-gradient-to-r from-amber-500 via-orange-500 to-emerald-400 transition-all duration-75 ease-linear"
-              style={{ width: `${holdProgress}%` }}
-            />
-          </div>
+      {/* Floating Yellow/Amber Social Button - Clean, Natural, No Timer Boxes */}
+      <button
+        id="saddam-floating-social-button"
+        onClick={toggleOpen}
+        className="group relative flex items-center gap-2.5 bg-gradient-to-r from-amber-500 via-orange-500 to-amber-600 hover:from-amber-400 hover:to-orange-500 text-gray-950 font-black px-4 py-3 rounded-full shadow-[0_8px_30px_rgb(245,158,11,0.45)] border-2 border-white/50 backdrop-blur-md transition-all cursor-pointer select-none active:scale-95"
+        title={isAr ? 'حساباتنا الرسمية' : 'Official Social Channels'}
+      >
+        <div className="relative">
+          <Sparkles className="w-5 h-5 text-gray-950 animate-spin" style={{ animationDuration: '8s' }} />
+          <span className="absolute -top-1 -right-1 w-2.5 h-2.5 bg-emerald-500 rounded-full border-2 border-white" />
         </div>
-      )}
 
-      {/* Floating Yellow/Amber Social Orb Trigger with 10-Second Hold Logic */}
-      <div className="relative">
-        {/* Circular Progress SVG surrounding the button when held */}
-        {isHolding && (
-          <svg
-            className="absolute -inset-1.5 w-[calc(100%+12px)] h-[calc(100%+12px)] pointer-events-none z-10"
-            viewBox="0 0 100 100"
-          >
-            <circle
-              cx="50"
-              cy="50"
-              r="46"
-              fill="none"
-              stroke="#fbbf24"
-              strokeWidth="4"
-              strokeDasharray="289"
-              strokeDashoffset={289 - (289 * holdProgress) / 100}
-              strokeLinecap="round"
-              className="transition-all duration-75"
-            />
-          </svg>
-        )}
+        <span className="font-extrabold text-xs hidden sm:inline-block tracking-wide text-gray-950">
+          {isAr ? 'حساباتنا الرسمية' : 'Official Social'}
+        </span>
 
-        <button
-          id="saddam-floating-social-button"
-          onPointerDown={handlePointerDown}
-          onPointerUp={handlePointerUp}
-          onPointerLeave={handlePointerLeave}
-          onContextMenu={(e) => e.preventDefault()}
-          className={`group relative flex items-center gap-2.5 bg-gradient-to-r from-amber-500 via-orange-500 to-amber-600 hover:from-amber-400 hover:to-orange-500 text-gray-950 font-black px-4 py-3 rounded-full shadow-[0_8px_30px_rgb(245,158,11,0.45)] border-2 border-white/50 backdrop-blur-md transition-all cursor-pointer select-none touch-none ${
-            isHolding ? 'scale-95 ring-4 ring-amber-300 ring-offset-2 ring-offset-black' : 'active:scale-95'
-          }`}
-          title={isAr ? 'حساباتنا الرسمية (اضغط وتثبيت 10 ثوان للدخول السري)' : 'Official Social Channels'}
-        >
-          <div className="relative">
-            <Sparkles className="w-5 h-5 text-gray-950 animate-spin" style={{ animationDuration: '8s' }} />
-            <span className="absolute -top-1 -right-1 w-2.5 h-2.5 bg-emerald-500 rounded-full border-2 border-white" />
-          </div>
-
-          <span className="font-extrabold text-xs hidden sm:inline-block tracking-wide text-gray-950">
-            {isHolding ? (isAr ? `جارِ الفتح ${holdSecondsRemaining}ث` : `Unlocking ${holdSecondsRemaining}s`) : (isAr ? 'حساباتنا الرسمية' : 'Official Social')}
-          </span>
-
-          {/* Social icons preview */}
-          <div className="flex items-center -space-x-1 rtl:space-x-reverse">
-            <span className="w-2.5 h-2.5 rounded-full bg-red-600 border border-white" />
-            <span className="w-2.5 h-2.5 rounded-full bg-black border border-white" />
-            <span className="w-2.5 h-2.5 rounded-full bg-pink-600 border border-white" />
-            <span className="w-2.5 h-2.5 rounded-full bg-blue-600 border border-white" />
-          </div>
-        </button>
-      </div>
+        {/* Social icons preview */}
+        <div className="flex items-center -space-x-1 rtl:space-x-reverse">
+          <span className="w-2.5 h-2.5 rounded-full bg-red-600 border border-white" />
+          <span className="w-2.5 h-2.5 rounded-full bg-black border border-white" />
+          <span className="w-2.5 h-2.5 rounded-full bg-pink-600 border border-white" />
+          <span className="w-2.5 h-2.5 rounded-full bg-blue-600 border border-white" />
+        </div>
+      </button>
     </div>
   );
 }

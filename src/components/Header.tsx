@@ -15,6 +15,7 @@ import {
   Cable,
   Truck,
   ShieldCheck,
+  CheckCircle,
   CreditCard,
   Building2,
   Lock,
@@ -385,8 +386,8 @@ export default function Header({
             </span>
             <span className="text-gray-300">|</span>
             <span className="flex items-center gap-1">
-              <CreditCard className="w-3.5 h-3.5 text-primary" />
-              <span>{isAr ? 'تقسيط تابي وتمارا 0%' : '0% Installments'}</span>
+              <CheckCircle className="w-3.5 h-3.5 text-emerald-600" />
+              <span>{isAr ? 'منتجات أصلية 100% معتمدة' : '100% Authentic Certified'}</span>
             </span>
           </div>
         </div>

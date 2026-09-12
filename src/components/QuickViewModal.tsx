@@ -143,13 +143,9 @@ export default function QuickViewModal({
                   </span>
                 )}
               </div>
-              <span className="text-[10px] text-gray-500 font-mono flex items-center gap-1">
-                <Zap className="w-3 h-3 text-amber-500" />
-                <span>
-                  {isAr
-                    ? `أو ${formatPrice(Math.round(product.price / 4), currency, isAr)} / شهر مع تابي`
-                    : `or 4x ${formatPrice(Math.round(product.price / 4), currency, isAr)} with Tabby`}
-                </span>
+              <span className="text-[11px] text-emerald-700 font-bold flex items-center gap-1 bg-emerald-50 px-2 py-0.5 rounded-md inline-flex border border-emerald-200">
+                <ShieldCheck className="w-3.5 h-3.5 text-emerald-600" />
+                <span>{isAr ? 'منتج أصلي مضمون 100% مع الضمان' : '100% Guaranteed Authentic'}</span>
               </span>
             </div>
 

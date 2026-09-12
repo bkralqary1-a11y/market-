@@ -11,8 +11,15 @@ import {
   CheckCircle2,
   Printer,
   AlertCircle,
+  ShoppingBag,
+  Sparkles,
+  ArrowLeft,
+  Smartphone,
+  Zap,
+  Headphones,
+  Cable,
 } from 'lucide-react';
-import { CartItem } from '../types';
+import { CartItem, CategoryId } from '../types';
 
 interface InvoiceModalProps {
   isOpen: boolean;
@@ -21,6 +28,8 @@ interface InvoiceModalProps {
   onUpdateQuantity: (index: number, newQty: number) => void;
   onRemoveItem: (index: number) => void;
   onClearCart?: () => void;
+  onBrowseProducts?: () => void;
+  onSelectCategory?: (category: CategoryId) => void;
 }
 
 export default function InvoiceModal({
@@ -29,6 +38,8 @@ export default function InvoiceModal({
   cart,
   onUpdateQuantity,
   onRemoveItem,
+  onBrowseProducts,
+  onSelectCategory,
 }: InvoiceModalProps) {
   const modalId = useId();
   // Name & Phone start empty as requested
@@ -39,6 +50,22 @@ export default function InvoiceModal({
   const [validationError, setValidationError] = useState('');
 
   if (!isOpen) return null;
+
+  const handleBrowse = () => {
+    onClose();
+    if (onBrowseProducts) {
+      onBrowseProducts();
+    }
+  };
+
+  const handleCategoryClick = (catId: CategoryId) => {
+    onClose();
+    if (onSelectCategory) {
+      onSelectCategory(catId);
+    } else if (onBrowseProducts) {
+      onBrowseProducts();
+    }
+  };
 
   // Calculate subtotal
   const grandTotal = cart.reduce((sum, item) => sum + item.product.price * item.quantity, 0);
@@ -239,14 +266,75 @@ export default function InvoiceModal({
         </div>
 
         {cart.length === 0 ? (
-          <div className="py-12 text-center text-gray-400">
-            <p className="text-sm">السلة فارغة حالياً. قم بإضافة منتجات لتظهر في الفاتورة.</p>
+          <div className="py-10 text-center flex flex-col items-center">
+            {/* Welcoming Badge */}
+            <div className="inline-flex items-center gap-1.5 bg-emerald-500/10 text-emerald-400 px-3.5 py-1.5 rounded-full text-xs font-bold border border-emerald-500/20 mb-4">
+              <Sparkles className="w-3.5 h-3.5 text-emerald-400" />
+              <span>أهلاً بك في متجر صدام العقاري 🌟</span>
+            </div>
+
+            {/* Glowing Shopping Bag Icon */}
+            <div className="relative w-20 h-20 mb-4">
+              <div className="absolute inset-0 rounded-2xl bg-emerald-500/20 blur-md animate-pulse" />
+              <div className="relative w-full h-full rounded-2xl bg-gradient-to-tr from-emerald-600 to-teal-500 text-white flex items-center justify-center shadow-lg shadow-emerald-500/20">
+                <ShoppingBag className="w-9 h-9" />
+              </div>
+            </div>
+
+            {/* Title & Welcoming Message */}
+            <h3 className="text-xl font-black text-white mb-2">
+              سلة مشترياتك وفاتورتك فارغة حالياً
+            </h3>
+            <p className="text-xs sm:text-sm text-gray-400 mb-6 max-w-sm leading-relaxed">
+              أهلاً بك! لم تقم بإضافة أي أجهزة إلى الفاتورة بعد. تصفح تشكيلتنا من أحدث الهواتف الذكية المعتمدة، منصات الشحن السريع، والسماعات لإصدار فاتورتك الفورية المعتمدة.
+            </p>
+
+            {/* Browse Button */}
             <button
-              onClick={onClose}
-              className="mt-4 px-6 py-2.5 rounded-xl bg-orange-600 hover:bg-orange-700 text-white font-bold text-xs cursor-pointer"
+              onClick={handleBrowse}
+              className="inline-flex items-center justify-center gap-2 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white font-extrabold text-sm px-7 py-3 rounded-xl transition-all shadow-lg shadow-emerald-600/30 active:scale-95 cursor-pointer mb-6"
             >
-              تصفح المنتجات
+              <ShoppingBag className="w-4 h-4" />
+              <span>تصفح المنتجات</span>
+              <ArrowLeft className="w-4 h-4" />
             </button>
+
+            {/* Category Shortcuts */}
+            <div className="w-full border-t border-gray-800 pt-4 max-w-md">
+              <span className="block text-xs font-bold text-gray-500 mb-2.5">
+                أو تصفح مباشرة حسب القسم:
+              </span>
+              <div className="flex flex-wrap justify-center gap-2">
+                <button
+                  onClick={() => handleCategoryClick('phones')}
+                  className="inline-flex items-center gap-1.5 text-xs font-bold text-gray-300 bg-gray-800/80 hover:bg-emerald-950/60 hover:text-emerald-400 px-3 py-1.5 rounded-lg border border-gray-700 transition-colors"
+                >
+                  <Smartphone className="w-3.5 h-3.5 text-emerald-400" />
+                  <span>الهواتف</span>
+                </button>
+                <button
+                  onClick={() => handleCategoryClick('chargers')}
+                  className="inline-flex items-center gap-1.5 text-xs font-bold text-gray-300 bg-gray-800/80 hover:bg-emerald-950/60 hover:text-emerald-400 px-3 py-1.5 rounded-lg border border-gray-700 transition-colors"
+                >
+                  <Zap className="w-3.5 h-3.5 text-amber-400" />
+                  <span>الشواحن</span>
+                </button>
+                <button
+                  onClick={() => handleCategoryClick('audio')}
+                  className="inline-flex items-center gap-1.5 text-xs font-bold text-gray-300 bg-gray-800/80 hover:bg-emerald-950/60 hover:text-emerald-400 px-3 py-1.5 rounded-lg border border-gray-700 transition-colors"
+                >
+                  <Headphones className="w-3.5 h-3.5 text-purple-400" />
+                  <span>السماعات</span>
+                </button>
+                <button
+                  onClick={() => handleCategoryClick('cables')}
+                  className="inline-flex items-center gap-1.5 text-xs font-bold text-gray-300 bg-gray-800/80 hover:bg-emerald-950/60 hover:text-emerald-400 px-3 py-1.5 rounded-lg border border-gray-700 transition-colors"
+                >
+                  <Cable className="w-3.5 h-3.5 text-teal-400" />
+                  <span>الكيابل</span>
+                </button>
+              </div>
+            </div>
           </div>
         ) : (
           <>

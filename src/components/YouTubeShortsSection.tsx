@@ -1,5 +1,5 @@
-import { useState } from 'react';
-import { Play, ExternalLink, MessageCircle, X, ChevronRight, ChevronLeft, Sparkles, Smartphone, Eye, Share2, Volume2 } from 'lucide-react';
+import { useState, useEffect } from 'react';
+import { Play, ExternalLink, MessageCircle, X, ChevronRight, ChevronLeft, Sparkles, Smartphone, Eye, Share2, RotateCw, Pause } from 'lucide-react';
 import { Language, Currency, Product, ShortVideoItem } from '../types';
 import { getYouTubeEmbedUrl, getYouTubeThumbnail } from '../utils/videoUtils';
 import Tilt3D from './Tilt3D';
@@ -82,8 +82,31 @@ export default function YouTubeShortsSection({
   const [fullscreenIndex, setFullscreenIndex] = useState<number | null>(null);
   const [copiedLink, setCopiedLink] = useState<string | null>(null);
 
+  // Auto-flip rotation states
+  const [autoRotate, setAutoRotate] = useState(true);
+  const [activeSlideIndex, setActiveSlideIndex] = useState(0);
+
   // Active visible shorts
   const activeShorts = (shorts && shorts.length > 0 ? shorts : YOUTUBE_SHORTS_DATA).filter((s) => !s.hidden);
+
+  // Auto-flip timer (every 5 seconds when not playing in-card)
+  useEffect(() => {
+    if (!autoRotate || activePlayId || activeShorts.length <= 1) return;
+    const interval = setInterval(() => {
+      setActiveSlideIndex((prev) => (prev + 1) % activeShorts.length);
+    }, 5000);
+    return () => clearInterval(interval);
+  }, [autoRotate, activePlayId, activeShorts.length]);
+
+  const handleNextSlide = () => {
+    soundFX.playWhoosh();
+    setActiveSlideIndex((prev) => (prev + 1) % activeShorts.length);
+  };
+
+  const handlePrevSlide = () => {
+    soundFX.playWhoosh();
+    setActiveSlideIndex((prev) => (prev - 1 + activeShorts.length) % activeShorts.length);
+  };
 
   const handleOpenFullscreen = (idx: number) => {
     soundFX.playModalOpen();
@@ -120,12 +143,37 @@ export default function YouTubeShortsSection({
       <div className="absolute bottom-1/4 -right-20 w-80 h-80 bg-orange-500/15 rounded-full blur-3xl pointer-events-none" />
 
       <div className="container mx-auto px-4 relative z-10">
-        {/* Header Title with YouTube Branding */}
+        {/* Header Title with YouTube Branding & Auto-Rotate Controls */}
         <div className="flex flex-col md:flex-row md:items-end justify-between gap-4 mb-8 sm:mb-12 border-b border-white/10 pb-6">
           <div>
-            <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-red-600/20 border border-red-500/40 text-red-400 text-xs font-bold mb-3 shadow-xs">
-              <span className="w-2 h-2 rounded-full bg-red-500 animate-ping" />
-              <span>{isAr ? 'فيديوهات يوتيوب القصيرة الحصرية' : 'Exclusive YouTube Shorts'}</span>
+            <div className="flex items-center gap-2 mb-3">
+              <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-red-600/20 border border-red-500/40 text-red-400 text-xs font-bold shadow-xs">
+                <span className="w-2 h-2 rounded-full bg-red-500 animate-ping" />
+                <span>{isAr ? 'فيديوهات يوتيوب القصيرة والريلز' : 'Exclusive YouTube Shorts'}</span>
+              </div>
+
+              {/* Auto-flip status badge */}
+              <button
+                onClick={() => setAutoRotate((prev) => !prev)}
+                className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-medium border transition-colors cursor-pointer ${
+                  autoRotate
+                    ? 'bg-emerald-500/15 border-emerald-500/30 text-emerald-300'
+                    : 'bg-zinc-800/60 border-zinc-700 text-zinc-400'
+                }`}
+                title={isAr ? 'التحكم في التقليب التلقائي للفيديوهات' : 'Toggle Auto-Slide'}
+              >
+                {autoRotate ? (
+                  <>
+                    <RotateCw className="w-3 h-3 animate-spin" style={{ animationDuration: '6s' }} />
+                    <span>{isAr ? 'التقليب التلقائي: شغال' : 'Auto-Flip: ON'}</span>
+                  </>
+                ) : (
+                  <>
+                    <Pause className="w-3 h-3" />
+                    <span>{isAr ? 'التقليب التلقائي: متوقف' : 'Auto-Flip: OFF'}</span>
+                  </>
+                )}
+              </button>
             </div>
 
             <h2 className="text-2xl sm:text-3xl lg:text-4xl font-black tracking-tight text-white flex items-center gap-3">
@@ -136,30 +184,54 @@ export default function YouTubeShortsSection({
 
             <p className="text-xs sm:text-sm text-gray-400 mt-2 max-w-2xl leading-relaxed">
               {isAr
-                ? 'شاهد مراجعات الهواتف، فتح الصندوق، واختبارات الكاميرات والملحقات الأصلية مباشرة من قناتنا على يوتيوب بجودة فائقة.'
-                : 'Watch real phone reviews, unboxing, camera zoom tests, and original accessories right from our YouTube channel.'}
+                ? 'شاهد مراجعات الهواتف، فتح الصندوق، واختبارات الكاميرات والملحقات الأصلية. تتقلب القوالب والفيديوهات تلقائياً لراحتك.'
+                : 'Watch real phone reviews, unboxing, camera zoom tests, and original accessories. Video templates auto-rotate smoothly.'}
             </p>
           </div>
 
-          {/* Direct YouTube Channel CTA Button */}
+          {/* Navigation Controls and Direct YouTube Channel CTA Button */}
           <div className="flex items-center gap-3">
+            {/* Prev / Next controls */}
+            {activeShorts.length > 1 && (
+              <div className="flex items-center gap-1.5 bg-neutral-800/80 p-1 rounded-xl border border-white/10">
+                <button
+                  onClick={handlePrevSlide}
+                  className="p-1.5 rounded-lg hover:bg-white/10 text-gray-300 hover:text-white transition-colors cursor-pointer"
+                  title={isAr ? 'السابق' : 'Previous'}
+                >
+                  {isAr ? <ChevronRight className="w-4 h-4" /> : <ChevronLeft className="w-4 h-4" />}
+                </button>
+                <span className="text-[11px] font-mono font-bold px-2 text-gray-400">
+                  {activeSlideIndex + 1} / {activeShorts.length}
+                </span>
+                <button
+                  onClick={handleNextSlide}
+                  className="p-1.5 rounded-lg hover:bg-white/10 text-gray-300 hover:text-white transition-colors cursor-pointer"
+                  title={isAr ? 'التالي' : 'Next'}
+                >
+                  {isAr ? <ChevronLeft className="w-4 h-4" /> : <ChevronRight className="w-4 h-4" />}
+                </button>
+              </div>
+            )}
+
             <a
               href="https://youtube.com/shorts/Ues_BxS8v-s"
               target="_blank"
               rel="noopener noreferrer"
               onClick={() => soundFX.playClick()}
-              className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-red-600 hover:bg-red-500 text-white font-bold text-xs sm:text-sm shadow-lg hover:shadow-red-600/30 transition-all active:scale-95 border border-red-400/40"
+              className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-red-600 hover:bg-red-500 text-white font-bold text-xs sm:text-sm shadow-lg hover:shadow-red-600/30 transition-all active:scale-95 border border-red-400/40 cursor-pointer"
             >
               <ExternalLink className="w-4 h-4" />
-              <span>{isAr ? 'مشاهدة كل الفيديوهات على يوتيوب' : 'Open YouTube Channel'}</span>
+              <span>{isAr ? 'قناة يوتيوب' : 'YouTube Channel'}</span>
             </a>
           </div>
         </div>
 
-        {/* 3D Vertical Cards Grid */}
+        {/* 3D Vertical Cards Grid with Auto-Slide Focus Highlights */}
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6 lg:gap-8 max-w-6xl mx-auto">
           {activeShorts.map((short, index) => {
             const isPlaying = activePlayId === short.id;
+            const isHighlighted = activeSlideIndex === index;
             const embedSrc = getYouTubeEmbedUrl(short.youtubeId, { autoplay: true, mute: false, loop: true });
             const thumbSrc = getYouTubeThumbnail(short.youtubeId);
 
@@ -167,12 +239,14 @@ export default function YouTubeShortsSection({
               <Tilt3D
                 key={short.id}
                 maxAngle={8}
-                scale={1.02}
+                scale={isHighlighted ? 1.03 : 1}
                 depth={25}
                 className="w-full h-full"
               >
                 <div
-                  className="w-full rounded-3xl overflow-hidden bg-neutral-900 border border-white/15 shadow-2xl flex flex-col group transition-all duration-300 relative"
+                  className={`w-full rounded-3xl overflow-hidden bg-neutral-900 border shadow-2xl flex flex-col group transition-all duration-500 relative ${
+                    isHighlighted ? 'border-amber-400/80 shadow-[0_0_30px_rgba(245,158,11,0.25)] ring-1 ring-amber-400/50' : 'border-white/15'
+                  }`}
                   style={{ transformStyle: 'preserve-3d' }}
                 >
                   {/* Smartphone Bezel & Aspect Ratio Frame (9:16) */}
@@ -193,7 +267,7 @@ export default function YouTubeShortsSection({
                             soundFX.playClick();
                             setActivePlayId(null);
                           }}
-                          className="absolute top-3 right-3 z-30 w-8 h-8 rounded-full bg-black/70 hover:bg-black text-white flex items-center justify-center border border-white/30 backdrop-blur-md transition-all active:scale-90"
+                          className="absolute top-3 right-3 z-30 w-8 h-8 rounded-full bg-black/70 hover:bg-black text-white flex items-center justify-center border border-white/30 backdrop-blur-md transition-all active:scale-90 cursor-pointer"
                           title={isAr ? 'إيقاف الفيديو' : 'Close Player'}
                         >
                           <X className="w-4 h-4" />
@@ -220,32 +294,30 @@ export default function YouTubeShortsSection({
                             <span>Shorts</span>
                           </span>
 
-                          <span className="bg-black/60 text-gray-200 text-[10px] font-mono px-2.5 py-1 rounded-full backdrop-blur-md border border-white/20 flex items-center gap-1">
+                          <span className="bg-black/60 text-gray-200 text-[10px] font-mono px-2 py-0.5 rounded-full backdrop-blur-md border border-white/10 flex items-center gap-1">
                             <Eye className="w-3 h-3 text-red-400" />
-                            <span>{short.viewsText}</span>
+                            <span>{short.viewsText || '50K'}</span>
                           </span>
                         </div>
 
-                        {/* Center Big Play Button */}
-                        <button
-                          onClick={() => {
-                            soundFX.playModalOpen();
-                            setActivePlayId(short.id);
-                          }}
-                          className="absolute inset-0 m-auto w-16 h-16 rounded-full bg-red-600/90 hover:bg-red-500 text-white flex items-center justify-center shadow-2xl border-2 border-white/80 group-hover/thumb:scale-110 active:scale-95 transition-all z-20 cursor-pointer backdrop-blur-xs"
-                          title={isAr ? 'تشغيل الفيديو' : 'Play Short'}
-                        >
-                          <Play className="w-7 h-7 fill-white translate-x-0.5" />
-                        </button>
+                        {/* Center Luxury Play Button */}
+                        <div className="absolute inset-0 flex items-center justify-center z-20">
+                          <button
+                            onClick={() => {
+                              soundFX.playClick();
+                              setActivePlayId(short.id);
+                            }}
+                            className="w-16 h-16 rounded-full bg-red-600 hover:bg-red-500 text-white flex items-center justify-center shadow-[0_0_25px_rgba(220,38,38,0.7)] group-hover/thumb:scale-110 active:scale-95 transition-all duration-300 border-2 border-white/40 cursor-pointer"
+                            aria-label={isAr ? 'تشغيل الفيديو' : 'Play Short'}
+                          >
+                            <Play className="w-7 h-7 fill-white translate-x-0.5" />
+                          </button>
+                        </div>
 
-                        {/* Fullscreen Reel Trigger in corner */}
+                        {/* Bottom Fullscreen Overlay Trigger */}
                         <button
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            handleOpenFullscreen(index);
-                          }}
-                          className="absolute bottom-3 left-3 rtl:left-auto rtl:right-3 z-20 px-3 py-1 rounded-full bg-white/20 hover:bg-white/30 text-white text-[11px] font-bold backdrop-blur-md border border-white/30 transition-all flex items-center gap-1 active:scale-90"
-                          title={isAr ? 'مشاهدة ملء الشاشة' : 'Fullscreen Reel'}
+                          onClick={() => handleOpenFullscreen(index)}
+                          className="absolute bottom-3 right-3 z-20 px-2.5 py-1 rounded-lg bg-black/60 hover:bg-black text-white text-[10px] font-bold border border-white/20 backdrop-blur-md flex items-center gap-1 opacity-90 hover:opacity-100 transition-all cursor-pointer"
                         >
                           <Sparkles className="w-3 h-3 text-amber-300" />
                           <span>{isAr ? 'شاشة كاملة' : 'Fullscreen'}</span>
@@ -265,7 +337,7 @@ export default function YouTubeShortsSection({
 
                         <button
                           onClick={() => handleShareShort(short)}
-                          className="text-gray-400 hover:text-white transition-colors flex items-center gap-1 text-[11px]"
+                          className="text-gray-400 hover:text-white transition-colors flex items-center gap-1 text-[11px] cursor-pointer"
                           title={isAr ? 'نسخ رابط الفيديو' : 'Copy Short link'}
                         >
                           <Share2 className="w-3.5 h-3.5" />
@@ -306,7 +378,7 @@ export default function YouTubeShortsSection({
                           target="_blank"
                           rel="noopener noreferrer"
                           onClick={() => soundFX.playClick()}
-                          className="inline-flex items-center justify-center gap-1.5 py-2 px-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs shadow-md transition-all active:scale-95 border border-emerald-400/30"
+                          className="inline-flex items-center justify-center gap-1.5 py-2 px-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs shadow-md transition-all active:scale-95 border border-emerald-400/30 cursor-pointer"
                           title={isAr ? 'اطلب الآن عبر واتساب' : 'Order on WhatsApp'}
                         >
                           <MessageCircle className="w-3.5 h-3.5" />
@@ -319,29 +391,13 @@ export default function YouTubeShortsSection({
                           target="_blank"
                           rel="noopener noreferrer"
                           onClick={() => soundFX.playClick()}
-                          className="inline-flex items-center justify-center gap-1.5 py-2 px-2.5 rounded-xl bg-white/10 hover:bg-white/20 text-white font-semibold text-xs transition-all active:scale-95 border border-white/15"
-                          title={isAr ? 'فتح الفيديو على يوتيوب' : 'Open in YouTube'}
+                          className="inline-flex items-center justify-center gap-1.5 py-2 px-2.5 rounded-xl bg-white/10 hover:bg-white/20 text-white font-bold text-xs transition-all active:scale-95 border border-white/15 cursor-pointer"
+                          title={isAr ? 'مشاهدة على تطبيق يوتيوب' : 'Watch on YouTube'}
                         >
                           <ExternalLink className="w-3.5 h-3.5 text-red-400" />
-                          <span>{isAr ? 'على يوتيوب' : 'YouTube'}</span>
+                          <span>{isAr ? 'يوتيوب' : 'YouTube'}</span>
                         </a>
                       </div>
-
-                      {/* View Product Details in Store */}
-                      {onSelectProduct && (
-                        <button
-                          onClick={() => {
-                            soundFX.playClick();
-                            const matched = products.find((p) => p.id === short.productId);
-                            if (matched) {
-                              onSelectProduct(matched);
-                            }
-                          }}
-                          className="w-full text-center py-1.5 text-[11px] font-bold text-gray-300 hover:text-orange-400 transition-colors block cursor-pointer"
-                        >
-                          {isAr ? 'عرض المواصفات التقنية الكاملة لهذا الجهاز ←' : 'View Full Specs of this device →'}
-                        </button>
-                      )}
                     </div>
                   </div>
                 </div>
@@ -349,34 +405,44 @@ export default function YouTubeShortsSection({
             );
           })}
         </div>
-      </div>
 
-      {/* FULLSCREEN REELS MODAL (LIKE YOUTUBE SHORTS / TIKTOK REEL VIEWER) */}
-      {currentFullscreenShort && (
-        <div className="fixed inset-0 z-[999999] bg-black/95 backdrop-blur-2xl flex items-center justify-center p-2 sm:p-4 animate-in fade-in duration-200">
-          <div className="relative w-full max-w-sm sm:max-w-md h-[92vh] max-h-[820px] bg-neutral-950 rounded-3xl overflow-hidden shadow-2xl border border-white/20 flex flex-col">
-            {/* Top Bar with Close & Short Title */}
-            <div className="absolute top-0 inset-x-0 z-30 flex items-center justify-between p-4 bg-gradient-to-b from-black/80 to-transparent text-white">
-              <div className="flex items-center gap-2">
-                <span className="w-2.5 h-2.5 rounded-full bg-red-500 animate-pulse" />
-                <span className="text-xs font-bold font-mono tracking-wider text-red-400">
-                  YouTube Shorts ({fullscreenIndex! + 1}/{YOUTUBE_SHORTS_DATA.length})
-                </span>
-              </div>
-
+        {/* Carousel Dots Indicator */}
+        {activeShorts.length > 1 && (
+          <div className="flex items-center justify-center gap-2 mt-8">
+            {activeShorts.map((_, idx) => (
               <button
+                key={idx}
                 onClick={() => {
                   soundFX.playClick();
-                  setFullscreenIndex(null);
+                  setActiveSlideIndex(idx);
                 }}
-                className="w-9 h-9 rounded-full bg-black/60 hover:bg-white/20 text-white flex items-center justify-center border border-white/20 transition-colors cursor-pointer"
-                title={isAr ? 'إغلاق' : 'Close'}
-              >
-                <X className="w-5 h-5" />
-              </button>
-            </div>
+                className={`h-2 rounded-full transition-all duration-300 cursor-pointer ${
+                  activeSlideIndex === idx ? 'w-8 bg-amber-400 shadow-md' : 'w-2 bg-white/30 hover:bg-white/60'
+                }`}
+                aria-label={`Slide ${idx + 1}`}
+              />
+            ))}
+          </div>
+        )}
+      </div>
 
-            {/* Main Video Embed */}
+      {/* Fullscreen Video Reel Modal */}
+      {fullscreenIndex !== null && currentFullscreenShort && (
+        <div className="fixed inset-0 z-50 bg-black/95 backdrop-blur-xl flex items-center justify-center p-2 sm:p-4 animate-fadeIn">
+          {/* Close button */}
+          <button
+            onClick={() => {
+              soundFX.playClick();
+              setFullscreenIndex(null);
+            }}
+            className="absolute top-4 right-4 z-40 w-10 h-10 rounded-full bg-white/10 hover:bg-white/20 text-white flex items-center justify-center border border-white/20 backdrop-blur-md active:scale-90 transition-all cursor-pointer"
+            title={isAr ? 'إغلاق' : 'Close'}
+          >
+            <X className="w-5 h-5" />
+          </button>
+
+          {/* Fullscreen Mobile Frame (9:16) */}
+          <div className="relative w-full max-w-sm sm:max-w-md aspect-[9/16] max-h-[90vh] bg-black rounded-3xl overflow-hidden border border-white/20 shadow-2xl flex flex-col">
             <div className="w-full h-full relative bg-black">
               <iframe
                 src={getYouTubeEmbedUrl(currentFullscreenShort.youtubeId, {
@@ -401,7 +467,7 @@ export default function YouTubeShortsSection({
                 target="_blank"
                 rel="noopener noreferrer"
                 onClick={() => soundFX.playClick()}
-                className="flex-1 py-2.5 px-4 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs flex items-center justify-center gap-2 shadow-lg"
+                className="flex-1 py-2.5 px-4 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs flex items-center justify-center gap-2 shadow-lg cursor-pointer"
               >
                 <MessageCircle className="w-4 h-4" />
                 <span>{isAr ? 'اطلب الآن بالواتساب' : 'Order on WhatsApp'}</span>
@@ -411,7 +477,7 @@ export default function YouTubeShortsSection({
                 href={currentFullscreenShort.shortsUrl}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="p-2.5 rounded-xl bg-white/20 hover:bg-white/30 text-white border border-white/30"
+                className="p-2.5 rounded-xl bg-white/20 hover:bg-white/30 text-white border border-white/30 cursor-pointer"
                 title={isAr ? 'فتح على يوتيوب' : 'Open in YouTube'}
               >
                 <ExternalLink className="w-4 h-4" />

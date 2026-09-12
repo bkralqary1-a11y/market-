@@ -118,7 +118,7 @@ export default function CheckoutView({
               <div className="flex justify-between">
                 <span className="text-gray-400">{isAr ? 'طريقة الدفع:' : 'Payment:'}</span>
                 <span className="font-bold text-primary">
-                  {paymentMethod === 'apple_pay' ? 'Apple Pay' : paymentMethod === 'tabby' ? 'Tabby (4 دفعات)' : paymentMethod === 'tamara' ? 'Tamara (4 دفعات)' : 'بطاقة مدى / ائتمان'}
+                  {paymentMethod === 'apple_pay' ? 'Apple Pay' : paymentMethod === 'kuraimi' ? (isAr ? 'بنك الكريمي' : 'Kuraimi Bank') : paymentMethod === 'onecash' ? 'OneCash' : paymentMethod === 'mobile_money' ? (isAr ? 'موبايل موني' : 'Mobile Money') : paymentMethod === 'cod' ? (isAr ? 'الدفع عند الاستلام' : 'Cash on Delivery') : (isAr ? 'بطاقة بنكية / حوالة' : 'Card / Bank Transfer')}
                 </span>
               </div>
               <div className="flex justify-between border-t border-gray-line pt-2 text-sm font-extrabold text-gray-dark">

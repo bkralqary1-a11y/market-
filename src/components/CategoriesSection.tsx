@@ -8,11 +8,13 @@ import { soundFX } from '../utils/audioEffects';
 interface CategoriesSectionProps {
   language: Language;
   onSelectCategory: (catId: CategoryId) => void;
+  selectedCategory?: CategoryId;
 }
 
 export default function CategoriesSection({
   language,
   onSelectCategory,
+  selectedCategory,
 }: CategoriesSectionProps) {
   const isAr = language === 'ar';
   const scrollContainerRef = useRef<HTMLDivElement>(null);
@@ -149,7 +151,7 @@ export default function CategoriesSection({
         >
           {mockCategories.map((cat, idx) => {
             const bgImg = categoryImages[cat.id] || cat.image;
-            const isSelected = currentIndex === idx;
+            const isSelected = selectedCategory ? selectedCategory === cat.id : currentIndex === idx;
 
             return (
               <Tilt3D

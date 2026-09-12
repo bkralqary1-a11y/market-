@@ -29,14 +29,14 @@ export default function Newsletter({ language }: NewsletterProps) {
 
           <h2 className="text-2xl md:text-3xl font-black mb-2 font-display">
             {isAr
-              ? 'انضم لنادي VIP واحصل على قسيمة 50 ر.س فورية'
-              : 'Join ElectroLux VIP Club & Get 50 SAR Voucher'}
+              ? 'انضم لقائمتنا وتلقّ أحدث الوصولات فوراً'
+              : 'Join Our VIP Updates for New Flagship Arrivals'}
           </h2>
 
           <p className="text-xs md:text-sm text-gray-300 max-w-md mx-auto mb-6">
             {isAr
-              ? 'احصل على إشعارات مسبقة قبل نفاد أجهزة آبل وسامسونج، وعروض حصرية على الشواحن والسماعات.'
-              : 'Priority alerts for flagship smartphone restocks, exclusive deals on GaN chargers & audio gear.'}
+              ? 'احصل على إشعارات فورية عند وصول أحدث أجهزة آبل وسامسونج والشواحن والسماعات الأصلية.'
+              : 'Instant alerts for official smartphone restocks, original chargers and audio gear.'}
           </p>
 
           {submitted ? (

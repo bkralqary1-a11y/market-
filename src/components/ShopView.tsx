@@ -1,5 +1,5 @@
-import { useState, useMemo } from 'react';
-import { Filter, SlidersHorizontal, Grid, List, Check, ArrowUpDown, X, Sparkles } from 'lucide-react';
+import { useState, useMemo, useEffect } from 'react';
+import { Filter, SlidersHorizontal, Sparkles } from 'lucide-react';
 import { Product, Language, Currency, CategoryId } from '../types';
 import ProductCard from './ProductCard';
 import { formatPrice } from '../data/mockData';
@@ -44,8 +44,10 @@ export default function ShopView({
   const [isMobileFilterOpen, setIsMobileFilterOpen] = useState(false);
 
   // Sync category if initialCategory changes
-  useMemo(() => {
-    setSelectedCategory(initialCategory);
+  useEffect(() => {
+    if (initialCategory) {
+      setSelectedCategory(initialCategory);
+    }
   }, [initialCategory]);
 
   const categories: { id: CategoryId; nameEn: string; nameAr: string }[] = [
@@ -127,7 +129,7 @@ export default function ShopView({
         </div>
 
         {/* Main Grid: Filters Sidebar (1 Col) + Product Grid (3 Cols) */}
-        <div className="grid grid-cols-1 lg:grid-cols-4 gap-8">
+        <div className="grid grid-cols-1 lg:grid-cols-4 gap-6 lg:gap-8 w-full min-w-0">
           {/* Desktop Filters Sidebar */}
           <aside className="hidden lg:block space-y-6">
             <div className="bg-white p-6 rounded-3xl border border-gray-line shadow-xs space-y-6">
@@ -218,7 +220,7 @@ export default function ShopView({
           </aside>
 
           {/* Right Product Grid Area */}
-          <div className="lg:col-span-3 space-y-6">
+          <div className="lg:col-span-3 space-y-6 w-full min-w-0">
             {/* Top Toolbar: Sorting and Mobile Filter button */}
             <div className="bg-white p-4 rounded-2xl border border-gray-line shadow-xs flex items-center justify-between gap-3">
               <button
@@ -244,7 +246,7 @@ export default function ShopView({
               </div>
             </div>
 
-            {/* Products Grid */}
+            {/* Products Grid: Always 2 products side-by-side on mobile and small screens */}
             {filteredProducts.length === 0 ? (
               <div className="bg-white p-12 rounded-3xl border border-gray-line text-center shadow-xs">
                 <Sparkles className="w-10 h-10 text-gray-300 mx-auto mb-3" />
@@ -262,7 +264,7 @@ export default function ShopView({
                 </button>
               </div>
             ) : (
-              <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-6">
+              <div className="grid grid-cols-2 sm:grid-cols-2 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-3 gap-2.5 sm:gap-4 md:gap-6 w-full min-w-0">
                 {filteredProducts.map((p) => (
                   <ProductCard
                     key={p.id}

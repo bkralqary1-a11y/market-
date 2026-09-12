@@ -356,16 +356,15 @@ export default function ProductDetailView({
                     </span>
                   </div>
 
-                  {/* Tabby & Tamara Installment Banner */}
-                  <div className="flex items-center justify-between text-xs text-gray-600 bg-white p-2.5 rounded-xl border border-gray-200">
+                  {/* Authentic Certified & Warranty Banner */}
+                  <div className="flex items-center justify-between text-xs text-gray-700 bg-white p-2.5 rounded-xl border border-gray-200">
                     <div className="flex items-center gap-2">
-                      <Zap className="w-4 h-4 text-amber-500" />
-                      <span>{isAr ? `قسطها على 4 دفعات بقيمة ${formatPrice(installment4, currency, isAr)} بدون أي فوائد` : `Or 4 interest-free payments of ${formatPrice(installment4, currency, isAr)}`}</span>
+                      <ShieldCheck className="w-4 h-4 text-emerald-600 shrink-0" />
+                      <span className="font-bold">{isAr ? 'منتج أصلي 100% معتمد مع ضمان المحل وفاتورة رسمية' : '100% Certified Original with Official Warranty & Invoice'}</span>
                     </div>
-                    <div className="flex items-center gap-1 font-mono font-black text-[10px]">
-                      <span className="bg-emerald-50 text-emerald-800 px-1.5 py-0.5 rounded border border-emerald-200">tabby</span>
-                      <span className="bg-amber-50 text-amber-800 px-1.5 py-0.5 rounded border border-amber-200">tamara</span>
-                    </div>
+                    <span className="text-[11px] font-bold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-md border border-emerald-200 shrink-0">
+                      {isAr ? 'متوفر فوري' : 'In Stock'}
+                    </span>
                   </div>
                 </div>
 
@@ -712,7 +711,7 @@ export default function ProductDetailView({
             <h3 className="text-lg sm:text-xl font-black text-gray-dark mb-6 pb-2 border-b border-gray-line">
               {isAr ? 'منتجات وملحقات مشابهة قد تهمك' : 'Related Hardware & Accessories'}
             </h3>
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
+            <div className="grid grid-cols-2 sm:grid-cols-2 lg:grid-cols-4 gap-2.5 sm:gap-6">
               {relatedProducts.map((p) => (
                 <ProductCard
                   key={p.id}

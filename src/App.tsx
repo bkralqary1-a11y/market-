@@ -31,7 +31,7 @@ import WaveDivider from './components/WaveDivider';
 import SocialMediaShowcase from './components/SocialMediaShowcase';
 import YouTubeShortsSection from './components/YouTubeShortsSection';
 import FloatingSocialDock from './components/FloatingSocialDock';
-import AdminControlModal from './components/AdminControlModal';
+import AdminPageView from './components/AdminPageView';
 import { soundFX } from './utils/audioEffects';
 
 export default function App() {
@@ -39,7 +39,6 @@ export default function App() {
   const [products, setProducts] = useState<Product[]>(() => getStoredProducts());
   const [shorts, setShorts] = useState<ShortVideoItem[]>(() => getStoredShorts());
   const [discountConfig, setDiscountConfig] = useState<StoreDiscountConfig>(() => getStoredDiscountConfig());
-  const [adminModalOpen, setAdminModalOpen] = useState(false);
 
   // App navigation state
   const [currentView, setCurrentView] = useState<PageView>('home');
@@ -108,12 +107,12 @@ export default function App() {
       if ((e.ctrlKey && e.shiftKey && e.key.toLowerCase() === 'a') || (e.altKey && e.key.toLowerCase() === 'a')) {
         e.preventDefault();
         soundFX.playModalOpen();
-        setAdminModalOpen((prev) => !prev);
+        setCurrentView((prev) => (prev === 'admin' ? 'home' : 'admin'));
       }
     };
     const handleAdminEvent = () => {
       soundFX.playModalOpen();
-      setAdminModalOpen(true);
+      setCurrentView('admin');
     };
     window.addEventListener('keydown', handleKeyDown);
     window.addEventListener('open-admin-panel', handleAdminEvent);
@@ -223,13 +222,15 @@ export default function App() {
     soundFX.playWhoosh();
     setSelectedCategory(catId);
     setCurrentView('shop');
+    window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
   // Filter active products (non-hidden) for client views
   const visibleProducts = products.filter((p) => !p.hidden);
 
-  // Home filtered products
+  // Home filtered products (supports category selection and trending/popular filters)
   const homeFilteredProducts = visibleProducts.filter((p) => {
+    if (selectedCategory !== 'all' && p.category !== selectedCategory) return false;
     if (homeFilter === 'trending') return p.isTrending ?? true;
     if (homeFilter === 'popular') return p.isPopular ?? true;
     return true;
@@ -243,6 +244,30 @@ export default function App() {
   }, 0);
 
   const comparedProducts = products.filter((p) => comparedProductIds.includes(p.id));
+
+  // Standalone Admin Dashboard Website View (User request: لوحه التحكم تضهر كا موقع اخر بالكامل ليس انبثاق)
+  if (currentView === 'admin') {
+    return (
+      <AdminPageView
+        products={products}
+        onUpdateProducts={(updated) => {
+          setProducts(updated);
+          saveStoredProducts(updated);
+        }}
+        shorts={shorts}
+        onUpdateShorts={(updated) => {
+          setShorts(updated);
+          saveStoredShorts(updated);
+        }}
+        language={language}
+        currency={currency}
+        onBackToStore={() => {
+          setCurrentView('home');
+          setDiscountConfig(getStoredDiscountConfig());
+        }}
+      />
+    );
+  }
 
   return (
     <div
@@ -265,7 +290,13 @@ export default function App() {
         cartTotal={cartTotalAmount}
         wishlistCount={wishlist.length}
         compareCount={comparedProductIds.length}
-        onOpenCartDrawer={() => setInvoiceModalOpen(true)}
+        onOpenCartDrawer={() => {
+          if (cart.length === 0) {
+            setCartDrawerOpen(true);
+          } else {
+            setInvoiceModalOpen(true);
+          }
+        }}
         onOpenCompare={() => setCompareModalOpen(true)}
         language={language}
         setLanguage={setLanguage}
@@ -273,7 +304,7 @@ export default function App() {
         setCurrency={setCurrency}
         onOpenSearch={() => setSearchOpen(true)}
         onOpenAuth={() => setAuthOpen(true)}
-        onOpenAdmin={() => setAdminModalOpen(true)}
+        onOpenAdmin={() => setCurrentView('admin')}
       />
 
       {/* Store-wide Promo & Discount Announcement Banner (Controlled from Admin Panel) */}
@@ -314,6 +345,7 @@ export default function App() {
             <CategoriesSection
               language={language}
               onSelectCategory={handleSelectCategory}
+              selectedCategory={selectedCategory}
             />
 
             {/* 3D Wave Transition into Trending */}
@@ -322,38 +354,70 @@ export default function App() {
             {/* Trending & Best Sellers Showcase */}
             <section id="trending-products-section" className="py-14 bg-gray-50 border-t border-gray-line">
               <div className="container mx-auto px-4">
-                <div className="flex flex-col md:flex-row md:items-end justify-between mb-8 pb-3 border-b border-gray-line">
+                <div className="flex flex-col md:flex-row md:items-end justify-between mb-8 pb-3 border-b border-gray-line gap-4">
                   <div>
-                    <span className="text-primary text-xs font-bold uppercase tracking-wider block mb-1">
-                      {isAr ? 'المختارات الأكثر إقبالاً' : 'Flagship Collection'}
-                    </span>
+                    <div className="flex items-center gap-2 mb-1">
+                      <span className="text-primary text-xs font-bold uppercase tracking-wider block">
+                        {isAr ? 'المختارات الأكثر إقبالاً' : 'Flagship Collection'}
+                      </span>
+                      {selectedCategory !== 'all' && (
+                        <span className="text-[10px] font-bold bg-orange-100 text-orange-700 px-2 py-0.5 rounded-full border border-orange-200">
+                          {isAr ? 'قسم مفلتر' : 'Filtered Section'}
+                        </span>
+                      )}
+                    </div>
                     <h2 className="text-2xl md:text-3xl font-extrabold text-gray-dark tracking-tight">
-                      {isAr ? 'الأجهزة والملحقات الأكثر مبيعاً' : 'Best Selling Electronics & Gear'}
+                      {selectedCategory === 'phones'
+                        ? (isAr ? 'الهواتف الذكية المعتمدة' : 'Certified Smartphones')
+                        : selectedCategory === 'audio'
+                        ? (isAr ? 'السماعات والأنظمة الصوتية' : 'Headphones & Audio')
+                        : selectedCategory === 'cases'
+                        ? (isAr ? 'كفرات وحماية الأجهزة' : 'Cases & Protection')
+                        : selectedCategory === 'chargers'
+                        ? (isAr ? 'الشواحن ومنصات الطاقة' : 'Chargers & Power')
+                        : selectedCategory === 'cables'
+                        ? (isAr ? 'الكيابل والوصلات المعتمدة' : 'Cables & Adapters')
+                        : (isAr ? 'الأجهزة والملحقات الأكثر مبيعاً' : 'Best Selling Electronics & Gear')}
                     </h2>
                   </div>
 
-                  {/* Filter Tabs */}
-                  <div className="flex items-center gap-2 mt-4 md:mt-0 bg-white border border-gray-line p-1 rounded-xl self-start md:self-auto">
+                  {/* Filter & Category Quick Tabs */}
+                  <div className="flex flex-wrap items-center gap-2 bg-white border border-gray-line p-1 rounded-xl self-start md:self-auto shadow-xs">
                     <button
-                      onClick={() => setHomeFilter('trending')}
-                      className={`text-xs font-bold px-3.5 py-1.5 rounded-lg transition-colors ${
-                        homeFilter === 'trending' ? 'bg-primary text-white shadow' : 'text-gray-600 hover:text-gray-dark'
+                      onClick={() => {
+                        setSelectedCategory('all');
+                        setHomeFilter('trending');
+                      }}
+                      className={`text-xs font-bold px-3 py-1.5 rounded-lg transition-colors cursor-pointer ${
+                        homeFilter === 'trending' && selectedCategory === 'all'
+                          ? 'bg-primary text-white shadow'
+                          : 'text-gray-600 hover:text-gray-dark'
                       }`}
                     >
                       {isAr ? 'الأكثر طلباً' : 'Trending'}
                     </button>
                     <button
-                      onClick={() => setHomeFilter('popular')}
-                      className={`text-xs font-bold px-3.5 py-1.5 rounded-lg transition-colors ${
-                        homeFilter === 'popular' ? 'bg-primary text-white shadow' : 'text-gray-600 hover:text-gray-dark'
+                      onClick={() => {
+                        setSelectedCategory('all');
+                        setHomeFilter('popular');
+                      }}
+                      className={`text-xs font-bold px-3 py-1.5 rounded-lg transition-colors cursor-pointer ${
+                        homeFilter === 'popular' && selectedCategory === 'all'
+                          ? 'bg-primary text-white shadow'
+                          : 'text-gray-600 hover:text-gray-dark'
                       }`}
                     >
                       {isAr ? 'الأعلى تقييماً' : 'Top Rated'}
                     </button>
                     <button
-                      onClick={() => setHomeFilter('all')}
-                      className={`text-xs font-bold px-3.5 py-1.5 rounded-lg transition-colors ${
-                        homeFilter === 'all' ? 'bg-primary text-white shadow' : 'text-gray-600 hover:text-gray-dark'
+                      onClick={() => {
+                        setSelectedCategory('all');
+                        setHomeFilter('all');
+                      }}
+                      className={`text-xs font-bold px-3 py-1.5 rounded-lg transition-colors cursor-pointer ${
+                        homeFilter === 'all' && selectedCategory === 'all'
+                          ? 'bg-primary text-white shadow'
+                          : 'text-gray-600 hover:text-gray-dark'
                       }`}
                     >
                       {isAr ? 'عرض الكل' : 'All'}
@@ -361,7 +425,7 @@ export default function App() {
                   </div>
                 </div>
 
-                {/* Products Grid or Welcoming State */}
+                {/* Products Grid: strictly 2 products side by side (grid-cols-2) on mobile & tablets */}
                 {visibleProducts.length === 0 ? (
                   <div className="text-center py-14 px-4 bg-white rounded-3xl border border-dashed border-gray-200 max-w-xl mx-auto my-4 shadow-xs">
                     <div className="w-14 h-14 bg-amber-50 rounded-2xl flex items-center justify-center mx-auto mb-3 text-amber-600">
@@ -386,7 +450,7 @@ export default function App() {
                     </a>
                   </div>
                 ) : (
-                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
+                  <div className="grid grid-cols-2 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-2.5 sm:gap-4 md:gap-6 w-full min-w-0">
                     {displayedHomeProducts.slice(0, 8).map((prod) => (
                       <ProductCard
                         key={prod.id}
@@ -507,7 +571,16 @@ export default function App() {
             onUpdateQuantity={handleUpdateQuantity}
             onRemoveItem={handleRemoveFromCart}
             onToggleWarranty={handleToggleWarranty}
-            onContinueShopping={() => setCurrentView('shop')}
+            onContinueShopping={() => {
+              setSelectedCategory('all');
+              setCurrentView('shop');
+              window.scrollTo({ top: 0, behavior: 'smooth' });
+            }}
+            onSelectCategory={(cat) => {
+              setSelectedCategory(cat);
+              setCurrentView('shop');
+              window.scrollTo({ top: 0, behavior: 'smooth' });
+            }}
             onProceedToCheckout={() => setCurrentView('checkout')}
           />
         )}
@@ -541,7 +614,7 @@ export default function App() {
             currency={currency}
             onBackToStore={() => setCurrentView('home')}
             onSelectProduct={handleSelectProduct}
-            onOpenAdmin={() => setAdminModalOpen(true)}
+            onOpenAdmin={() => setCurrentView('admin')}
           />
         )}
 
@@ -580,6 +653,18 @@ export default function App() {
         cart={cart}
         onUpdateQuantity={handleUpdateQuantity}
         onRemoveItem={handleRemoveFromCart}
+        onBrowseProducts={() => {
+          setInvoiceModalOpen(false);
+          setSelectedCategory('all');
+          setCurrentView('shop');
+          window.scrollTo({ top: 0, behavior: 'smooth' });
+        }}
+        onSelectCategory={(cat) => {
+          setInvoiceModalOpen(false);
+          setSelectedCategory(cat);
+          setCurrentView('shop');
+          window.scrollTo({ top: 0, behavior: 'smooth' });
+        }}
       />
 
       {/* Slide-out Cart Drawer */}
@@ -603,6 +688,18 @@ export default function App() {
         onViewFullCart={() => {
           setCartDrawerOpen(false);
           setCurrentView('cart');
+        }}
+        onBrowseProducts={() => {
+          setCartDrawerOpen(false);
+          setSelectedCategory('all');
+          setCurrentView('shop');
+          window.scrollTo({ top: 0, behavior: 'smooth' });
+        }}
+        onSelectCategory={(cat) => {
+          setCartDrawerOpen(false);
+          setSelectedCategory(cat);
+          setCurrentView('shop');
+          window.scrollTo({ top: 0, behavior: 'smooth' });
         }}
       />
 
@@ -663,7 +760,7 @@ export default function App() {
       {/* Floating 3D VIP Social Dock (منصات التواصل الاجتماعي الرسمية وخدمة العملاء) */}
       <FloatingSocialDock
         language={language}
-        onOpenAdmin={() => setAdminModalOpen(true)}
+        onOpenAdmin={() => setCurrentView('admin')}
       />
 
       {/* 4. Luxury Footer */}
@@ -674,28 +771,7 @@ export default function App() {
           if (view === 'shop') setSelectedCategory('all');
           setCurrentView(view);
         }}
-        onOpenAdmin={() => setAdminModalOpen(true)}
-      />
-
-      {/* 5. Full Admin Control Dashboard Modal (التحكم بالكامل وإدارة المنتجات والفيديوهات) */}
-      <AdminControlModal
-        isOpen={adminModalOpen}
-        onClose={() => {
-          setAdminModalOpen(false);
-          setDiscountConfig(getStoredDiscountConfig());
-        }}
-        products={products}
-        onUpdateProducts={(updated) => {
-          setProducts(updated);
-          saveStoredProducts(updated);
-        }}
-        shorts={shorts}
-        onUpdateShorts={(updated) => {
-          setShorts(updated);
-          saveStoredShorts(updated);
-        }}
-        language={language}
-        currency={currency}
+        onOpenAdmin={() => setCurrentView('admin')}
       />
     </div>
   );

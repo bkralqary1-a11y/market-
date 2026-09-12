@@ -106,7 +106,7 @@ export default function SocialMediaShowcase({ language }: SocialMediaShowcasePro
           <h2 className="text-2xl sm:text-4xl lg:text-5xl font-black font-display tracking-tight text-white leading-tight mb-4">
             {isAr ? (
               <>
-                تابع أحدث الفيديوهات والعروض عبر{' '}
+                تابع أحدث الفيديوهات ومراجعات الأجهزة عبر{' '}
                 <span className="bg-gradient-to-r from-orange-400 via-amber-300 to-rose-400 bg-clip-text text-transparent">
                   منصاتنا الرسمية
                 </span>
