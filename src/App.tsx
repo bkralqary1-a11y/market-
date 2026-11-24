@@ -1038,19 +1038,21 @@ export default function App() {
         </>
       )}
 
-      {/* 4. TrustBuy Liquid Glass Footer */}
-      <Footer
-        language={language}
-        onSelectCategory={handleSelectCategory}
-        onNavigate={(view) => {
-          if (view === 'shop') setSelectedCategory('all');
-          setCurrentView(view);
-        }}
-        siteConfig={siteConfig}
-        isAdminMode={isAdminMode}
-        onAdminEditStore={() => setEditingSection({ type: 'storeSettings' })}
-        onTriggerHiddenAdmin={handleTriggerHiddenAdmin}
-      />
+      {/* 4. Compact Liquid Glass Footer (Homepage Only) */}
+      {currentView === 'home' && (
+        <Footer
+          language={language}
+          onSelectCategory={handleSelectCategory}
+          onNavigate={(view) => {
+            if (view === 'shop') setSelectedCategory('all');
+            setCurrentView(view);
+          }}
+          siteConfig={siteConfig}
+          isAdminMode={isAdminMode}
+          onAdminEditStore={() => setEditingSection({ type: 'storeSettings' })}
+          onTriggerHiddenAdmin={handleTriggerHiddenAdmin}
+        />
+      )}
     </div>
   );
 }
