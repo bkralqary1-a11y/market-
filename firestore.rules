@@ -1,0 +1,315 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // Pillar 0: Global default-deny safety net
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // --- Reusable Hardened Primitives ---
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isVerifiedUser() {
+      return isSignedIn() && request.auth.token.email_verified == true;
+    }
+
+    function isValidId(id) {
+      return id is string && id.size() >= 1 && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
+    }
+
+    function incoming() {
+      return request.resource.data;
+    }
+
+    function existing() {
+      return resource.data;
+    }
+
+    function isAdmin() {
+      return isVerifiedUser() && (
+        request.auth.token.email == 'bkralqary1@gmail.com' ||
+        exists(/databases/$(database)/documents/admins/$(request.auth.uid))
+      );
+    }
+
+    function isValidString(val, minLen, maxLen) {
+      return val is string && val.size() >= minLen && val.size() <= maxLen;
+    }
+
+    function isValidOptionalString(data, key, maxLen) {
+      return !(key in data) || (data[key] is string && data[key].size() <= maxLen);
+    }
+
+    function isValidOptionalNumber(data, key) {
+      return !(key in data) || (data[key] is number && data[key] >= 0);
+    }
+
+    function isValidOptionalBool(data, key) {
+      return !(key in data) || (data[key] is bool);
+    }
+
+    function isValidStringList(listVal, maxItems) {
+      return listVal is list &&
+        listVal.size() <= maxItems &&
+        (listVal.size() == 0 || (listVal[0] is string && listVal[0].size() <= 1500));
+    }
+
+    // --- Validation Blueprints ---
+    function isValidProduct(data, productId) {
+      return data.keys().hasAll([
+          'id', 'sku', 'name', 'nameAr', 'brand', 'price', 'category',
+          'categoryNameEn', 'categoryNameAr', 'image', 'images', 'rating',
+          'reviewsCount', 'description', 'descriptionAr', 'inStock',
+          'fastShipping', 'warrantyYears', 'colors', 'variants', 'specs',
+          'hidden', 'createdAt', 'updatedAt'
+        ]) &&
+        data.keys().hasOnly([
+          'id', 'sku', 'name', 'nameAr', 'brand', 'price', 'originalPrice',
+          'discountPercentage', 'category', 'categoryNameEn', 'categoryNameAr',
+          'image', 'images', 'rating', 'reviewsCount', 'description',
+          'descriptionAr', 'inStock', 'stock', 'fastShipping', 'warrantyYears',
+          'isTrending', 'isPopular', 'isFeatured', 'colors', 'colorNamesAr',
+          'variants', 'specs', 'tag', 'tagAr', 'videoUrl', 'hidden',
+          'createdAt', 'updatedAt'
+        ]) &&
+        data.id == productId &&
+        isValidId(data.id) &&
+        isValidString(data.sku, 1, 64) &&
+        isValidString(data.name, 1, 200) &&
+        isValidString(data.nameAr, 1, 200) &&
+        isValidString(data.brand, 1, 80) &&
+        data.price is number && data.price >= 0 &&
+        isValidOptionalNumber(data, 'originalPrice') &&
+        isValidOptionalNumber(data, 'discountPercentage') &&
+        data.category in ['phones', 'audio', 'cases', 'chargers', 'cables'] &&
+        isValidString(data.categoryNameEn, 1, 80) &&
+        isValidString(data.categoryNameAr, 1, 80) &&
+        isValidString(data.image, 0, 1500) &&
+        isValidStringList(data.images, 12) &&
+        data.rating is number && data.rating >= 0 && data.rating <= 5 &&
+        data.reviewsCount is number && data.reviewsCount >= 0 &&
+        isValidString(data.description, 0, 3000) &&
+        isValidString(data.descriptionAr, 0, 3000) &&
+        data.inStock is bool &&
+        isValidOptionalNumber(data, 'stock') &&
+        data.fastShipping is bool &&
+        data.warrantyYears is number && data.warrantyYears >= 0 && data.warrantyYears <= 10 &&
+        isValidOptionalBool(data, 'isTrending') &&
+        isValidOptionalBool(data, 'isPopular') &&
+        isValidOptionalBool(data, 'isFeatured') &&
+        isValidStringList(data.colors, 12) &&
+        (!('colorNamesAr' in data) || isValidStringList(data.colorNamesAr, 12)) &&
+        data.variants is map &&
+        data.variants.keys().hasAll(['titleEn', 'titleAr', 'options']) &&
+        data.variants.keys().hasOnly(['titleEn', 'titleAr', 'options']) &&
+        isValidString(data.variants.titleEn, 0, 80) &&
+        isValidString(data.variants.titleAr, 0, 80) &&
+        isValidStringList(data.variants.options, 20) &&
+        data.specs is map &&
+        data.specs.size() <= 25 &&
+        isValidOptionalString(data, 'tag', 60) &&
+        isValidOptionalString(data, 'tagAr', 60) &&
+        isValidOptionalString(data, 'videoUrl', 1500) &&
+        data.hidden is bool &&
+        data.createdAt is timestamp &&
+        data.updatedAt is timestamp;
+    }
+
+    function isValidHeroSlide(data, slideId) {
+      return data.keys().hasAll([
+          'id', 'badgeAr', 'titleAr', 'subtitleAr', 'mediaType',
+          'imageUrl', 'order', 'enabled', 'createdAt', 'updatedAt'
+        ]) &&
+        data.keys().hasOnly([
+          'id', 'badgeAr', 'badgeEn', 'titleAr', 'titleEn', 'subtitleAr',
+          'subtitleEn', 'mediaType', 'imageUrl', 'videoUrl', 'buttonTextAr',
+          'buttonTextEn', 'featureBadge1Ar', 'featureBadge2Ar',
+          'whatsappCustomTextAr', 'order', 'enabled', 'createdAt', 'updatedAt'
+        ]) &&
+        data.id == slideId &&
+        isValidId(data.id) &&
+        isValidString(data.badgeAr, 0, 160) &&
+        isValidOptionalString(data, 'badgeEn', 160) &&
+        isValidString(data.titleAr, 1, 200) &&
+        isValidOptionalString(data, 'titleEn', 200) &&
+        isValidString(data.subtitleAr, 0, 500) &&
+        isValidOptionalString(data, 'subtitleEn', 500) &&
+        data.mediaType in ['image', 'video'] &&
+        isValidString(data.imageUrl, 0, 1500) &&
+        isValidOptionalString(data, 'videoUrl', 1500) &&
+        isValidOptionalString(data, 'buttonTextAr', 80) &&
+        isValidOptionalString(data, 'buttonTextEn', 80) &&
+        isValidOptionalString(data, 'featureBadge1Ar', 100) &&
+        isValidOptionalString(data, 'featureBadge2Ar', 100) &&
+        isValidOptionalString(data, 'whatsappCustomTextAr', 300) &&
+        data.order is number && data.order >= 0 && data.order <= 100 &&
+        data.enabled is bool &&
+        data.createdAt is timestamp &&
+        data.updatedAt is timestamp;
+    }
+
+    function isValidSiteConfig(data) {
+      return data.keys().hasAll([
+          'storeNameAr', 'storeNameEn', 'taglineAr', 'taglineEn',
+          'addressAr', 'addressEn', 'whatsappPrimary', 'whatsappSecondary',
+          'phoneTertiary', 'bannerEnabled', 'bannerTextAr', 'bannerTextEn',
+          'promoCode', 'bento1BadgeAr', 'bento1TitleAr', 'bento1DescAr',
+          'bento2BadgeAr', 'bento2TitleAr', 'bento2DescAr',
+          'catPhonesImg', 'catAudioImg', 'catCasesImg',
+          'catChargersImg', 'catCablesImg', 'updatedAt'
+        ]) &&
+        data.keys().hasOnly([
+          'storeNameAr', 'storeNameEn', 'taglineAr', 'taglineEn',
+          'addressAr', 'addressEn', 'whatsappPrimary', 'whatsappSecondary',
+          'phoneTertiary', 'bannerEnabled', 'bannerTextAr', 'bannerTextEn',
+          'promoCode', 'bento1BadgeAr', 'bento1TitleAr', 'bento1DescAr',
+          'bento2BadgeAr', 'bento2TitleAr', 'bento2DescAr',
+          'catPhonesImg', 'catAudioImg', 'catCasesImg',
+          'catChargersImg', 'catCablesImg',
+          'catPhonesNameAr', 'catAudioNameAr', 'catCasesNameAr',
+          'catChargersNameAr', 'catCablesNameAr',
+          'categoriesSectionBadgeAr', 'categoriesSectionTitleAr',
+          'productsSectionBadgeAr', 'productsSectionTitleAr',
+          'updatedAt'
+        ]) &&
+        isValidString(data.storeNameAr, 1, 120) &&
+        isValidString(data.storeNameEn, 1, 120) &&
+        isValidString(data.taglineAr, 0, 200) &&
+        isValidString(data.taglineEn, 0, 200) &&
+        isValidString(data.addressAr, 0, 300) &&
+        isValidString(data.addressEn, 0, 300) &&
+        isValidString(data.whatsappPrimary, 6, 30) &&
+        isValidString(data.whatsappSecondary, 6, 30) &&
+        isValidString(data.phoneTertiary, 6, 30) &&
+        data.bannerEnabled is bool &&
+        isValidString(data.bannerTextAr, 0, 300) &&
+        isValidString(data.bannerTextEn, 0, 300) &&
+        isValidString(data.promoCode, 0, 40) &&
+        isValidString(data.bento1BadgeAr, 0, 120) &&
+        isValidString(data.bento1TitleAr, 0, 160) &&
+        isValidString(data.bento1DescAr, 0, 300) &&
+        isValidString(data.bento2BadgeAr, 0, 120) &&
+        isValidString(data.bento2TitleAr, 0, 160) &&
+        isValidString(data.bento2DescAr, 0, 300) &&
+        isValidString(data.catPhonesImg, 0, 1500) &&
+        isValidString(data.catAudioImg, 0, 1500) &&
+        isValidString(data.catCasesImg, 0, 1500) &&
+        isValidString(data.catChargersImg, 0, 1500) &&
+        isValidString(data.catCablesImg, 0, 1500) &&
+        isValidOptionalString(data, 'catPhonesNameAr', 80) &&
+        isValidOptionalString(data, 'catAudioNameAr', 80) &&
+        isValidOptionalString(data, 'catCasesNameAr', 80) &&
+        isValidOptionalString(data, 'catChargersNameAr', 80) &&
+        isValidOptionalString(data, 'catCablesNameAr', 80) &&
+        isValidOptionalString(data, 'categoriesSectionBadgeAr', 120) &&
+        isValidOptionalString(data, 'categoriesSectionTitleAr', 160) &&
+        isValidOptionalString(data, 'productsSectionBadgeAr', 120) &&
+        isValidOptionalString(data, 'productsSectionTitleAr', 160) &&
+        data.updatedAt is timestamp;
+    }
+
+    // --- Collection 1: Public Storefront Products (Admin-Only Writes) ---
+    match /products/{productId} {
+      allow get: if isValidId(productId);
+      allow list: if resource.data.hidden is bool;
+
+      allow create: if isVerifiedUser() &&
+        isValidId(productId) &&
+        isValidProduct(incoming(), productId) &&
+        incoming().createdAt == request.time &&
+        incoming().updatedAt == request.time &&
+        isAdmin();
+
+      allow update: if isVerifiedUser() &&
+        isValidId(productId) &&
+        isValidProduct(incoming(), productId) &&
+        incoming().id == existing().id &&
+        incoming().createdAt == existing().createdAt &&
+        incoming().updatedAt == request.time &&
+        incoming().diff(existing()).affectedKeys().hasOnly([
+          'sku', 'name', 'nameAr', 'brand', 'price', 'originalPrice',
+          'discountPercentage', 'category', 'categoryNameEn', 'categoryNameAr',
+          'image', 'images', 'rating', 'reviewsCount', 'description',
+          'descriptionAr', 'inStock', 'stock', 'fastShipping', 'warrantyYears',
+          'isTrending', 'isPopular', 'isFeatured', 'colors', 'colorNamesAr',
+          'variants', 'specs', 'tag', 'tagAr', 'videoUrl', 'hidden', 'updatedAt'
+        ]) &&
+        isAdmin();
+
+      allow delete: if isVerifiedUser() && isValidId(productId) && isAdmin();
+    }
+
+    // --- Collection 2: Homepage Hero Slides (Admin-Only Writes) ---
+    match /heroSlides/{slideId} {
+      allow get: if isValidId(slideId);
+      allow list: if resource.data.enabled is bool;
+
+      allow create: if isVerifiedUser() &&
+        isValidId(slideId) &&
+        isValidHeroSlide(incoming(), slideId) &&
+        incoming().createdAt == request.time &&
+        incoming().updatedAt == request.time &&
+        isAdmin();
+
+      allow update: if isVerifiedUser() &&
+        isValidId(slideId) &&
+        isValidHeroSlide(incoming(), slideId) &&
+        incoming().id == existing().id &&
+        incoming().createdAt == existing().createdAt &&
+        incoming().updatedAt == request.time &&
+        incoming().diff(existing()).affectedKeys().hasOnly([
+          'badgeAr', 'badgeEn', 'titleAr', 'titleEn', 'subtitleAr',
+          'subtitleEn', 'mediaType', 'imageUrl', 'videoUrl', 'buttonTextAr',
+          'buttonTextEn', 'featureBadge1Ar', 'featureBadge2Ar',
+          'whatsappCustomTextAr', 'order', 'enabled', 'updatedAt'
+        ]) &&
+        isAdmin();
+
+      allow delete: if isVerifiedUser() && isValidId(slideId) && isAdmin();
+    }
+
+    // --- Collection 3: Global Storefront UI Config (Single 'main' doc) ---
+    match /siteConfig/{configId} {
+      allow get: if configId == 'main';
+      allow list: if false;
+
+      allow create: if isVerifiedUser() &&
+        configId == 'main' &&
+        isValidSiteConfig(incoming()) &&
+        incoming().updatedAt == request.time &&
+        isAdmin();
+
+      allow update: if isVerifiedUser() &&
+        configId == 'main' &&
+        isValidSiteConfig(incoming()) &&
+        incoming().updatedAt == request.time &&
+        incoming().diff(existing()).affectedKeys().hasOnly([
+          'storeNameAr', 'storeNameEn', 'taglineAr', 'taglineEn',
+          'addressAr', 'addressEn', 'whatsappPrimary', 'whatsappSecondary',
+          'phoneTertiary', 'bannerEnabled', 'bannerTextAr', 'bannerTextEn',
+          'promoCode', 'bento1BadgeAr', 'bento1TitleAr', 'bento1DescAr',
+          'bento2BadgeAr', 'bento2TitleAr', 'bento2DescAr',
+          'catPhonesImg', 'catAudioImg', 'catCasesImg',
+          'catChargersImg', 'catCablesImg',
+          'catPhonesNameAr', 'catAudioNameAr', 'catCasesNameAr',
+          'catChargersNameAr', 'catCablesNameAr',
+          'categoriesSectionBadgeAr', 'categoriesSectionTitleAr',
+          'productsSectionBadgeAr', 'productsSectionTitleAr',
+          'updatedAt'
+        ]) &&
+        isAdmin();
+
+      allow delete: if false;
+    }
+
+    // --- Collection 4: Admin Allowlist (Read-Own Only, Never Client Writable) ---
+    match /admins/{adminUid} {
+      allow get: if isVerifiedUser() && isValidId(adminUid) && (request.auth.uid == adminUid || isAdmin());
+      allow list: if false;
+      allow create, update, delete: if false;
+    }
+  }
+}

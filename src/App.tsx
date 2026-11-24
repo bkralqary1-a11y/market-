@@ -1,8 +1,26 @@
 import { useState, useEffect } from 'react';
-import { PageView, Language, Currency, CategoryId, Product, CartItem } from './types';
+import { onAuthStateChanged, signOut, type User } from 'firebase/auth';
+import { PageView, Language, Currency, CategoryId, Product, CartItem, HeroSlideItem } from './types';
 import { mockProducts } from './data/mockData';
-import { getStoredProducts, getStoredDiscountConfig, StoreDiscountConfig } from './utils/storeStorage';
-import { MessageCircle, ArrowLeft, ArrowRight } from 'lucide-react';
+import {
+  DEFAULT_HERO_SLIDES,
+  INITIAL_PRODUCTS_LIST,
+} from './utils/storeStorage';
+import { MessageCircle, ArrowLeft, ArrowRight, Pencil } from 'lucide-react';
+import { auth, isVerifiedAdminUser } from './firebase';
+import {
+  SiteConfig,
+  DEFAULT_SITE_CONFIG,
+  subscribeToProducts,
+  subscribeToHeroSlides,
+  subscribeToSiteConfig,
+  saveProductToCloud,
+  deleteProductFromCloud,
+  saveHeroSlideToCloud,
+  deleteHeroSlideFromCloud,
+  saveSiteConfigToCloud,
+  seedDefaultDataToCloud,
+} from './services/firestoreService';
 
 // Components
 import Header from './components/Header';
@@ -10,6 +28,7 @@ import HeroSlider from './components/HeroSlider';
 import BrandTicker from './components/BrandTicker';
 import CategoriesSection from './components/CategoriesSection';
 import ProductCard from './components/ProductCard';
+import AddProductTile from './components/AddProductTile';
 import Footer from './components/Footer';
 import ShopView from './components/ShopView';
 import ProductDetailView from './components/ProductDetailView';
@@ -27,11 +46,75 @@ import FloatingCartBar from './components/FloatingCartBar';
 import FlyingCartAnimation from './components/FlyingCartAnimation';
 import Ambient3DBackground from './components/Ambient3DBackground';
 import FloatingSocialDock from './components/FloatingSocialDock';
+import AdminAuthModal from './components/AdminAuthModal';
+import AdminFloatingBar from './components/AdminFloatingBar';
+import VisualProductEditorModal from './components/VisualProductEditorModal';
+import VisualSectionEditorModal, {
+  type EditableSectionTarget,
+} from './components/VisualSectionEditorModal';
 import { soundFX } from './utils/audioEffects';
 
 export default function App() {
-  const [products] = useState<Product[]>(() => getStoredProducts());
-  const [discountConfig] = useState<StoreDiscountConfig>(() => getStoredDiscountConfig());
+  // Live Firestore Data (falls back cleanly to defaults until first admin save/seed)
+  const [cloudProducts, setCloudProducts] = useState<Product[]>([]);
+  const [hasCloudProducts, setHasCloudProducts] = useState(false);
+  const [cloudSlides, setCloudSlides] = useState<HeroSlideItem[]>([]);
+  const [hasCloudSlides, setHasCloudSlides] = useState(false);
+  const [siteConfig, setSiteConfig] = useState<SiteConfig>(DEFAULT_SITE_CONFIG);
+  const [hasCloudConfig, setHasCloudConfig] = useState(false);
+
+  const products = hasCloudProducts ? cloudProducts : INITIAL_PRODUCTS_LIST;
+  const heroSlides = hasCloudSlides ? cloudSlides : DEFAULT_HERO_SLIDES;
+
+  // Firebase Auth & Hidden Visual Admin Mode State
+  const [authUser, setAuthUser] = useState<User | null>(null);
+  const [adminAuthModalOpen, setAdminAuthModalOpen] = useState(false);
+  const [adminModeEnabled, setAdminModeEnabled] = useState(false);
+  const [editingProduct, setEditingProduct] = useState<Product | null | undefined>(undefined);
+  const [newProductDefaultCat, setNewProductDefaultCat] = useState<CategoryId>('phones');
+  const [editingSection, setEditingSection] = useState<EditableSectionTarget | null>(null);
+  const [seedingCloud, setSeedingCloud] = useState(false);
+  const [adminToast, setAdminToast] = useState<string | null>(null);
+
+  const isAdminVerified = isVerifiedAdminUser(authUser);
+  const isAdminMode = adminModeEnabled && isAdminVerified;
+
+  const showAdminToast = (msg: string) => {
+    setAdminToast(msg);
+    setTimeout(() => setAdminToast(null), 3200);
+  };
+
+  // Subscribe to Firebase Auth state
+  useEffect(() => {
+    const unsub = onAuthStateChanged(auth, (user) => {
+      setAuthUser(user);
+      if (!isVerifiedAdminUser(user)) {
+        setAdminModeEnabled(false);
+      }
+    });
+    return () => unsub();
+  }, []);
+
+  // Subscribe to live Firestore collections
+  useEffect(() => {
+    const unsubProducts = subscribeToProducts((list, hasDocs) => {
+      setCloudProducts(list);
+      setHasCloudProducts(hasDocs);
+    });
+    const unsubSlides = subscribeToHeroSlides((list, hasDocs) => {
+      setCloudSlides(list);
+      setHasCloudSlides(hasDocs);
+    });
+    const unsubConfig = subscribeToSiteConfig((cfg, hasDoc) => {
+      setSiteConfig(cfg);
+      setHasCloudConfig(hasDoc);
+    });
+    return () => {
+      unsubProducts();
+      unsubSlides();
+      unsubConfig();
+    };
+  }, []);
 
   // Navigation state
   const [currentView, setCurrentView] = useState<PageView>('home');
@@ -41,6 +124,15 @@ export default function App() {
     products.length > 0 ? products[0] : mockProducts[0]
   );
   const [selectedCategory, setSelectedCategory] = useState<CategoryId>('all');
+
+  // Keep selectedProduct fresh if updated in Firestore
+  useEffect(() => {
+    if (!selectedProduct) return;
+    const match = products.find((p) => p.id === selectedProduct.id);
+    if (match && match !== selectedProduct) {
+      setSelectedProduct(match);
+    }
+  }, [products, selectedProduct]);
 
   // Cart state
   const [cart, setCart] = useState<CartItem[]>(() => {
@@ -95,6 +187,69 @@ export default function App() {
   }, [currentView]);
 
   const isAr = language === 'ar';
+
+  // Silent Long-Press Trigger (from Footer copyright line)
+  const handleTriggerHiddenAdmin = () => {
+    if (isVerifiedAdminUser(auth.currentUser)) {
+      setAdminModeEnabled(true);
+      showAdminToast('تم تفعيل وضع التعديل المباشر للمتجر');
+    } else {
+      setAdminAuthModalOpen(true);
+    }
+  };
+
+  // Admin Cloud CRUD Handlers
+  const handleAdminSaveProduct = async (prod: Product) => {
+    await saveProductToCloud(prod);
+    showAdminToast('تم حفظ المنتج وتحديث المتجر مباشرة');
+  };
+
+  const handleAdminDeleteProduct = async (productId: string) => {
+    await deleteProductFromCloud(productId);
+    showAdminToast('تم حذف المنتج من السحابة');
+  };
+
+  const handleAdminSaveHeroSlide = async (slide: HeroSlideItem, order: number) => {
+    if (!hasCloudSlides) {
+      // Seed other default slides first so editing one doesn't hide the rest
+      for (let i = 0; i < DEFAULT_HERO_SLIDES.length; i++) {
+        if (DEFAULT_HERO_SLIDES[i].id !== slide.id) {
+          await saveHeroSlideToCloud(DEFAULT_HERO_SLIDES[i], i);
+        }
+      }
+    }
+    await saveHeroSlideToCloud(slide, order);
+    showAdminToast('تم تحديث شريحة الواجهة الرئيسية بنجاح');
+  };
+
+  const handleAdminDeleteHeroSlide = async (slideId: string) => {
+    await deleteHeroSlideFromCloud(slideId);
+    showAdminToast('تم حذف الشريحة');
+  };
+
+  const handleAdminSaveSiteConfig = async (nextCfg: SiteConfig) => {
+    await saveSiteConfigToCloud(nextCfg);
+    showAdminToast('تم حفظ تعديلات الواجهة والإعدادات');
+  };
+
+  const handleSeedCloud = async () => {
+    setSeedingCloud(true);
+    try {
+      await seedDefaultDataToCloud(products, heroSlides, siteConfig);
+      showAdminToast('تم رفع كافة بيانات المتجر للسحابة بنجاح');
+    } catch {
+      showAdminToast('تعذر الرفع — تأكد من تسجيل الدخول بحساب المالك');
+    } finally {
+      setSeedingCloud(false);
+    }
+  };
+
+  const handleAdminSignOut = async () => {
+    await signOut(auth);
+    setAdminModeEnabled(false);
+    setEditingProduct(undefined);
+    setEditingSection(null);
+  };
 
   // Cart operations
   const handleAddToCart = (
@@ -192,16 +347,18 @@ export default function App() {
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
-  const visibleProducts = products.filter((p) => !p.hidden);
+  // In Admin Mode show hidden products too so owner can edit or unhide them
+  const displayableProducts = isAdminMode ? products : products.filter((p) => !p.hidden);
 
-  const homeFilteredProducts = visibleProducts.filter((p) => {
+  const homeFilteredProducts = displayableProducts.filter((p) => {
     if (selectedCategory !== 'all' && p.category !== selectedCategory) return false;
     if (homeFilter === 'trending') return p.isTrending ?? true;
     if (homeFilter === 'popular') return p.isPopular ?? true;
     return true;
   });
 
-  const displayedHomeProducts = homeFilteredProducts.length > 0 ? homeFilteredProducts : visibleProducts;
+  const displayedHomeProducts =
+    homeFilteredProducts.length > 0 ? homeFilteredProducts : displayableProducts;
 
   const cartTotalAmount = cart.reduce((sum, item) => {
     const itemPrice = item.product.price + (item.warrantyUpgrade ? 49 : 0);
@@ -209,11 +366,14 @@ export default function App() {
   }, 0);
 
   const comparedProducts = products.filter((p) => comparedProductIds.includes(p.id));
+  const waClean = siteConfig.whatsappPrimary.replace(/\D/g, '') || '774102030';
 
   return (
     <div
       dir={isAr ? 'rtl' : 'ltr'}
-      className="min-h-screen flex flex-col text-[#0b1220] font-sans selection:bg-[#0071e3] selection:text-white relative overflow-x-hidden"
+      className={`min-h-screen flex flex-col text-[#0b1220] font-sans selection:bg-[#0071e3] selection:text-white relative overflow-x-hidden ${
+        isAdminMode ? 'pb-24' : ''
+      }`}
     >
       {/* iOS 27 Liquid Glass Atmospheric Refraction Canvas */}
       <Ambient3DBackground />
@@ -245,17 +405,36 @@ export default function App() {
         setCurrency={setCurrency}
         onOpenSearch={() => setSearchOpen(true)}
         onOpenAuth={() => setAuthOpen(true)}
+        siteConfig={siteConfig}
+        isAdminMode={isAdminMode}
+        onAdminEditStore={() => setEditingSection({ type: 'storeSettings' })}
       />
 
-      {/* Slim Liquid Glass Announcement Strip (if enabled) */}
-      {discountConfig.enabled && (
+      {/* Slim Liquid Glass Announcement Strip (if enabled or in Admin Mode) */}
+      {(siteConfig.bannerEnabled || isAdminMode) && (
         <div className="px-3 sm:px-5 pt-1 relative z-20">
           <div className="container mx-auto max-w-7xl liquid-glass rounded-2xl py-2 px-4 text-center text-xs font-bold text-[#0b1220] flex flex-wrap items-center justify-center gap-2">
-            <span>{isAr ? discountConfig.bannerTextAr : discountConfig.bannerTextEn}</span>
-            {discountConfig.promoCode && (
+            <span>
+              {siteConfig.bannerEnabled
+                ? isAr
+                  ? siteConfig.bannerTextAr
+                  : siteConfig.bannerTextEn
+                : 'شريط العروض العلوي (مخفي عن الزوار حالياً — اضغط القلم لتفعيله وتعديله)'}
+            </span>
+            {siteConfig.bannerEnabled && siteConfig.promoCode && (
               <span className="text-[#0071e3] font-mono font-black tracking-wider">
-                {isAr ? 'الكود:' : 'CODE:'} {discountConfig.promoCode}
+                {isAr ? 'الكود:' : 'CODE:'} {siteConfig.promoCode}
               </span>
+            )}
+            {isAdminMode && (
+              <button
+                type="button"
+                onClick={() => setEditingSection({ type: 'storeSettings' })}
+                className="w-6 h-6 rounded-lg bg-[#0071e3] text-white inline-flex items-center justify-center cursor-pointer"
+                title="تعديل شريط العروض"
+              >
+                <Pencil className="w-3 h-3" />
+              </button>
             )}
           </div>
         </div>
@@ -275,6 +454,10 @@ export default function App() {
                 setCurrentView('shop');
               }}
               onSelectProduct={handleSelectProduct}
+              slides={heroSlides}
+              siteConfig={siteConfig}
+              isAdminMode={isAdminMode}
+              onAdminEditSection={(target) => setEditingSection(target)}
             />
 
             {/* Section 2: TrustBuy Trust Pillars + Authorized Brands Ribbon */}
@@ -285,19 +468,35 @@ export default function App() {
               language={language}
               onSelectCategory={handleSelectCategory}
               selectedCategory={selectedCategory}
+              siteConfig={siteConfig}
+              products={products}
+              isAdminMode={isAdminMode}
+              onAdminEditSection={(target) => setEditingSection(target)}
             />
 
             {/* Section 4: Featured & Best-Selling Products Grid */}
             <section id="trending-products-section" className="py-10 sm:py-14 px-3 sm:px-5">
               <div className="container mx-auto max-w-7xl">
                 <div className="flex flex-col md:flex-row md:items-end justify-between gap-4 mb-8">
-                  <div>
-                    <span className="text-xs font-bold text-[#0071e3] block mb-1">
-                      {isAr ? 'مختارات الثقة والأكثر طلباً' : 'Trusted Bestsellers'}
-                    </span>
-                    <h2 className="text-2xl sm:text-3xl font-extrabold text-[#0b1220] tracking-tight">
-                      {isAr ? 'أحدث الأجهزة والملحقات الأصلية' : 'Featured Devices & Accessories'}
-                    </h2>
+                  <div className="flex items-center gap-2.5">
+                    <div>
+                      <span className="text-xs font-bold text-[#0071e3] block mb-1">
+                        {isAr ? siteConfig.productsSectionBadgeAr : 'Trusted Bestsellers'}
+                      </span>
+                      <h2 className="text-2xl sm:text-3xl font-extrabold text-[#0b1220] tracking-tight">
+                        {isAr ? siteConfig.productsSectionTitleAr : 'Featured Devices & Accessories'}
+                      </h2>
+                    </div>
+                    {isAdminMode && (
+                      <button
+                        type="button"
+                        onClick={() => setEditingSection({ type: 'productsHeader' })}
+                        className="w-8 h-8 rounded-xl bg-[#0071e3] hover:bg-[#005bbf] text-white flex items-center justify-center shadow-md cursor-pointer shrink-0"
+                        title="تعديل عنوان قسم المنتجات"
+                      >
+                        <Pencil className="w-3.5 h-3.5" />
+                      </button>
+                    )}
                   </div>
 
                   {/* iOS 27 Liquid Glass Segmented Filter Control */}
@@ -351,10 +550,10 @@ export default function App() {
                 </div>
 
                 {/* Products Grid */}
-                {visibleProducts.length === 0 ? (
+                {displayableProducts.length === 0 && !isAdminMode ? (
                   <div className="text-center py-14 px-6 liquid-glass rounded-[30px] max-w-xl mx-auto my-4">
                     <h3 className="text-lg font-extrabold text-[#0b1220] mb-2">
-                      {isAr ? 'متجر صدام العقاري للهواتف الذكية' : 'Saddam Al-Aqari Tech Store'}
+                      {isAr ? siteConfig.storeNameAr : siteConfig.storeNameEn}
                     </h3>
                     <p className="text-sm text-slate-600 mb-6 leading-relaxed">
                       {isAr
@@ -362,33 +561,49 @@ export default function App() {
                         : 'Contact us directly on WhatsApp for inquiries and instant orders.'}
                     </p>
                     <a
-                      href="https://wa.me/967774102030"
+                      href={`https://wa.me/967${waClean}`}
                       target="_blank"
                       rel="noopener noreferrer"
                       className="inline-flex items-center gap-2 liquid-btn-emerald font-bold text-sm px-6 py-3 rounded-2xl"
                     >
                       <MessageCircle className="w-4 h-4" />
-                      <span>{isAr ? 'تواصل عبر الواتساب (774102030)' : 'Chat on WhatsApp (774102030)'}</span>
+                      <span>
+                        {isAr ? `تواصل عبر الواتساب (${waClean})` : `Chat on WhatsApp (${waClean})`}
+                      </span>
                     </a>
                   </div>
                 ) : (
                   <div className="grid grid-cols-2 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3 sm:gap-5 w-full min-w-0">
-                    {displayedHomeProducts.slice(0, 8).map((prod) => (
-                      <ProductCard
-                        key={prod.id}
-                        product={prod}
+                    {(isAdminMode ? displayedHomeProducts : displayedHomeProducts.slice(0, 8)).map(
+                      (prod) => (
+                        <ProductCard
+                          key={prod.id}
+                          product={prod}
+                          language={language}
+                          currency={currency}
+                          onSelect={handleSelectProduct}
+                          onAddToCart={(p, vr, col) => handleAddToCart(p, vr, col, 1)}
+                          onQuickOrder={handleQuickOrder}
+                          isWishlisted={wishlist.includes(prod.id)}
+                          onToggleWishlist={handleToggleWishlist}
+                          isCompared={comparedProductIds.includes(prod.id)}
+                          onToggleCompare={handleToggleCompare}
+                          onQuickView={(p) => setQuickViewProduct(p)}
+                          isAdminMode={isAdminMode}
+                          onAdminEdit={(p) => setEditingProduct(p)}
+                        />
+                      )
+                    )}
+                    {/* Identical-shaped Rectangular "+" Add Product Card right after the last product */}
+                    {isAdminMode && (
+                      <AddProductTile
                         language={language}
-                        currency={currency}
-                        onSelect={handleSelectProduct}
-                        onAddToCart={(p, vr, col) => handleAddToCart(p, vr, col, 1)}
-                        onQuickOrder={handleQuickOrder}
-                        isWishlisted={wishlist.includes(prod.id)}
-                        onToggleWishlist={handleToggleWishlist}
-                        isCompared={comparedProductIds.includes(prod.id)}
-                        onToggleCompare={handleToggleCompare}
-                        onQuickView={(p) => setQuickViewProduct(p)}
+                        onClick={() => {
+                          setNewProductDefaultCat('phones');
+                          setEditingProduct(null);
+                        }}
                       />
-                    ))}
+                    )}
                   </div>
                 )}
 
@@ -415,7 +630,7 @@ export default function App() {
         {/* VIEW 2: SHOP CATALOG */}
         {currentView === 'shop' && (
           <ShopView
-            products={visibleProducts}
+            products={displayableProducts}
             language={language}
             currency={currency}
             onSelectProduct={handleSelectProduct}
@@ -427,6 +642,12 @@ export default function App() {
             onToggleCompare={handleToggleCompare}
             initialCategory={selectedCategory}
             onCategoryChange={(cat) => setSelectedCategory(cat)}
+            isAdminMode={isAdminMode}
+            onAdminEditProduct={(p) => setEditingProduct(p)}
+            onAdminAddProduct={(cat) => {
+              setNewProductDefaultCat(cat);
+              setEditingProduct(null);
+            }}
           />
         )}
 
@@ -527,10 +748,12 @@ export default function App() {
       </main>
 
       {/* 3. Global Drawers & Modals */}
-      <FloatingCartBar
-        cart={cart}
-        onOpenInvoice={() => setInvoiceModalOpen(true)}
-      />
+      {!isAdminMode && (
+        <FloatingCartBar
+          cart={cart}
+          onOpenInvoice={() => setInvoiceModalOpen(true)}
+        />
+      )}
 
       <InvoiceModal
         isOpen={invoiceModalOpen}
@@ -605,7 +828,7 @@ export default function App() {
       <SearchModal
         isOpen={searchOpen}
         onClose={() => setSearchOpen(false)}
-        products={visibleProducts}
+        products={displayableProducts}
         language={language}
         currency={currency}
         onSelectProduct={handleSelectProduct}
@@ -636,7 +859,58 @@ export default function App() {
 
       <FlyingCartAnimation />
 
-      <FloatingSocialDock language={language} />
+      {!isAdminMode && <FloatingSocialDock language={language} />}
+
+      {/* Hidden Admin Auth Gate (Opened ONLY via silent 7-second long-press) */}
+      <AdminAuthModal
+        isOpen={adminAuthModalOpen}
+        onClose={() => setAdminAuthModalOpen(false)}
+        currentUser={authUser}
+        onAuthenticated={() => {
+          setAdminAuthModalOpen(false);
+          setAdminModeEnabled(true);
+          showAdminToast('أهلاً بك! تم تفعيل وضع التعديل المباشر للمتجر');
+        }}
+      />
+
+      {/* Visual Admin Mode Editors & Floating Control Bar (Authenticated Owner Only) */}
+      {isAdminMode && (
+        <>
+          <AdminFloatingBar
+            adminEmail={authUser?.email || ''}
+            needsInitialSeed={!hasCloudProducts || !hasCloudSlides || !hasCloudConfig}
+            seeding={seedingCloud}
+            toastMessage={adminToast}
+            onAddNewProduct={() => {
+              setNewProductDefaultCat(selectedCategory === 'all' ? 'phones' : selectedCategory);
+              setEditingProduct(null);
+            }}
+            onOpenStoreSettings={() => setEditingSection({ type: 'storeSettings' })}
+            onSeedCloud={handleSeedCloud}
+            onExitEditMode={() => setAdminModeEnabled(false)}
+            onSignOut={handleAdminSignOut}
+          />
+
+          <VisualProductEditorModal
+            isOpen={editingProduct !== undefined}
+            product={editingProduct ?? null}
+            defaultCategory={newProductDefaultCat}
+            onClose={() => setEditingProduct(undefined)}
+            onSave={handleAdminSaveProduct}
+            onDelete={handleAdminDeleteProduct}
+          />
+
+          <VisualSectionEditorModal
+            target={editingSection}
+            siteConfig={siteConfig}
+            heroSlides={heroSlides}
+            onClose={() => setEditingSection(null)}
+            onSaveSiteConfig={handleAdminSaveSiteConfig}
+            onSaveHeroSlide={handleAdminSaveHeroSlide}
+            onDeleteHeroSlide={handleAdminDeleteHeroSlide}
+          />
+        </>
+      )}
 
       {/* 4. TrustBuy Liquid Glass Footer */}
       <Footer
@@ -646,6 +920,10 @@ export default function App() {
           if (view === 'shop') setSelectedCategory('all');
           setCurrentView(view);
         }}
+        siteConfig={siteConfig}
+        isAdminMode={isAdminMode}
+        onAdminEditStore={() => setEditingSection({ type: 'storeSettings' })}
+        onTriggerHiddenAdmin={handleTriggerHiddenAdmin}
       />
     </div>
   );

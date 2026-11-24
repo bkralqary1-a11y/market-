@@ -1,3 +1,4 @@
+import { useRef, useEffect } from 'react';
 import {
   ShieldCheck,
   Truck,
@@ -9,19 +10,62 @@ import {
   CheckCircle2,
   MessageCircle,
   Smartphone,
+  Pencil,
 } from 'lucide-react';
 import { Language, CategoryId, PageView } from '../types';
 import PaymentPointsSection from './PaymentPointsSection';
 import { soundFX } from '../utils/audioEffects';
+import { SiteConfig, DEFAULT_SITE_CONFIG } from '../services/firestoreService';
 
 interface FooterProps {
   language: Language;
   onSelectCategory: (catId: CategoryId) => void;
   onNavigate: (view: PageView) => void;
+  siteConfig?: SiteConfig;
+  isAdminMode?: boolean;
+  onAdminEditStore?: () => void;
+  onTriggerHiddenAdmin?: () => void;
 }
 
-export default function Footer({ language, onSelectCategory, onNavigate }: FooterProps) {
+export default function Footer({
+  language,
+  onSelectCategory,
+  onNavigate,
+  siteConfig = DEFAULT_SITE_CONFIG,
+  isAdminMode = false,
+  onAdminEditStore,
+  onTriggerHiddenAdmin,
+}: FooterProps) {
   const isAr = language === 'ar';
+  const holdTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const clearHoldTimer = () => {
+    if (holdTimerRef.current) {
+      clearTimeout(holdTimerRef.current);
+      holdTimerRef.current = null;
+    }
+  };
+
+  useEffect(() => {
+    return () => clearHoldTimer();
+  }, []);
+
+  // Completely silent 7-second long press on copyright line (zero visual cues)
+  const handleSilentHoldStart = () => {
+    if (!onTriggerHiddenAdmin) return;
+    clearHoldTimer();
+    holdTimerRef.current = setTimeout(() => {
+      holdTimerRef.current = null;
+      onTriggerHiddenAdmin();
+    }, 7000);
+  };
+
+  const phoneNumbers = [
+    siteConfig.whatsappPrimary,
+    siteConfig.whatsappSecondary,
+    siteConfig.phoneTertiary,
+  ].filter(Boolean);
+  const waClean = siteConfig.whatsappPrimary.replace(/\D/g, '') || '774102030';
 
   return (
     <footer className="mt-12 px-3 sm:px-4 pb-6 text-xs">
@@ -100,28 +144,38 @@ export default function Footer({ language, onSelectCategory, onNavigate }: Foote
                   <div className="w-10 h-10 rounded-2xl liquid-btn-primary flex items-center justify-center shrink-0">
                     <Smartphone className="w-5 h-5 text-white" />
                   </div>
-                  <div>
-                    <span className="font-extrabold text-lg sm:text-xl font-display block text-white">
-                      محلات <span className="text-sky-400">صدام العقاري</span>
-                    </span>
-                    <span className="text-[11px] text-slate-300 font-medium">
-                      {isAr ? 'تسوق بثقة · الهواتف الذكية ومستلزماتها' : 'Shop with Confidence · Smartphones & Gear'}
-                    </span>
+                  <div className="flex items-center gap-2">
+                    <div>
+                      <span className="font-extrabold text-lg sm:text-xl font-display block text-white">
+                        {isAr ? siteConfig.storeNameAr : siteConfig.storeNameEn}
+                      </span>
+                      <span className="text-[11px] text-slate-300 font-medium">
+                        {isAr ? siteConfig.taglineAr : siteConfig.taglineEn}
+                      </span>
+                    </div>
+                    {isAdminMode && onAdminEditStore && (
+                      <button
+                        type="button"
+                        onClick={onAdminEditStore}
+                        className="w-8 h-8 rounded-xl bg-[#0071e3] hover:bg-[#005bbf] text-white flex items-center justify-center shadow cursor-pointer shrink-0"
+                        title="تعديل بيانات المتجر والأرقام"
+                      >
+                        <Pencil className="w-3.5 h-3.5" />
+                      </button>
+                    )}
                   </div>
                 </div>
 
                 <p className="text-slate-300/85 text-xs leading-relaxed max-w-sm">
                   {isAr
-                    ? 'محلات صدام العقاري للإلكترونيات والهواتف الذكية ومستلزماتها — وجهتكم الموثوقة لأحدث الهواتف الذكية والسماعات والشواحن والملحقات الأصلية بضمان رسمي.'
-                    : 'Saddam Al-Aqari Electronics & Smartphones — Your trusted destination for original devices, accessories, and certified warranty.'}
+                    ? `${siteConfig.storeNameAr} للإلكترونيات والهواتف الذكية ومستلزماتها — وجهتكم الموثوقة لأحدث الهواتف الذكية والسماعات والشواحن والملحقات الأصلية بضمان رسمي.`
+                    : `${siteConfig.storeNameEn} — Your trusted destination for original devices, accessories, and certified warranty.`}
                 </p>
 
                 <div className="flex items-start gap-2 text-xs text-slate-200 pt-1">
                   <MapPin className="w-4 h-4 text-sky-400 shrink-0 mt-0.5" />
                   <span className="text-[11px] text-slate-200/90 leading-relaxed">
-                    {isAr
-                      ? 'عمران - الشارع العام امام ابن مهدي الخدري والهدور - جوار الذفيف'
-                      : 'Amran - Main Street, In front of Ibn Mahdi Al-Khadri & Al-Hadoor, Next to Al-Dhafeef'}
+                    {isAr ? siteConfig.addressAr : siteConfig.addressEn}
                   </span>
                 </div>
 
@@ -313,14 +367,16 @@ export default function Footer({ language, onSelectCategory, onNavigate }: Foote
 
                     {/* Direct WhatsApp */}
                     <a
-                      href="https://wa.me/967774102030?text=%D9%85%D8%B1%D8%AD%D8%A8%D8%A7%D9%8B%20%D9%85%D8%AD%D9%84%D8%A7%D8%AA%20%D8%B5%D8%AF%D8%A7%D9%85%20%D8%A7%D9%84%D8%B9%D9%82%D8%A7%D8%B1%D9%8A%D8%8C%20%D8%A3%D8%B1%D9%8A%D8%AF%20%D8%A7%D9%84%D8%A7%D8%B3%D8%AA%D9%81%D8%B3%D8%A7%D8%B1%20%D8%B9%D9%86%20%D8%A7%D9%84%D8%A3%D8%AC%D9%87%D8%B2%D8%A9"
+                      href={`https://wa.me/967${waClean}?text=%D9%85%D8%B1%D8%AD%D8%A8%D8%A7%D9%8B%20%D9%85%D8%AD%D9%84%D8%A7%D8%AA%20%D8%B5%D8%AF%D8%A7%D9%85%20%D8%A7%D9%84%D8%B9%D9%82%D8%A7%D8%B1%D9%8A%D8%8C%20%D8%A3%D8%B1%D9%8A%D8%AF%20%D8%A7%D9%84%D8%A7%D8%B3%D8%AA%D9%81%D8%B3%D8%A7%D8%B1%20%D8%B9%D9%86%20%D8%A7%D9%84%D8%A3%D8%AC%D9%87%D8%B2%D8%A9`}
                       target="_blank"
                       rel="noopener noreferrer"
                       onClick={() => soundFX.playClick()}
                       className="liquid-btn-emerald w-full flex items-center justify-center gap-2 py-2.5 px-3 rounded-xl font-extrabold text-xs"
                     >
                       <MessageCircle className="w-4 h-4" />
-                      <span>{isAr ? 'واتساب المبيعات (+967 774 102 030)' : 'WhatsApp (+967 774 102 030)'}</span>
+                      <span>
+                        {isAr ? `واتساب المبيعات (+967 ${waClean})` : `WhatsApp (+967 ${waClean})`}
+                      </span>
                     </a>
                   </div>
 
@@ -332,10 +388,10 @@ export default function Footer({ language, onSelectCategory, onNavigate }: Foote
                     </div>
 
                     <div className="flex flex-col gap-1.5">
-                      {['774102030', '777551485', '777059581'].map((num) => (
+                      {phoneNumbers.map((num) => (
                         <a
                           key={num}
-                          href={`tel:+967${num}`}
+                          href={`tel:+967${num.replace(/\D/g, '')}`}
                           onClick={() => soundFX.playClick()}
                           className="inline-flex items-center justify-between bg-white/[0.06] hover:bg-emerald-500/20 border border-white/12 hover:border-emerald-400/35 px-3 py-1.5 rounded-xl text-emerald-300 hover:text-emerald-200 transition-all font-mono tabular-nums font-bold text-xs tracking-wider"
                           title={isAr ? `اضغط للاتصال بـ ${num}` : `Call ${num}`}
@@ -354,7 +410,16 @@ export default function Footer({ language, onSelectCategory, onNavigate }: Foote
 
             {/* Bottom Copyright & Gateways */}
             <div className="pt-7 mt-8 border-t border-white/10 flex flex-col sm:flex-row items-center justify-between gap-4">
-              <p className="text-slate-400 text-xs">
+              <p
+                onPointerDown={handleSilentHoldStart}
+                onPointerUp={clearHoldTimer}
+                onPointerLeave={clearHoldTimer}
+                onPointerCancel={clearHoldTimer}
+                onContextMenu={(e) => {
+                  if (holdTimerRef.current) e.preventDefault();
+                }}
+                className="text-slate-400 text-xs select-none"
+              >
                 © 2026{' '}
                 {isAr
                   ? 'متجر صدام العقاري للهواتف الذكية ومستلزماتها. كافة الحقوق محفوظة.'

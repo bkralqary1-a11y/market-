@@ -1,0 +1,160 @@
+{
+  "entities": {
+    "Product": {
+      "title": "Storefront Product",
+      "description": "A phone, audio device, charger, case, or cable displayed in Saddam Al-Aqari Store.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "maxLength": 128 },
+        "sku": { "type": "string", "maxLength": 64 },
+        "name": { "type": "string", "maxLength": 200 },
+        "nameAr": { "type": "string", "maxLength": 200 },
+        "brand": { "type": "string", "maxLength": 80 },
+        "price": { "type": "number" },
+        "originalPrice": { "type": "number" },
+        "discountPercentage": { "type": "number" },
+        "category": { "type": "string", "enum": ["phones", "audio", "cases", "chargers", "cables"] },
+        "categoryNameEn": { "type": "string", "maxLength": 80 },
+        "categoryNameAr": { "type": "string", "maxLength": 80 },
+        "image": { "type": "string", "maxLength": 1500 },
+        "images": { "type": "array", "items": { "type": "string" } },
+        "rating": { "type": "number" },
+        "reviewsCount": { "type": "number" },
+        "description": { "type": "string", "maxLength": 3000 },
+        "descriptionAr": { "type": "string", "maxLength": 3000 },
+        "inStock": { "type": "boolean" },
+        "stock": { "type": "number" },
+        "fastShipping": { "type": "boolean" },
+        "warrantyYears": { "type": "number" },
+        "isTrending": { "type": "boolean" },
+        "isPopular": { "type": "boolean" },
+        "isFeatured": { "type": "boolean" },
+        "colors": { "type": "array", "items": { "type": "string" } },
+        "colorNamesAr": { "type": "array", "items": { "type": "string" } },
+        "variants": { "type": "object" },
+        "specs": { "type": "object" },
+        "tag": { "type": "string", "maxLength": 60 },
+        "tagAr": { "type": "string", "maxLength": 60 },
+        "videoUrl": { "type": "string", "maxLength": 1500 },
+        "hidden": { "type": "boolean" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": [
+        "id", "sku", "name", "nameAr", "brand", "price", "category",
+        "categoryNameEn", "categoryNameAr", "image", "images", "rating",
+        "reviewsCount", "description", "descriptionAr", "inStock",
+        "fastShipping", "warrantyYears", "colors", "variants", "specs",
+        "hidden", "createdAt", "updatedAt"
+      ]
+    },
+    "HeroSlide": {
+      "title": "Homepage Hero Slide",
+      "description": "Hero showcase banner slide managed by the store admin.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "maxLength": 128 },
+        "badgeAr": { "type": "string", "maxLength": 160 },
+        "badgeEn": { "type": "string", "maxLength": 160 },
+        "titleAr": { "type": "string", "maxLength": 200 },
+        "titleEn": { "type": "string", "maxLength": 200 },
+        "subtitleAr": { "type": "string", "maxLength": 500 },
+        "subtitleEn": { "type": "string", "maxLength": 500 },
+        "mediaType": { "type": "string", "enum": ["image", "video"] },
+        "imageUrl": { "type": "string", "maxLength": 1500 },
+        "videoUrl": { "type": "string", "maxLength": 1500 },
+        "buttonTextAr": { "type": "string", "maxLength": 80 },
+        "buttonTextEn": { "type": "string", "maxLength": 80 },
+        "featureBadge1Ar": { "type": "string", "maxLength": 100 },
+        "featureBadge2Ar": { "type": "string", "maxLength": 100 },
+        "whatsappCustomTextAr": { "type": "string", "maxLength": 300 },
+        "order": { "type": "number" },
+        "enabled": { "type": "boolean" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": [
+        "id", "badgeAr", "titleAr", "subtitleAr", "mediaType",
+        "imageUrl", "order", "enabled", "createdAt", "updatedAt"
+      ]
+    },
+    "SiteConfig": {
+      "title": "Global Storefront UI Configuration",
+      "description": "Single configuration document controlling store titles, section labels, banners, Bento tiles, category names/images, and WhatsApp numbers.",
+      "type": "object",
+      "properties": {
+        "storeNameAr": { "type": "string", "maxLength": 120 },
+        "storeNameEn": { "type": "string", "maxLength": 120 },
+        "taglineAr": { "type": "string", "maxLength": 200 },
+        "taglineEn": { "type": "string", "maxLength": 200 },
+        "addressAr": { "type": "string", "maxLength": 300 },
+        "addressEn": { "type": "string", "maxLength": 300 },
+        "whatsappPrimary": { "type": "string", "maxLength": 30 },
+        "whatsappSecondary": { "type": "string", "maxLength": 30 },
+        "phoneTertiary": { "type": "string", "maxLength": 30 },
+        "bannerEnabled": { "type": "boolean" },
+        "bannerTextAr": { "type": "string", "maxLength": 300 },
+        "bannerTextEn": { "type": "string", "maxLength": 300 },
+        "promoCode": { "type": "string", "maxLength": 40 },
+        "bento1BadgeAr": { "type": "string", "maxLength": 120 },
+        "bento1TitleAr": { "type": "string", "maxLength": 160 },
+        "bento1DescAr": { "type": "string", "maxLength": 300 },
+        "bento2BadgeAr": { "type": "string", "maxLength": 120 },
+        "bento2TitleAr": { "type": "string", "maxLength": 160 },
+        "bento2DescAr": { "type": "string", "maxLength": 300 },
+        "catPhonesImg": { "type": "string", "maxLength": 1500 },
+        "catAudioImg": { "type": "string", "maxLength": 1500 },
+        "catCasesImg": { "type": "string", "maxLength": 1500 },
+        "catChargersImg": { "type": "string", "maxLength": 1500 },
+        "catCablesImg": { "type": "string", "maxLength": 1500 },
+        "catPhonesNameAr": { "type": "string", "maxLength": 80 },
+        "catAudioNameAr": { "type": "string", "maxLength": 80 },
+        "catCasesNameAr": { "type": "string", "maxLength": 80 },
+        "catChargersNameAr": { "type": "string", "maxLength": 80 },
+        "catCablesNameAr": { "type": "string", "maxLength": 80 },
+        "categoriesSectionBadgeAr": { "type": "string", "maxLength": 120 },
+        "categoriesSectionTitleAr": { "type": "string", "maxLength": 160 },
+        "productsSectionBadgeAr": { "type": "string", "maxLength": 120 },
+        "productsSectionTitleAr": { "type": "string", "maxLength": 160 },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": [
+        "storeNameAr", "storeNameEn", "taglineAr", "taglineEn",
+        "addressAr", "addressEn", "whatsappPrimary", "whatsappSecondary",
+        "phoneTertiary", "bannerEnabled", "bannerTextAr", "bannerTextEn",
+        "promoCode", "bento1BadgeAr", "bento1TitleAr", "bento1DescAr",
+        "bento2BadgeAr", "bento2TitleAr", "bento2DescAr",
+        "catPhonesImg", "catAudioImg", "catCasesImg",
+        "catChargersImg", "catCablesImg", "updatedAt"
+      ]
+    },
+    "AdminProfile": {
+      "title": "Admin Allowlist Document",
+      "description": "Server-managed admin allowlist document keyed by Firebase Auth UID.",
+      "type": "object",
+      "properties": {
+        "email": { "type": "string", "maxLength": 160 },
+        "role": { "type": "string", "enum": ["admin"] }
+      },
+      "required": ["email", "role"]
+    }
+  },
+  "firestore": {
+    "/products/{productId}": {
+      "schema": { "$ref": "#/entities/Product" },
+      "description": "Public storefront product catalog; writes restricted exclusively to verified admin."
+    },
+    "/heroSlides/{slideId}": {
+      "schema": { "$ref": "#/entities/HeroSlide" },
+      "description": "Public homepage hero slides; writes restricted exclusively to verified admin."
+    },
+    "/siteConfig/{configId}": {
+      "schema": { "$ref": "#/entities/SiteConfig" },
+      "description": "Global storefront configuration document ('main'); writes restricted exclusively to verified admin."
+    },
+    "/admins/{adminUid}": {
+      "schema": { "$ref": "#/entities/AdminProfile" },
+      "description": "Read-own admin role verification documents; never writable from clients."
+    }
+  }
+}

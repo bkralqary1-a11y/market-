@@ -14,10 +14,12 @@ import {
   Truck,
   Building2,
   ShieldCheck,
+  Pencil,
 } from 'lucide-react';
 import { PageView, Language, Currency, CategoryId } from '../types';
 import { formatPrice } from '../data/mockData';
 import { soundFX } from '../utils/audioEffects';
+import { SiteConfig, DEFAULT_SITE_CONFIG } from '../services/firestoreService';
 
 interface HeaderProps {
   currentView: PageView;
@@ -36,6 +38,9 @@ interface HeaderProps {
   setCurrency: (curr: Currency) => void;
   onOpenSearch: () => void;
   onOpenAuth: () => void;
+  siteConfig?: SiteConfig;
+  isAdminMode?: boolean;
+  onAdminEditStore?: () => void;
 }
 
 export default function Header({
@@ -52,6 +57,9 @@ export default function Header({
   setLanguage,
   currency,
   onOpenSearch,
+  siteConfig = DEFAULT_SITE_CONFIG,
+  isAdminMode = false,
+  onAdminEditStore,
 }: HeaderProps) {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [cartBumping, setCartBumping] = useState(false);
@@ -110,17 +118,19 @@ export default function Header({
                 <ShieldCheck className="w-5 h-5 text-white" />
               </div>
               <span className="font-extrabold text-base sm:text-lg lg:text-xl tracking-tight text-[#0b1220] font-display whitespace-nowrap">
-                {isAr ? (
-                  <>
-                    صدام <span className="text-[#0071e3]">العقاري</span>
-                  </>
-                ) : (
-                  <>
-                    Saddam <span className="text-[#0071e3]">Al-Aqari</span>
-                  </>
-                )}
+                {isAr ? siteConfig.storeNameAr : siteConfig.storeNameEn}
               </span>
             </button>
+            {isAdminMode && onAdminEditStore && (
+              <button
+                type="button"
+                onClick={onAdminEditStore}
+                className="w-7 h-7 rounded-xl bg-[#0071e3] hover:bg-[#005bbf] text-white flex items-center justify-center shadow cursor-pointer shrink-0"
+                title="تعديل اسم المتجر والإعدادات"
+              >
+                <Pencil className="w-3.5 h-3.5" />
+              </button>
+            )}
           </div>
 
           {/* ZONE 2: Clean Single-Line Navigation Links */}

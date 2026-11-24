@@ -2,6 +2,7 @@ import { useState, useMemo, useEffect } from 'react';
 import { Filter, SlidersHorizontal, X, SearchX } from 'lucide-react';
 import { Product, Language, Currency, CategoryId } from '../types';
 import ProductCard from './ProductCard';
+import AddProductTile from './AddProductTile';
 import { formatPrice } from '../data/mockData';
 
 interface ShopViewProps {
@@ -17,6 +18,9 @@ interface ShopViewProps {
   onToggleCompare: (productId: string) => void;
   initialCategory: CategoryId;
   onCategoryChange?: (cat: CategoryId) => void;
+  isAdminMode?: boolean;
+  onAdminEditProduct?: (product: Product) => void;
+  onAdminAddProduct?: (defaultCategory: CategoryId) => void;
 }
 
 export default function ShopView({
@@ -32,6 +36,9 @@ export default function ShopView({
   onToggleCompare,
   initialCategory = 'all',
   onCategoryChange,
+  isAdminMode = false,
+  onAdminEditProduct,
+  onAdminAddProduct,
 }: ShopViewProps) {
   const isAr = language === 'ar';
 
@@ -261,7 +268,7 @@ export default function ShopView({
             </div>
 
             {/* Grid */}
-            {filteredProducts.length === 0 ? (
+            {filteredProducts.length === 0 && !isAdminMode ? (
               <div className="liquid-glass-strong p-12 rounded-[28px] text-center">
                 <SearchX className="w-10 h-10 text-slate-400 mx-auto mb-3" />
                 <h3 className="text-base font-extrabold text-[#0b1220] mb-1">
@@ -295,8 +302,16 @@ export default function ShopView({
                     onToggleWishlist={onToggleWishlist}
                     isCompared={comparedIds.includes(p.id)}
                     onToggleCompare={onToggleCompare}
+                    isAdminMode={isAdminMode}
+                    onAdminEdit={onAdminEditProduct}
                   />
                 ))}
+                {isAdminMode && onAdminAddProduct && (
+                  <AddProductTile
+                    language={language}
+                    onClick={() => onAdminAddProduct(selectedCategory)}
+                  />
+                )}
               </div>
             )}
           </div>

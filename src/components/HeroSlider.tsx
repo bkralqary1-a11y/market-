@@ -8,42 +8,50 @@ import {
   MessageCircle,
   Smartphone,
   Zap,
+  Pencil,
 } from 'lucide-react';
 import { Language, Currency, HeroSlideItem, CategoryId } from '../types';
 import { soundFX } from '../utils/audioEffects';
-import { getStoredHeroSlides } from '../utils/storeStorage';
+import { DEFAULT_HERO_SLIDES } from '../utils/storeStorage';
 import { getYouTubeId, getYouTubeEmbedUrl } from '../utils/videoUtils';
+import { SiteConfig, DEFAULT_SITE_CONFIG } from '../services/firestoreService';
+import { type EditableSectionTarget } from './VisualSectionEditorModal';
 
 interface HeroSliderProps {
   language: Language;
   currency: Currency;
   onExplore: (category?: CategoryId) => void;
   onSelectProduct: (product: any) => void;
+  slides?: HeroSlideItem[];
+  siteConfig?: SiteConfig;
+  isAdminMode?: boolean;
+  onAdminEditSection?: (target: EditableSectionTarget) => void;
 }
 
-export default function HeroSlider({ language, onExplore }: HeroSliderProps) {
+export default function HeroSlider({
+  language,
+  onExplore,
+  slides: propSlides,
+  siteConfig = DEFAULT_SITE_CONFIG,
+  isAdminMode = false,
+  onAdminEditSection,
+}: HeroSliderProps) {
   const isAr = language === 'ar';
-  const [slides, setSlides] = useState<HeroSlideItem[]>(() => {
-    const loaded = getStoredHeroSlides();
-    return loaded.filter((s) => s.enabled);
-  });
+  const activeSlides =
+    propSlides && propSlides.length > 0
+      ? propSlides.filter((s) => isAdminMode || s.enabled !== false)
+      : DEFAULT_HERO_SLIDES;
+  const slides = activeSlides.length > 0 ? activeSlides : DEFAULT_HERO_SLIDES;
   const [currentSlide, setCurrentSlide] = useState(0);
   const [touchStart, setTouchStart] = useState<number | null>(null);
   const [touchEnd, setTouchEnd] = useState<number | null>(null);
   const [imgFailed, setImgFailed] = useState<Record<string, boolean>>({});
 
   useEffect(() => {
-    const handleUpdated = (e: Event) => {
-      const updated = (e as CustomEvent).detail as HeroSlideItem[];
-      if (Array.isArray(updated)) {
-        const enabledOnes = updated.filter((s) => s.enabled);
-        setSlides(enabledOnes.length > 0 ? enabledOnes : getStoredHeroSlides());
-        setCurrentSlide(0);
-      }
-    };
-    window.addEventListener('saddam-hero-slides-updated', handleUpdated);
-    return () => window.removeEventListener('saddam-hero-slides-updated', handleUpdated);
-  }, []);
+    if (currentSlide >= slides.length) {
+      setCurrentSlide(0);
+    }
+  }, [slides.length, currentSlide]);
 
   const changeSlide = (newIndex: number) => {
     soundFX.playWhoosh();
@@ -153,6 +161,21 @@ export default function HeroSlider({ language, onExplore }: HeroSliderProps) {
             {/* Specular Top Glass Edge Highlight */}
             <div className="absolute inset-0 rounded-[32px] ring-1 ring-inset ring-white/25 pointer-events-none" />
 
+            {/* Admin Mode Floating Pencil Trigger for Hero */}
+            {isAdminMode && onAdminEditSection && (
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onAdminEditSection({ type: 'hero', slideIndex: currentSlide });
+                }}
+                className="absolute top-4 left-4 rtl:left-4 rtl:right-auto z-30 px-3.5 py-2 rounded-2xl bg-[#0071e3] hover:bg-[#005bbf] text-white text-xs font-extrabold shadow-xl flex items-center gap-1.5 cursor-pointer border border-white/30"
+              >
+                <Pencil className="w-3.5 h-3.5" />
+                <span>تعديل الشريحة الرئيسية</span>
+              </button>
+            )}
+
             {/* Hero Foreground Content */}
             <div className="relative z-10 w-full p-6 sm:p-9 lg:p-11 flex flex-col justify-end gap-4">
               {/* Quiet Unboxed Editorial Kicker */}
@@ -190,11 +213,11 @@ export default function HeroSlider({ language, onExplore }: HeroSliderProps) {
                   </button>
 
                   <a
-                    href={`https://wa.me/967774102030?text=${encodeURIComponent(
+                    href={`https://wa.me/967${siteConfig.whatsappPrimary.replace(/\D/g, '')}?text=${encodeURIComponent(
                       slide.whatsappCustomTextAr ||
                         (isAr
-                          ? `السلام عليكم متجر صدام العقاري، أود الاستفسار عن: ${slide.titleAr}`
-                          : `Hello Saddam Al-Aqari Store, I want to inquire about: ${slide.titleEn || slide.titleAr}`)
+                          ? `السلام عليكم ${siteConfig.storeNameAr}، أود الاستفسار عن: ${slide.titleAr}`
+                          : `Hello ${siteConfig.storeNameEn}, I want to inquire about: ${slide.titleEn || slide.titleAr}`)
                     )}`}
                     target="_blank"
                     rel="noopener noreferrer"
@@ -247,92 +270,134 @@ export default function HeroSlider({ language, onExplore }: HeroSliderProps) {
 
           {/* Side TrustBuy-Style Liquid Glass Bento Cards (4 Cols) */}
           <div className="lg:col-span-4 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-1 gap-4 sm:gap-5">
-            {/* Side Glass Tile 1: Flagship Phones & Official Warranty */}
-            <button
-              type="button"
-              onClick={() => {
-                soundFX.playClick();
-                onExplore('phones');
-              }}
-              className="liquid-glass liquid-card-hover rounded-[28px] p-6 text-right rtl:text-right ltr:text-left flex flex-col justify-between min-h-[210px] lg:min-h-0 cursor-pointer group overflow-hidden relative"
-            >
-              <div
-                aria-hidden="true"
-                className="absolute -bottom-10 -left-10 rtl:-left-10 ltr:-right-10 w-40 h-40 rounded-full bg-[#0071e3]/15 blur-2xl pointer-events-none"
-              />
-              <div className="flex items-start justify-between gap-4 relative z-10">
-                <div className="space-y-1.5">
-                  <span className="text-xs font-bold text-[#0071e3] block">
-                    {isAr ? 'تسوق بثقة · ضمان الوكالة' : 'Shop with Confidence'}
+            {/* Side Glass Tile 1 */}
+            <div className="relative flex flex-col">
+              {isAdminMode && onAdminEditSection && (
+                <button
+                  type="button"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onAdminEditSection({ type: 'bento1' });
+                  }}
+                  className="absolute top-3 left-3 rtl:left-3 rtl:right-auto z-20 w-8 h-8 rounded-xl bg-[#0071e3] hover:bg-[#005bbf] text-white flex items-center justify-center shadow-lg cursor-pointer"
+                  title="تعديل البطاقة الجانبية الأولى"
+                >
+                  <Pencil className="w-3.5 h-3.5" />
+                </button>
+              )}
+              <button
+                type="button"
+                onClick={() => {
+                  soundFX.playClick();
+                  if (isAdminMode && onAdminEditSection) {
+                    onAdminEditSection({ type: 'bento1' });
+                  } else {
+                    onExplore('phones');
+                  }
+                }}
+                className={`liquid-glass liquid-card-hover rounded-[28px] p-6 text-right rtl:text-right ltr:text-left flex flex-col justify-between min-h-[210px] lg:min-h-0 flex-1 cursor-pointer group overflow-hidden relative ${
+                  isAdminMode ? 'ring-2 ring-[#0071e3]/45 hover:ring-[#0071e3]' : ''
+                }`}
+              >
+                <div
+                  aria-hidden="true"
+                  className="absolute -bottom-10 -left-10 rtl:-left-10 ltr:-right-10 w-40 h-40 rounded-full bg-[#0071e3]/15 blur-2xl pointer-events-none"
+                />
+                <div className="flex items-start justify-between gap-4 relative z-10">
+                  <div className="space-y-1.5">
+                    <span className="text-xs font-bold text-[#0071e3] block">
+                      {isAr ? siteConfig.bento1BadgeAr : 'Shop with Confidence'}
+                    </span>
+                    <h2 className="text-lg sm:text-xl font-extrabold text-[#0b1220] leading-snug">
+                      {isAr ? siteConfig.bento1TitleAr : 'Latest 5G Flagship Phones'}
+                    </h2>
+                    <p className="text-xs text-slate-600 leading-relaxed">
+                      {isAr
+                        ? siteConfig.bento1DescAr
+                        : 'iPhone 16 Pro Max & Galaxy Ultra with certified warranty.'}
+                    </p>
+                  </div>
+                  <div className="w-11 h-11 rounded-2xl liquid-glass-strong flex items-center justify-center text-[#0071e3] shrink-0">
+                    <Smartphone className="w-5 h-5" />
+                  </div>
+                </div>
+
+                <div className="pt-4 mt-4 border-t border-slate-900/8 flex items-center justify-between text-xs font-bold text-[#0071e3] relative z-10">
+                  <span>{isAr ? 'استعراض الهواتف' : 'Browse Phones'}</span>
+                  {isAr ? (
+                    <ArrowLeft className="w-4 h-4 group-hover:-translate-x-1 transition-transform" />
+                  ) : (
+                    <ArrowRight className="w-4 h-4 group-hover:translate-x-1 transition-transform" />
+                  )}
+                </div>
+              </button>
+            </div>
+
+            {/* Side Glass Tile 2 */}
+            <div className="relative flex flex-col">
+              {isAdminMode && onAdminEditSection && (
+                <button
+                  type="button"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onAdminEditSection({ type: 'bento2' });
+                  }}
+                  className="absolute top-3 left-3 rtl:left-3 rtl:right-auto z-20 w-8 h-8 rounded-xl bg-[#0071e3] hover:bg-[#005bbf] text-white flex items-center justify-center shadow-lg cursor-pointer"
+                  title="تعديل البطاقة الجانبية الثانية"
+                >
+                  <Pencil className="w-3.5 h-3.5" />
+                </button>
+              )}
+              <button
+                type="button"
+                onClick={() => {
+                  soundFX.playClick();
+                  if (isAdminMode && onAdminEditSection) {
+                    onAdminEditSection({ type: 'bento2' });
+                  } else {
+                    onExplore('chargers');
+                  }
+                }}
+                className={`liquid-glass liquid-card-hover rounded-[28px] p-6 text-right rtl:text-right ltr:text-left flex flex-col justify-between min-h-[210px] lg:min-h-0 flex-1 cursor-pointer group overflow-hidden relative ${
+                  isAdminMode ? 'ring-2 ring-[#0071e3]/45 hover:ring-[#0071e3]' : ''
+                }`}
+              >
+                <div
+                  aria-hidden="true"
+                  className="absolute -bottom-10 -left-10 rtl:-left-10 ltr:-right-10 w-40 h-40 rounded-full bg-emerald-500/15 blur-2xl pointer-events-none"
+                />
+                <div className="flex items-start justify-between gap-4 relative z-10">
+                  <div className="space-y-1.5">
+                    <span className="text-xs font-bold text-emerald-700 block">
+                      {isAr ? siteConfig.bento2BadgeAr : 'GaN Power & Original Gear'}
+                    </span>
+                    <h2 className="text-lg sm:text-xl font-extrabold text-[#0b1220] leading-snug">
+                      {isAr ? siteConfig.bento2TitleAr : 'Chargers, Audio & MagSafe'}
+                    </h2>
+                    <p className="text-xs text-slate-600 leading-relaxed">
+                      {isAr
+                        ? siteConfig.bento2DescAr
+                        : 'Anker, Belkin & Sony with instant inspection & fast dispatch.'}
+                    </p>
+                  </div>
+                  <div className="w-11 h-11 rounded-2xl liquid-glass-strong flex items-center justify-center text-emerald-600 shrink-0">
+                    <Zap className="w-5 h-5" />
+                  </div>
+                </div>
+
+                <div className="pt-4 mt-4 border-t border-slate-900/8 flex items-center justify-between text-xs font-bold text-emerald-700 relative z-10">
+                  <span className="flex items-center gap-1.5">
+                    <ShieldCheck className="w-4 h-4" />
+                    <span>{isAr ? 'تصفح الملحقات الأصلية' : 'Browse Accessories'}</span>
                   </span>
-                  <h2 className="text-lg sm:text-xl font-extrabold text-[#0b1220] leading-snug">
-                    {isAr ? 'أحدث الهواتف الذكية 5G' : 'Latest 5G Flagship Phones'}
-                  </h2>
-                  <p className="text-xs text-slate-600 leading-relaxed">
-                    {isAr
-                      ? 'آيفون 16 برو ماكس وسامسونج ألترا بأفضل سعر وفاتورة رسمية.'
-                      : 'iPhone 16 Pro Max & Galaxy Ultra with certified warranty.'}
-                  </p>
+                  {isAr ? (
+                    <ArrowLeft className="w-4 h-4 group-hover:-translate-x-1 transition-transform" />
+                  ) : (
+                    <ArrowRight className="w-4 h-4 group-hover:translate-x-1 transition-transform" />
+                  )}
                 </div>
-                <div className="w-11 h-11 rounded-2xl liquid-glass-strong flex items-center justify-center text-[#0071e3] shrink-0">
-                  <Smartphone className="w-5 h-5" />
-                </div>
-              </div>
-
-              <div className="pt-4 mt-4 border-t border-slate-900/8 flex items-center justify-between text-xs font-bold text-[#0071e3] relative z-10">
-                <span>{isAr ? 'استعراض الهواتف' : 'Browse Phones'}</span>
-                {isAr ? (
-                  <ArrowLeft className="w-4 h-4 group-hover:-translate-x-1 transition-transform" />
-                ) : (
-                  <ArrowRight className="w-4 h-4 group-hover:translate-x-1 transition-transform" />
-                )}
-              </div>
-            </button>
-
-            {/* Side Glass Tile 2: Fast Charging & Certified Accessories */}
-            <button
-              type="button"
-              onClick={() => {
-                soundFX.playClick();
-                onExplore('chargers');
-              }}
-              className="liquid-glass liquid-card-hover rounded-[28px] p-6 text-right rtl:text-right ltr:text-left flex flex-col justify-between min-h-[210px] lg:min-h-0 cursor-pointer group overflow-hidden relative"
-            >
-              <div
-                aria-hidden="true"
-                className="absolute -bottom-10 -left-10 rtl:-left-10 ltr:-right-10 w-40 h-40 rounded-full bg-emerald-500/15 blur-2xl pointer-events-none"
-              />
-              <div className="flex items-start justify-between gap-4 relative z-10">
-                <div className="space-y-1.5">
-                  <span className="text-xs font-bold text-emerald-700 block">
-                    {isAr ? 'شحن فائق GaN · ملحقات أصلية' : 'GaN Power & Original Gear'}
-                  </span>
-                  <h2 className="text-lg sm:text-xl font-extrabold text-[#0b1220] leading-snug">
-                    {isAr ? 'الشواحن والسماعات المعتمدة' : 'Chargers, Audio & MagSafe'}
-                  </h2>
-                  <p className="text-xs text-slate-600 leading-relaxed">
-                    {isAr
-                      ? 'Anker و Belkin و Sony مع فحص فوري قبل الدفع وتوصيل سريع.'
-                      : 'Anker, Belkin & Sony with instant inspection & fast dispatch.'}
-                  </p>
-                </div>
-                <div className="w-11 h-11 rounded-2xl liquid-glass-strong flex items-center justify-center text-emerald-600 shrink-0">
-                  <Zap className="w-5 h-5" />
-                </div>
-              </div>
-
-              <div className="pt-4 mt-4 border-t border-slate-900/8 flex items-center justify-between text-xs font-bold text-emerald-700 relative z-10">
-                <span className="flex items-center gap-1.5">
-                  <ShieldCheck className="w-4 h-4" />
-                  <span>{isAr ? 'تصفح الملحقات الأصلية' : 'Browse Accessories'}</span>
-                </span>
-                {isAr ? (
-                  <ArrowLeft className="w-4 h-4 group-hover:-translate-x-1 transition-transform" />
-                ) : (
-                  <ArrowRight className="w-4 h-4 group-hover:translate-x-1 transition-transform" />
-                )}
-              </div>
-            </button>
+              </button>
+            </div>
           </div>
         </div>
       </div>

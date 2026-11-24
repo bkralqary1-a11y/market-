@@ -1,5 +1,5 @@
 import { useState, useRef, type MouseEvent } from 'react';
-import { Heart, ShoppingBag, Eye, Star, SlidersHorizontal, Check, MessageCircle, Smartphone } from 'lucide-react';
+import { Heart, ShoppingBag, Eye, Star, SlidersHorizontal, Check, MessageCircle, Smartphone, Pencil, EyeOff } from 'lucide-react';
 import { Product, Language, Currency } from '../types';
 import { formatPrice } from '../data/mockData';
 import { triggerFlyToCart } from './FlyingCartAnimation';
@@ -18,6 +18,8 @@ interface ProductCardProps {
   isCompared?: boolean;
   onToggleCompare?: (productId: string) => void;
   onQuickView?: (product: Product) => void;
+  isAdminMode?: boolean;
+  onAdminEdit?: (product: Product) => void;
 }
 
 export default function ProductCard({
@@ -32,6 +34,8 @@ export default function ProductCard({
   isCompared = false,
   onToggleCompare,
   onQuickView,
+  isAdminMode = false,
+  onAdminEdit,
 }: ProductCardProps) {
   const isAr = language === 'ar';
   const [selectedColor] = useState(product.colors[0] || '#0f172a');
@@ -94,14 +98,50 @@ export default function ProductCard({
       <div
         onClick={() => {
           soundFX.playClick();
-          onSelect(product);
+          if (isAdminMode && onAdminEdit) {
+            onAdminEdit(product);
+          } else {
+            onSelect(product);
+          }
         }}
         className={`group liquid-glass liquid-card-hover rounded-[26px] p-2.5 sm:p-3.5 flex flex-col justify-between overflow-hidden cursor-pointer relative h-full w-full min-w-0 ${
           addedAnim ? 'ring-2 ring-emerald-500' : ''
+        } ${isAdminMode ? 'ring-2 ring-[#0071e3]/45 hover:ring-[#0071e3]' : ''} ${
+          product.hidden ? 'opacity-65' : ''
         }`}
       >
+        {/* Admin Mode Floating Pencil Edit Trigger */}
+        {isAdminMode && onAdminEdit && (
+          <button
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation();
+              onAdminEdit(product);
+            }}
+            className="absolute top-3.5 right-3.5 rtl:right-3.5 rtl:left-auto ltr:left-3.5 ltr:right-auto z-20 px-2.5 py-1.5 rounded-xl bg-[#0071e3] hover:bg-[#005bbf] text-white text-[11px] font-extrabold shadow-lg flex items-center gap-1 cursor-pointer"
+            title="تعديل هذا المنتج"
+          >
+            <Pencil className="w-3.5 h-3.5" />
+            <span>تعديل</span>
+          </button>
+        )}
+
         {/* 1. Product Image Stage (Translucent Frosted Glass Well) */}
         <div className="relative aspect-square rounded-[18px] liquid-glass-subtle overflow-hidden mb-3">
+          {/* Discount % & Hidden Indicator */}
+          {!isAdminMode && product.discountPercentage && product.discountPercentage > 0 ? (
+            <span className="absolute top-2.5 right-2.5 rtl:right-2.5 rtl:left-auto ltr:left-2.5 ltr:right-auto z-10 px-2 py-0.5 rounded-lg bg-rose-600 text-white text-[11px] font-black tabular-nums shadow">
+              -{product.discountPercentage}%
+            </span>
+          ) : null}
+
+          {isAdminMode && product.hidden && (
+            <span className="absolute bottom-2.5 right-2.5 z-20 px-2 py-0.5 rounded-lg bg-amber-500 text-slate-950 text-[10px] font-extrabold flex items-center gap-1 shadow">
+              <EyeOff className="w-3 h-3" />
+              <span>مخفي عن الزوار</span>
+            </span>
+          )}
+
           {/* Minimal Floating Glass Action Buttons */}
           <div className="absolute top-2.5 left-2.5 rtl:left-2.5 rtl:right-auto ltr:right-2.5 ltr:left-auto z-10 flex flex-col gap-1.5">
             <button
@@ -183,12 +223,25 @@ export default function ProductCard({
               {isAr ? product.nameAr : product.name}
             </h3>
 
-            {/* Clean Quiet Warranty & Authenticity Line */}
-            <p className="text-[11px] text-slate-600 truncate">
-              {isAr
-                ? `ضمان ${product.warrantyYears} سنوات · أصلي معتمد`
-                : `${product.warrantyYears}Y Warranty · Certified Original`}
-            </p>
+            {/* Clean Quiet Warranty & Colors Line */}
+            <div className="flex items-center justify-between gap-2">
+              <p className="text-[11px] text-slate-600 truncate">
+                {isAr
+                  ? `ضمان ${product.warrantyYears} سنوات · أصلي معتمد`
+                  : `${product.warrantyYears}Y Warranty · Certified Original`}
+              </p>
+              {product.colors && product.colors.length > 0 && (
+                <div className="flex items-center gap-1 shrink-0">
+                  {product.colors.slice(0, 4).map((col, i) => (
+                    <span
+                      key={i}
+                      className="w-3 h-3 rounded-full border border-slate-900/20 shadow-xs"
+                      style={{ backgroundColor: col }}
+                    />
+                  ))}
+                </div>
+              )}
+            </div>
           </div>
 
           {/* Price & Dual Liquid Glass Actions */}
