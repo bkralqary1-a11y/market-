@@ -87,8 +87,7 @@ export type PageView =
   | 'checkout'
   | 'compare'
   | 'account'
-  | 'wholesale'
-  | 'admin';
+  | 'wholesale';
 
 export type Language = 'ar' | 'en';
 

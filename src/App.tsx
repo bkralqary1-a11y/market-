@@ -1,8 +1,8 @@
 import { useState, useEffect } from 'react';
-import { PageView, Language, Currency, CategoryId, Product, CartItem, ShortVideoItem } from './types';
+import { PageView, Language, Currency, CategoryId, Product, CartItem } from './types';
 import { mockProducts } from './data/mockData';
-import { getStoredProducts, saveStoredProducts, getStoredShorts, saveStoredShorts, getStoredDiscountConfig, StoreDiscountConfig } from './utils/storeStorage';
-import { Sparkles, MessageCircle } from 'lucide-react';
+import { getStoredProducts, getStoredDiscountConfig, StoreDiscountConfig } from './utils/storeStorage';
+import { MessageCircle, ArrowLeft, ArrowRight } from 'lucide-react';
 
 // Components
 import Header from './components/Header';
@@ -10,7 +10,6 @@ import HeroSlider from './components/HeroSlider';
 import BrandTicker from './components/BrandTicker';
 import CategoriesSection from './components/CategoriesSection';
 import ProductCard from './components/ProductCard';
-import PromoBanner from './components/PromoBanner';
 import Footer from './components/Footer';
 import ShopView from './components/ShopView';
 import ProductDetailView from './components/ProductDetailView';
@@ -27,27 +26,23 @@ import InvoiceModal from './components/InvoiceModal';
 import FloatingCartBar from './components/FloatingCartBar';
 import FlyingCartAnimation from './components/FlyingCartAnimation';
 import Ambient3DBackground from './components/Ambient3DBackground';
-import WaveDivider from './components/WaveDivider';
-import SocialMediaShowcase from './components/SocialMediaShowcase';
-import YouTubeShortsSection from './components/YouTubeShortsSection';
 import FloatingSocialDock from './components/FloatingSocialDock';
-import AdminPageView from './components/AdminPageView';
 import { soundFX } from './utils/audioEffects';
 
 export default function App() {
-  // Dynamic persistent products and video shorts (التحكم الكامل بالمتجر)
-  const [products, setProducts] = useState<Product[]>(() => getStoredProducts());
-  const [shorts, setShorts] = useState<ShortVideoItem[]>(() => getStoredShorts());
-  const [discountConfig, setDiscountConfig] = useState<StoreDiscountConfig>(() => getStoredDiscountConfig());
+  const [products] = useState<Product[]>(() => getStoredProducts());
+  const [discountConfig] = useState<StoreDiscountConfig>(() => getStoredDiscountConfig());
 
-  // App navigation state
+  // Navigation state
   const [currentView, setCurrentView] = useState<PageView>('home');
   const [language, setLanguage] = useState<Language>('ar');
   const [currency, setCurrency] = useState<Currency>('YER');
-  const [selectedProduct, setSelectedProduct] = useState<Product>(() => (products.length > 0 ? products[0] : mockProducts[0]));
+  const [selectedProduct, setSelectedProduct] = useState<Product>(() =>
+    products.length > 0 ? products[0] : mockProducts[0]
+  );
   const [selectedCategory, setSelectedCategory] = useState<CategoryId>('all');
 
-  // Initial cart: completely empty so user starts with zeroed-out clean state
+  // Cart state
   const [cart, setCart] = useState<CartItem[]>(() => {
     try {
       const saved = localStorage.getItem('saddam_store_cart_v2');
@@ -57,7 +52,7 @@ export default function App() {
     }
   });
 
-  // Wishlist & Comparison: zeroed out by default
+  // Wishlist & Comparison
   const [wishlist, setWishlist] = useState<string[]>(() => {
     try {
       const saved = localStorage.getItem('saddam_store_wishlist_v2');
@@ -68,7 +63,6 @@ export default function App() {
   });
   const [comparedProductIds, setComparedProductIds] = useState<string[]>([]);
 
-  // Sync to localStorage when user adds/removes items
   useEffect(() => {
     try {
       localStorage.setItem('saddam_store_cart_v2', JSON.stringify(cart));
@@ -93,10 +87,9 @@ export default function App() {
   const [authOpen, setAuthOpen] = useState(false);
   const [quickViewProduct, setQuickViewProduct] = useState<Product | null>(null);
 
-  // Home filter tab (all, trending, popular)
+  // Home filter tab
   const [homeFilter, setHomeFilter] = useState<'trending' | 'popular' | 'all'>('trending');
 
-  // Scroll to top on view change
   useEffect(() => {
     window.scrollTo({ top: 0, behavior: 'smooth' });
   }, [currentView]);
@@ -131,10 +124,8 @@ export default function App() {
         },
       ];
     });
-    // Never force user into cart drawer when adding product: respects user request "دون الدخول الى السله"
   };
 
-  // One-Click Quick Order: directly adds product and opens invoice modal for instant WhatsApp checkout
   const handleQuickOrder = (
     product: Product,
     variant = product.variants.options[0] || 'الأساسي',
@@ -167,7 +158,6 @@ export default function App() {
     });
   };
 
-  // Wishlist toggle
   const handleToggleWishlist = (productId: string) => {
     soundFX.playClick();
     setWishlist((prev) =>
@@ -175,7 +165,6 @@ export default function App() {
     );
   };
 
-  // Compare toggle
   const handleToggleCompare = (productId: string) => {
     soundFX.playClick();
     setComparedProductIds((prev) => {
@@ -190,7 +179,6 @@ export default function App() {
     setCompareModalOpen(true);
   };
 
-  // Navigation handlers
   const handleSelectProduct = (product: Product) => {
     soundFX.playClick();
     setSelectedProduct(product);
@@ -204,10 +192,8 @@ export default function App() {
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
-  // Filter active products (non-hidden) for client views
   const visibleProducts = products.filter((p) => !p.hidden);
 
-  // Home filtered products (supports category selection and trending/popular filters)
   const homeFilteredProducts = visibleProducts.filter((p) => {
     if (selectedCategory !== 'all' && p.category !== selectedCategory) return false;
     if (homeFilter === 'trending') return p.isTrending ?? true;
@@ -224,39 +210,15 @@ export default function App() {
 
   const comparedProducts = products.filter((p) => comparedProductIds.includes(p.id));
 
-  // Standalone Admin Dashboard Website View (User request: لوحه التحكم تضهر كا موقع اخر بالكامل ليس انبثاق)
-  if (currentView === 'admin') {
-    return (
-      <AdminPageView
-        products={products}
-        onUpdateProducts={(updated) => {
-          setProducts(updated);
-          saveStoredProducts(updated);
-        }}
-        shorts={shorts}
-        onUpdateShorts={(updated) => {
-          setShorts(updated);
-          saveStoredShorts(updated);
-        }}
-        language={language}
-        currency={currency}
-        onBackToStore={() => {
-          setCurrentView('home');
-          setDiscountConfig(getStoredDiscountConfig());
-        }}
-      />
-    );
-  }
-
   return (
     <div
       dir={isAr ? 'rtl' : 'ltr'}
-      className="min-h-screen flex flex-col bg-white text-gray-dark font-sans selection:bg-primary selection:text-white relative overflow-x-hidden"
+      className="min-h-screen flex flex-col text-[#0b1220] font-sans selection:bg-[#0071e3] selection:text-white relative overflow-x-hidden"
     >
-      {/* 3D Interactive Ambient Particles & Holographic Orbs */}
+      {/* iOS 27 Liquid Glass Atmospheric Refraction Canvas */}
       <Ambient3DBackground />
 
-      {/* 1. Master Header */}
+      {/* 1. Floating iOS 27 Liquid Glass Header */}
       <Header
         currentView={currentView}
         setCurrentView={(view) => {
@@ -285,117 +247,102 @@ export default function App() {
         onOpenAuth={() => setAuthOpen(true)}
       />
 
-      {/* Store-wide Promo & Discount Announcement Banner (Controlled from Admin Panel) */}
+      {/* Slim Liquid Glass Announcement Strip (if enabled) */}
       {discountConfig.enabled && (
-        <div className="bg-gradient-to-r from-red-600 via-orange-600 to-amber-600 text-white text-xs py-2 px-4 text-center font-bold flex items-center justify-center gap-2 shadow-sm transition-all z-20">
-          <span>🔥 {isAr ? discountConfig.bannerTextAr : discountConfig.bannerTextEn}</span>
-          {discountConfig.promoCode && (
-            <span className="bg-white text-red-600 px-2 py-0.5 rounded-md font-mono text-[11px] font-black uppercase tracking-wider">
-              {isAr ? 'كود الخصم:' : 'CODE:'} {discountConfig.promoCode}
-            </span>
-          )}
+        <div className="px-3 sm:px-5 pt-1 relative z-20">
+          <div className="container mx-auto max-w-7xl liquid-glass rounded-2xl py-2 px-4 text-center text-xs font-bold text-[#0b1220] flex flex-wrap items-center justify-center gap-2">
+            <span>{isAr ? discountConfig.bannerTextAr : discountConfig.bannerTextEn}</span>
+            {discountConfig.promoCode && (
+              <span className="text-[#0071e3] font-mono font-black tracking-wider">
+                {isAr ? 'الكود:' : 'CODE:'} {discountConfig.promoCode}
+              </span>
+            )}
+          </div>
         </div>
       )}
 
       {/* 2. Main Content Area */}
-      <main className="flex-grow">
-        {/* VIEW 1: HOME */}
+      <main className="flex-grow relative z-10">
+        {/* VIEW 1: TRUSTBUY LIQUID GLASS HOMEPAGE */}
         {currentView === 'home' && (
           <>
-            {/* Hero Slider with Next-Gen Devices */}
+            {/* Section 1: TrustBuy Bento Hero Showcase */}
             <HeroSlider
               language={language}
               currency={currency}
-              onExplore={() => {
-                setSelectedCategory('all');
+              onExplore={(cat) => {
+                setSelectedCategory(cat || 'all');
                 setCurrentView('shop');
               }}
               onSelectProduct={handleSelectProduct}
             />
 
-            {/* Authorized Brands Ticker */}
+            {/* Section 2: TrustBuy Trust Pillars + Authorized Brands Ribbon */}
             <BrandTicker language={language} />
 
-            {/* 3D Wave Transition into Categories */}
-            <WaveDivider variant="sky-cyan" />
-
-            {/* The 5 Requested Categories (Phones, Audio, Cases, Chargers, Cables) */}
+            {/* Section 3: Curated Liquid Glass Categories */}
             <CategoriesSection
               language={language}
               onSelectCategory={handleSelectCategory}
               selectedCategory={selectedCategory}
             />
 
-            {/* 3D Wave Transition into Trending */}
-            <WaveDivider variant="cyan-orange" />
-
-            {/* Trending & Best Sellers Showcase */}
-            <section id="trending-products-section" className="py-14 bg-gray-50 border-t border-gray-line">
-              <div className="container mx-auto px-4">
-                <div className="flex flex-col md:flex-row md:items-end justify-between mb-8 pb-3 border-b border-gray-line gap-4">
+            {/* Section 4: Featured & Best-Selling Products Grid */}
+            <section id="trending-products-section" className="py-10 sm:py-14 px-3 sm:px-5">
+              <div className="container mx-auto max-w-7xl">
+                <div className="flex flex-col md:flex-row md:items-end justify-between gap-4 mb-8">
                   <div>
-                    <div className="flex items-center gap-2 mb-1">
-                      <span className="text-primary text-xs font-bold uppercase tracking-wider block">
-                        {isAr ? 'المختارات الأكثر إقبالاً' : 'Flagship Collection'}
-                      </span>
-                      {selectedCategory !== 'all' && (
-                        <span className="text-[10px] font-bold bg-orange-100 text-orange-700 px-2 py-0.5 rounded-full border border-orange-200">
-                          {isAr ? 'قسم مفلتر' : 'Filtered Section'}
-                        </span>
-                      )}
-                    </div>
-                    <h2 className="text-2xl md:text-3xl font-extrabold text-gray-dark tracking-tight">
-                      {selectedCategory === 'phones'
-                        ? (isAr ? 'الهواتف الذكية المعتمدة' : 'Certified Smartphones')
-                        : selectedCategory === 'audio'
-                        ? (isAr ? 'السماعات والأنظمة الصوتية' : 'Headphones & Audio')
-                        : selectedCategory === 'cases'
-                        ? (isAr ? 'كفرات وحماية الأجهزة' : 'Cases & Protection')
-                        : selectedCategory === 'chargers'
-                        ? (isAr ? 'الشواحن ومنصات الطاقة' : 'Chargers & Power')
-                        : selectedCategory === 'cables'
-                        ? (isAr ? 'الكيابل والوصلات المعتمدة' : 'Cables & Adapters')
-                        : (isAr ? 'الأجهزة والملحقات الأكثر مبيعاً' : 'Best Selling Electronics & Gear')}
+                    <span className="text-xs font-bold text-[#0071e3] block mb-1">
+                      {isAr ? 'مختارات الثقة والأكثر طلباً' : 'Trusted Bestsellers'}
+                    </span>
+                    <h2 className="text-2xl sm:text-3xl font-extrabold text-[#0b1220] tracking-tight">
+                      {isAr ? 'أحدث الأجهزة والملحقات الأصلية' : 'Featured Devices & Accessories'}
                     </h2>
                   </div>
 
-                  {/* Filter & Category Quick Tabs */}
-                  <div className="flex flex-wrap items-center gap-2 bg-white border border-gray-line p-1 rounded-xl self-start md:self-auto shadow-xs">
+                  {/* iOS 27 Liquid Glass Segmented Filter Control */}
+                  <div className="liquid-glass-capsule p-1 rounded-2xl inline-flex items-center gap-1 self-start md:self-auto">
                     <button
+                      type="button"
                       onClick={() => {
+                        soundFX.playClick();
                         setSelectedCategory('all');
                         setHomeFilter('trending');
                       }}
-                      className={`text-xs font-bold px-3 py-1.5 rounded-lg transition-colors cursor-pointer ${
+                      className={`text-xs font-bold px-4 py-2 rounded-xl transition-all cursor-pointer whitespace-nowrap ${
                         homeFilter === 'trending' && selectedCategory === 'all'
-                          ? 'bg-primary text-white shadow'
-                          : 'text-gray-600 hover:text-gray-dark'
+                          ? 'liquid-btn-primary text-white'
+                          : 'text-slate-700 hover:text-[#0b1220]'
                       }`}
                     >
                       {isAr ? 'الأكثر طلباً' : 'Trending'}
                     </button>
                     <button
+                      type="button"
                       onClick={() => {
+                        soundFX.playClick();
                         setSelectedCategory('all');
                         setHomeFilter('popular');
                       }}
-                      className={`text-xs font-bold px-3 py-1.5 rounded-lg transition-colors cursor-pointer ${
+                      className={`text-xs font-bold px-4 py-2 rounded-xl transition-all cursor-pointer whitespace-nowrap ${
                         homeFilter === 'popular' && selectedCategory === 'all'
-                          ? 'bg-primary text-white shadow'
-                          : 'text-gray-600 hover:text-gray-dark'
+                          ? 'liquid-btn-primary text-white'
+                          : 'text-slate-700 hover:text-[#0b1220]'
                       }`}
                     >
                       {isAr ? 'الأعلى تقييماً' : 'Top Rated'}
                     </button>
                     <button
+                      type="button"
                       onClick={() => {
+                        soundFX.playClick();
                         setSelectedCategory('all');
                         setHomeFilter('all');
                       }}
-                      className={`text-xs font-bold px-3 py-1.5 rounded-lg transition-colors cursor-pointer ${
+                      className={`text-xs font-bold px-4 py-2 rounded-xl transition-all cursor-pointer whitespace-nowrap ${
                         homeFilter === 'all' && selectedCategory === 'all'
-                          ? 'bg-primary text-white shadow'
-                          : 'text-gray-600 hover:text-gray-dark'
+                          ? 'liquid-btn-primary text-white'
+                          : 'text-slate-700 hover:text-[#0b1220]'
                       }`}
                     >
                       {isAr ? 'عرض الكل' : 'All'}
@@ -403,32 +350,29 @@ export default function App() {
                   </div>
                 </div>
 
-                {/* Products Grid: strictly 2 products side by side (grid-cols-2) on mobile & tablets */}
+                {/* Products Grid */}
                 {visibleProducts.length === 0 ? (
-                  <div className="text-center py-14 px-4 bg-white rounded-3xl border border-dashed border-gray-200 max-w-xl mx-auto my-4 shadow-xs">
-                    <div className="w-14 h-14 bg-amber-50 rounded-2xl flex items-center justify-center mx-auto mb-3 text-amber-600">
-                      <Sparkles className="w-7 h-7" />
-                    </div>
-                    <h3 className="text-lg font-black text-gray-900 mb-1.5">
-                      {isAr ? 'متجر صدام العقاري للأجهزة والإلكترونيات' : 'Saddam Al-Aqqari Tech Store'}
+                  <div className="text-center py-14 px-6 liquid-glass rounded-[30px] max-w-xl mx-auto my-4">
+                    <h3 className="text-lg font-extrabold text-[#0b1220] mb-2">
+                      {isAr ? 'متجر صدام العقاري للهواتف الذكية' : 'Saddam Al-Aqari Tech Store'}
                     </h3>
-                    <p className="text-xs text-gray-500 mb-5 max-w-md mx-auto leading-relaxed">
+                    <p className="text-sm text-slate-600 mb-6 leading-relaxed">
                       {isAr
-                        ? 'المتجر محمي ومشفر بالكامل. يمكنك الاستفسار والطلب المباشر لكافة الأجهزة والملحقات عبر الواتساب فوراً.'
-                        : 'Encrypted and protected store. Contact us directly on WhatsApp for inquiries and instant orders.'}
+                        ? 'يمكنك الاستفسار والطلب المباشر لكافة الأجهزة والملحقات الأصلية عبر الواتساب فوراً.'
+                        : 'Contact us directly on WhatsApp for inquiries and instant orders.'}
                     </p>
                     <a
                       href="https://wa.me/967774102030"
                       target="_blank"
                       rel="noopener noreferrer"
-                      className="inline-flex items-center gap-2 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs px-6 py-3 rounded-2xl shadow-md transition-all active:scale-95"
+                      className="inline-flex items-center gap-2 liquid-btn-emerald font-bold text-sm px-6 py-3 rounded-2xl"
                     >
                       <MessageCircle className="w-4 h-4" />
                       <span>{isAr ? 'تواصل عبر الواتساب (774102030)' : 'Chat on WhatsApp (774102030)'}</span>
                     </a>
                   </div>
                 ) : (
-                  <div className="grid grid-cols-2 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-2.5 sm:gap-4 md:gap-6 w-full min-w-0">
+                  <div className="grid grid-cols-2 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3 sm:gap-5 w-full min-w-0">
                     {displayedHomeProducts.slice(0, 8).map((prod) => (
                       <ProductCard
                         key={prod.id}
@@ -448,57 +392,23 @@ export default function App() {
                   </div>
                 )}
 
-                {/* View More Button */}
+                {/* Explore Full Catalog Button */}
                 <div className="text-center mt-10">
                   <button
+                    type="button"
                     onClick={() => {
+                      soundFX.playClick();
                       setSelectedCategory('all');
                       setCurrentView('shop');
                     }}
-                    className="inline-flex items-center gap-2 bg-tech-dark hover:bg-black text-white text-xs md:text-sm font-bold px-8 py-3.5 rounded-xl transition-all shadow-md active:scale-95"
+                    className="inline-flex items-center gap-2.5 liquid-glass-strong hover:bg-white text-[#0b1220] hover:text-[#0071e3] text-sm font-extrabold px-8 py-3.5 rounded-2xl transition-all cursor-pointer"
                   >
-                    <span>{isAr ? 'استعراض كتالوج الإلكترونيات بالكامل' : 'Explore Entire Tech Catalog'}</span>
+                    <span>{isAr ? 'استعراض جميع الأجهزة في الكتالوج' : 'Explore Complete Tech Catalog'}</span>
+                    {isAr ? <ArrowLeft className="w-4 h-4" /> : <ArrowRight className="w-4 h-4" />}
                   </button>
                 </div>
               </div>
             </section>
-
-            {/* 3D Wave Transition into Promo Banner */}
-            <WaveDivider variant="orange-gold" flip />
-
-            {/* Mid-Page Promo Banner (GaN Charging & MagSafe Bundle + 3D Products Coverflow) */}
-            <PromoBanner
-              language={language}
-              currency={currency}
-              products={visibleProducts}
-              onShopNow={() => {
-                setSelectedCategory('chargers');
-                setCurrentView('shop');
-              }}
-              onSelectProduct={handleSelectProduct}
-              onAddToCart={(p, vr, col) => handleAddToCart(p, vr, col, 1)}
-            />
-
-            {/* 3D Wave Transition into YouTube Shorts */}
-            <WaveDivider variant="sky-cyan" />
-
-            {/* Exclusive YouTube Shorts with live video URLs and dynamic admin controls */}
-            <YouTubeShortsSection
-              language={language}
-              currency={currency}
-              shorts={shorts}
-              products={visibleProducts}
-              onSelectProduct={handleSelectProduct}
-            />
-
-            {/* 3D Wave Transition into Social Media Showcase */}
-            <WaveDivider variant="cyan-orange" />
-
-            {/* Official Social Media Showcase (استعراض قنوات التواصل والفيديوهات مع تقلبات تفاعلية ومزج فخم) */}
-            <SocialMediaShowcase language={language} />
-
-            {/* 3D Wave Transition above Footer */}
-            <WaveDivider variant="orange-gold" />
           </>
         )}
 
@@ -597,8 +507,8 @@ export default function App() {
 
         {/* VIEW 8: COMPARE FULL VIEW */}
         {currentView === 'compare' && (
-          <div className="py-12 bg-gray-50 min-h-screen">
-            <div className="container mx-auto px-4">
+          <div className="py-12 min-h-screen px-3 sm:px-5">
+            <div className="container mx-auto max-w-6xl">
               <CompareModal
                 isOpen={true}
                 onClose={() => setCurrentView('shop')}
@@ -617,13 +527,11 @@ export default function App() {
       </main>
 
       {/* 3. Global Drawers & Modals */}
-      {/* Floating Cart Bar (الزر الطولي المخصص للطلب أسفل الشاشة مثل الفيديو) */}
       <FloatingCartBar
         cart={cart}
         onOpenInvoice={() => setInvoiceModalOpen(true)}
       />
 
-      {/* Invoice Modal (الفاتورة مع خياري الواتساب وتنزيل الفاتورة التلقائي) */}
       <InvoiceModal
         isOpen={invoiceModalOpen}
         onClose={() => setInvoiceModalOpen(false)}
@@ -644,7 +552,6 @@ export default function App() {
         }}
       />
 
-      {/* Slide-out Cart Drawer */}
       <CartDrawer
         isOpen={cartDrawerOpen}
         onClose={() => setCartDrawerOpen(false)}
@@ -680,7 +587,6 @@ export default function App() {
         }}
       />
 
-      {/* Side-by-Side Comparison Modal */}
       {currentView !== 'compare' && (
         <CompareModal
           isOpen={compareModalOpen}
@@ -696,7 +602,6 @@ export default function App() {
         />
       )}
 
-      {/* Live Instant Search Modal */}
       <SearchModal
         isOpen={searchOpen}
         onClose={() => setSearchOpen(false)}
@@ -706,7 +611,6 @@ export default function App() {
         onSelectProduct={handleSelectProduct}
       />
 
-      {/* Auth / VIP Modal */}
       <AuthModal
         isOpen={authOpen}
         onClose={() => setAuthOpen(false)}
@@ -714,7 +618,6 @@ export default function App() {
         onSuccessLogin={() => setCurrentView('account')}
       />
 
-      {/* Quick View Modal */}
       <QuickViewModal
         product={quickViewProduct}
         onClose={() => setQuickViewProduct(null)}
@@ -731,16 +634,11 @@ export default function App() {
         onToggleWishlist={handleToggleWishlist}
       />
 
-      {/* Flying Cart Animation Overlay ("رجم وإلقاء صورة المنتج إلى السلة بعدة طرق") */}
       <FlyingCartAnimation />
 
-      {/* Floating 3D VIP Social Dock (منصات التواصل الاجتماعي الرسمية وخدمة العملاء) */}
-      <FloatingSocialDock
-        language={language}
-        onOpenAdmin={() => setCurrentView('admin')}
-      />
+      <FloatingSocialDock language={language} />
 
-      {/* 4. Luxury Footer */}
+      {/* 4. TrustBuy Liquid Glass Footer */}
       <Footer
         language={language}
         onSelectCategory={handleSelectCategory}

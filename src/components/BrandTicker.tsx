@@ -1,4 +1,4 @@
-import { ShieldCheck } from 'lucide-react';
+import { ShieldCheck, Truck, CheckCircle2, MessageCircle } from 'lucide-react';
 import { Language } from '../types';
 
 interface BrandTickerProps {
@@ -8,41 +8,90 @@ interface BrandTickerProps {
 export default function BrandTicker({ language }: BrandTickerProps) {
   const isAr = language === 'ar';
 
+  const trustPillars = [
+    {
+      icon: <ShieldCheck className="w-5 h-5 text-[#0071e3]" />,
+      titleAr: 'ضمان رسمي معتمد',
+      titleEn: 'Official Warranty',
+      descAr: 'كفالة حقيقية مع فاتورة رسمية',
+      descEn: 'Certified hardware warranty',
+    },
+    {
+      icon: <CheckCircle2 className="w-5 h-5 text-emerald-600" />,
+      titleAr: 'أجهزة أصلية 100%',
+      titleEn: '100% Authentic Gear',
+      descAr: 'فحص كامل للجهاز قبل الاستلام',
+      descEn: 'Verified & inspectable on delivery',
+    },
+    {
+      icon: <Truck className="w-5 h-5 text-[#0071e3]" />,
+      titleAr: 'توصيل لجميع المحافظات',
+      titleEn: 'Fast Nationwide Delivery',
+      descAr: 'شحن سريع وآمن لحد باب منزلك',
+      descEn: 'Express insured courier dispatch',
+    },
+    {
+      icon: <MessageCircle className="w-5 h-5 text-emerald-600" />,
+      titleAr: 'طلب فوري عبر واتساب',
+      titleEn: 'Instant WhatsApp Order',
+      descAr: 'تأكيد سريع وخدمة عملاء مباشرة',
+      descEn: 'Direct confirmation & live support',
+    },
+  ];
+
   const techBrands = [
-    { name: 'Apple Authorized', logo: ' Apple' },
-    { name: 'Samsung Galaxy', logo: 'SAMSUNG' },
-    { name: 'Anker GaNPrime', logo: 'ANKER' },
-    { name: 'Sony Hi-Res Audio', logo: 'SONY' },
-    { name: 'Belkin Certified', logo: 'belkin' },
-    { name: 'Spigen Protection', logo: 'spigen' },
-    { name: 'Baseus QuickCharge', logo: 'BASEUS' },
+    'Apple',
+    'SAMSUNG',
+    'ANKER',
+    'SONY',
+    'belkin',
+    'spigen',
+    'BASEUS',
   ];
 
   return (
-    <div id="brands-ticker-section" className="bg-tech-dark text-white py-6 border-b border-white/10 overflow-hidden">
-      <div className="container mx-auto px-4 mb-4 flex items-center justify-between text-xs">
-        <div className="flex items-center gap-2 text-cyan-400 font-bold">
-          <ShieldCheck className="w-4 h-4" />
-          <span>{isAr ? 'موزع معتمد لأكبر الشركات العالمية:' : 'Authorized Distributor & Flagship Partner:'}</span>
-        </div>
-        <span className="text-gray-400 hidden sm:inline text-[11px]">
-          {isAr ? 'ضمان رسمي محلي سنتين لجميع الأجهزة' : 'Official 2-Year Authorized GCC Warranty'}
-        </span>
-      </div>
-      <div className="container mx-auto px-4">
-        <div className="flex items-center justify-between gap-6 overflow-x-auto scrollbar-none py-1">
-          {techBrands.map((brand, i) => (
+    <section id="brands-ticker-section" className="py-4 px-3 sm:px-5 relative z-10">
+      <div className="container mx-auto max-w-7xl space-y-4">
+        {/* TrustBuy 4-Pillar Strip (Full Liquid Glass Row) */}
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
+          {trustPillars.map((pillar, idx) => (
             <div
-              key={i}
-              className="flex items-center gap-2 px-4 py-2 rounded-xl bg-white/5 hover:bg-white/10 border border-white/10 transition-all shrink-0 cursor-default"
+              key={idx}
+              className="liquid-glass rounded-[22px] p-4 flex items-center gap-3"
             >
-              <span className="font-mono font-black text-sm tracking-wider text-white">
-                {brand.logo}
-              </span>
+              <div className="w-10 h-10 rounded-2xl liquid-glass-strong flex items-center justify-center shrink-0">
+                {pillar.icon}
+              </div>
+              <div className="min-w-0">
+                <h3 className="text-xs sm:text-sm font-extrabold text-[#0b1220] truncate">
+                  {isAr ? pillar.titleAr : pillar.titleEn}
+                </h3>
+                <p className="text-[11px] text-slate-600 truncate mt-0.5">
+                  {isAr ? pillar.descAr : pillar.descEn}
+                </p>
+              </div>
             </div>
           ))}
         </div>
+
+        {/* Authorized Brands Glass Bar */}
+        <div className="liquid-glass rounded-[22px] px-4 sm:px-6 py-3.5 flex flex-col md:flex-row md:items-center justify-between gap-3">
+          <span className="text-xs font-bold text-slate-600 whitespace-nowrap shrink-0">
+            {isAr ? 'العلامات التجارية المعتمدة' : 'Authorized Brands'}
+          </span>
+
+          <div className="flex items-center gap-2 sm:gap-3 overflow-x-auto no-scrollbar">
+            {techBrands.map((brand) => (
+              <span
+                key={brand}
+                className="px-4 py-1.5 rounded-xl liquid-glass-subtle text-xs sm:text-sm font-extrabold tracking-wider text-slate-800 whitespace-nowrap shrink-0"
+              >
+                {brand}
+              </span>
+            ))}
+          </div>
+        </div>
       </div>
-    </div>
+    </section>
   );
 }

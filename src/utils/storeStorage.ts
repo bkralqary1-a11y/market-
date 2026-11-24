@@ -1,14 +1,6 @@
 import { Product, HeroSlideItem } from '../types';
 import { ShortVideoItem } from '../types';
 import { YOUTUBE_SHORTS_DATA } from '../components/YouTubeShortsSection';
-import {
-  MASTER_ADMIN_PIN,
-  verifyAdminPinSecure,
-  isAdminSessionActive,
-  setAdminSessionActive,
-  setCustomAdminPin,
-  resetAdminPinToDefault,
-} from './security';
 
 const PRODUCTS_STORAGE_KEY = 'saddam_store_products_v4';
 const SHORTS_STORAGE_KEY = 'saddam_store_shorts_v4';
@@ -368,13 +360,3 @@ export function importStoreBackupJSON(jsonStr: string): { success: boolean; mess
     return { success: false, message: `فشل استيراد البيانات: ${err?.message || 'تنسيق JSON غير صالح'}` };
   }
 }
-
-// Re-export Security helpers for convenience
-export {
-  MASTER_ADMIN_PIN,
-  verifyAdminPinSecure,
-  isAdminSessionActive,
-  setAdminSessionActive,
-  setCustomAdminPin,
-  resetAdminPinToDefault,
-};

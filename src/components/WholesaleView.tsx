@@ -1,5 +1,5 @@
 import { useState, type FormEvent } from 'react';
-import { Building2, ShieldCheck, CheckCircle2, FileText, Send, ArrowRight, ArrowLeft, Download } from 'lucide-react';
+import { Building2, ShieldCheck, CheckCircle2, FileText, Send, ArrowRight, ArrowLeft } from 'lucide-react';
 import { Language, Currency } from '../types';
 import { mockProducts, formatPrice } from '../data/mockData';
 
@@ -11,17 +11,18 @@ interface WholesaleViewProps {
 
 export default function WholesaleView({ language, currency, onBackToStore }: WholesaleViewProps) {
   const isAr = language === 'ar';
-  const [companyName, setCompanyName] = useState('مؤسسة آفاق التقنية للاتصالات');
-  const [taxNumber, setTaxNumber] = useState('301294827100003');
-  const [contactName, setContactName] = useState('سلمان المنصور');
-  const [phone, setPhone] = useState('+966 50 987 6543');
-  const [email, setEmail] = useState('salman@afaq-tech.com');
+  const [companyName, setCompanyName] = useState('');
+  const [contactName, setContactName] = useState('');
+  const [phone, setPhone] = useState('');
+  const [city, setCity] = useState('عمران / صنعاء');
   const [selectedProduct, setSelectedProduct] = useState(mockProducts[0].id);
   const [quantity, setQuantity] = useState(25);
   const [submitted, setSubmitted] = useState(false);
 
   const product = mockProducts.find((p) => p.id === selectedProduct) || mockProducts[0];
-  const unitWholesalePrice = product.price * (quantity >= 100 ? 0.72 : quantity >= 50 ? 0.8 : 0.88);
+  const unitWholesalePrice = Math.round(
+    product.price * (quantity >= 100 ? 0.72 : quantity >= 50 ? 0.8 : 0.88)
+  );
   const totalWholesale = unitWholesalePrice * quantity;
 
   const handleSubmit = (e: FormEvent) => {
@@ -30,154 +31,140 @@ export default function WholesaleView({ language, currency, onBackToStore }: Who
   };
 
   return (
-    <div className="py-12 bg-gray-50 min-h-screen">
+    <div className="py-8 sm:py-10 min-h-screen">
       <div className="container mx-auto px-4 max-w-5xl">
-        {/* Back link */}
         <button
           onClick={onBackToStore}
-          className="text-xs font-bold text-gray-500 hover:text-primary flex items-center gap-1.5 mb-6 transition-colors"
+          className="text-xs font-bold text-slate-600 hover:text-[#0071e3] flex items-center gap-1.5 mb-6 transition-colors cursor-pointer"
         >
           {isAr ? <ArrowRight className="w-4 h-4" /> : <ArrowLeft className="w-4 h-4" />}
           <span>{isAr ? 'العودة لمتجر التجزئة الرئيسي' : 'Back to Retail Store'}</span>
         </button>
 
-        {/* Hero Banner for Wholesale */}
-        <div className="bg-tech-dark text-white p-8 sm:p-12 rounded-3xl mb-8 relative overflow-hidden shadow-xl border border-white/10">
+        {/* Deep Sapphire Liquid Glass Hero */}
+        <div className="liquid-glass-dark text-white p-7 sm:p-11 rounded-[32px] mb-8 relative overflow-hidden">
           <div className="relative z-10 max-w-2xl">
-            <div className="inline-flex items-center gap-2 bg-amber-400/20 text-amber-300 px-3 py-1 rounded-full text-xs font-bold mb-4 border border-amber-400/30">
-              <Building2 className="w-4 h-4" />
-              <span>{isAr ? 'بوابة الشركات ومبيعات الجملة B2B' : 'B2B Wholesale Portal'}</span>
-            </div>
+            <span className="text-xs font-bold text-sky-300 tracking-wide block mb-2">
+              {isAr ? 'بوابة الجملة والمحلات · محلات صدام العقاري' : 'Wholesale & Retail Partners'}
+            </span>
             <h1 className="text-2xl sm:text-4xl font-black mb-3 font-display">
-              {isAr ? 'حلول توريد الإلكترونيات والهواتف بالجملة' : 'Enterprise & Bulk Electronics Supply'}
+              {isAr ? 'توريد الهواتف والملحقات بأسعار الجملة' : 'Bulk Smartphones & Accessories Supply'}
             </h1>
-            <p className="text-xs sm:text-sm text-gray-300 leading-relaxed">
+            <p className="text-xs sm:text-sm text-slate-300 leading-relaxed">
               {isAr
-                ? 'أسعار خاصة لتجار التجزئة، الشركات، والجهات الحكومية مع فواتير ضريبية نظامية وضمان الوكيل سنتين لكافة الشواحن، الكيابل، الكفرات، والهواتف الأصلية.'
-                : 'Preferred corporate tiers, bulk quotation discounts, certified 2-year warranty, and instant VAT invoice generation.'}
+                ? 'أسعار خاصة لأصحاب المحلات والشركات في كافة المحافظات اليمنية مع فواتير رسمية وضمان معتمد لكافة الهواتف والشواحن والكيابل والسماعات.'
+                : 'Special wholesale tiers for resellers and businesses with official invoices and certified warranty.'}
             </p>
           </div>
-
-          <div className="absolute right-0 bottom-0 opacity-10 pointer-events-none translate-x-12 translate-y-12">
-            <Building2 className="w-80 h-80 text-white" />
+          <div className="absolute left-0 bottom-0 opacity-10 pointer-events-none">
+            <Building2 className="w-64 h-64 text-sky-300" />
           </div>
         </div>
 
-        {/* Wholesale Calculator & Form Grid */}
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-          {/* Left 2 Cols: Instant Bulk Quote Form */}
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-7">
+          {/* Quote Form */}
           <div className="lg:col-span-2">
-            <div className="bg-white p-6 sm:p-8 rounded-3xl border border-gray-line shadow-sm">
-              <h2 className="text-base sm:text-lg font-black text-gray-dark mb-1 flex items-center gap-2">
-                <FileText className="w-5 h-5 text-primary" />
-                <span>{isAr ? 'طلب عرض سعر فوري مخصص' : 'Request Instant Bulk Quotation'}</span>
+            <div className="liquid-glass-strong p-6 sm:p-8 rounded-[28px]">
+              <h2 className="text-base sm:text-lg font-black text-[#0b1220] mb-1 flex items-center gap-2">
+                <FileText className="w-5 h-5 text-[#0071e3]" />
+                <span>{isAr ? 'طلب تسعيرة جملة فورية' : 'Request Bulk Quotation'}</span>
               </h2>
-              <p className="text-xs text-gray-500 mb-6">
+              <p className="text-xs text-slate-600 mb-6">
                 {isAr
-                  ? 'املأ بيانات المنشأة للحصول على تسعيرة رسمية مختومة موجهة لشركتك مباشرة.'
-                  : 'Submit your organization details to receive an official formal quote.'}
+                  ? 'املأ بيانات المحل أو المؤسسة للتواصل المباشر وتأكيد الكمية.'
+                  : 'Submit your shop details to receive a direct wholesale quote.'}
               </p>
 
               {submitted ? (
-                <div className="py-10 text-center animate-in zoom-in-95">
-                  <div className="w-16 h-16 bg-emerald-100 text-emerald-600 rounded-full flex items-center justify-center mx-auto mb-4">
-                    <CheckCircle2 className="w-10 h-10" />
+                <div className="py-10 text-center">
+                  <div className="w-16 h-16 bg-emerald-500/15 text-emerald-600 rounded-full flex items-center justify-center mx-auto mb-4 border border-emerald-400/30">
+                    <CheckCircle2 className="w-9 h-9" />
                   </div>
-                  <h3 className="text-xl font-black text-gray-dark mb-2">
-                    {isAr ? 'تم استلام طلب التسعيرة بنجاح!' : 'Quotation Request Received!'}
+                  <h3 className="text-xl font-black text-[#0b1220] mb-2">
+                    {isAr ? 'تم استلام طلب التسعيرة بنجاح' : 'Quotation Request Received'}
                   </h3>
-                  <p className="text-xs text-gray-500 max-w-md mx-auto mb-6">
+                  <p className="text-xs text-slate-600 max-w-md mx-auto mb-6">
                     {isAr
-                      ? `شكراً لك أ. ${contactName}. تم إنشاء عرض السعر المبدئي للكمية (${quantity} قطعة) وأُرسل إلى بريدك ${email}. سيتواصل معك مدير حسابك المخصص خلال ساعتي عمل.`
-                      : `Thank you, ${contactName}. An automated formal quote has been sent to ${email}.`}
+                      ? `شكراً لك ${contactName}. تم تسجيل طلبك لعدد (${quantity} قطعة) وسيتواصل معك فريق الجملة قريباً.`
+                      : `Thank you, ${contactName}. Our wholesale team will reach out shortly.`}
                   </p>
                   <button
                     onClick={() => setSubmitted(false)}
-                    className="bg-primary hover:bg-primary-hover text-white text-xs font-bold py-2.5 px-6 rounded-xl transition-all shadow"
+                    className="liquid-btn-primary text-xs font-extrabold py-2.5 px-6 rounded-2xl cursor-pointer"
                   >
-                    {isAr ? 'تقديم طلب تسعيرة لمنتج آخر' : 'Request Another Quote'}
+                    {isAr ? 'طلب تسعيرة لمنتج آخر' : 'Request Another Quote'}
                   </button>
                 </div>
               ) : (
                 <form onSubmit={handleSubmit} className="space-y-4 text-xs">
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                     <div>
-                      <label className="font-bold text-gray-700 block mb-1">
-                        {isAr ? 'اسم الشركة / المؤسسة' : 'Company Name'}
+                      <label className="font-bold text-slate-700 block mb-1">
+                        {isAr ? 'اسم المحل / المؤسسة' : 'Shop / Company Name'}
                       </label>
                       <input
                         type="text"
                         required
+                        placeholder={isAr ? 'مثال: محلات النجم للاتصالات' : 'Company name'}
                         value={companyName}
                         onChange={(e) => setCompanyName(e.target.value)}
-                        className="w-full p-2.5 rounded-xl border border-gray-300 focus:outline-none focus:border-primary"
+                        className="w-full p-2.5 rounded-xl border border-white/80 bg-white/80 text-[#0b1220] focus:outline-none focus:ring-2 focus:ring-[#0071e3]/30"
                       />
                     </div>
                     <div>
-                      <label className="font-bold text-gray-700 block mb-1">
-                        {isAr ? 'الرقم الضريبي (VAT ID)' : 'Tax Number'}
-                      </label>
-                      <input
-                        type="text"
-                        required
-                        value={taxNumber}
-                        onChange={(e) => setTaxNumber(e.target.value)}
-                        className="w-full p-2.5 rounded-xl border border-gray-300 focus:outline-none focus:border-primary font-mono"
-                      />
-                    </div>
-                    <div>
-                      <label className="font-bold text-gray-700 block mb-1">
+                      <label className="font-bold text-slate-700 block mb-1">
                         {isAr ? 'اسم مسؤول المشتريات' : 'Contact Person'}
                       </label>
                       <input
                         type="text"
                         required
+                        placeholder={isAr ? 'الاسم الكريم' : 'Full name'}
                         value={contactName}
                         onChange={(e) => setContactName(e.target.value)}
-                        className="w-full p-2.5 rounded-xl border border-gray-300 focus:outline-none focus:border-primary"
+                        className="w-full p-2.5 rounded-xl border border-white/80 bg-white/80 text-[#0b1220] focus:outline-none focus:ring-2 focus:ring-[#0071e3]/30"
                       />
                     </div>
                     <div>
-                      <label className="font-bold text-gray-700 block mb-1">
-                        {isAr ? 'رقم هاتف التواصل' : 'Phone Number'}
+                      <label className="font-bold text-slate-700 block mb-1">
+                        {isAr ? 'رقم الجوال / واتساب' : 'Phone / WhatsApp'}
                       </label>
                       <input
                         type="tel"
                         required
+                        placeholder="77XXXXXXX"
                         value={phone}
                         onChange={(e) => setPhone(e.target.value)}
-                        className="w-full p-2.5 rounded-xl border border-gray-300 focus:outline-none focus:border-primary"
+                        className="w-full p-2.5 rounded-xl border border-white/80 bg-white/80 text-[#0b1220] font-mono focus:outline-none focus:ring-2 focus:ring-[#0071e3]/30"
                       />
                     </div>
-                    <div className="sm:col-span-2">
-                      <label className="font-bold text-gray-700 block mb-1">
-                        {isAr ? 'البريد الإلكتروني للعمل' : 'Corporate Email'}
+                    <div>
+                      <label className="font-bold text-slate-700 block mb-1">
+                        {isAr ? 'المحافظة / المدينة' : 'City'}
                       </label>
                       <input
-                        type="email"
+                        type="text"
                         required
-                        value={email}
-                        onChange={(e) => setEmail(e.target.value)}
-                        className="w-full p-2.5 rounded-xl border border-gray-300 focus:outline-none focus:border-primary"
+                        value={city}
+                        onChange={(e) => setCity(e.target.value)}
+                        className="w-full p-2.5 rounded-xl border border-white/80 bg-white/80 text-[#0b1220] focus:outline-none focus:ring-2 focus:ring-[#0071e3]/30"
                       />
                     </div>
                   </div>
 
-                  {/* Product & Quantity Selector */}
-                  <div className="pt-4 border-t border-gray-line">
-                    <h4 className="font-bold text-gray-dark mb-3">
-                      {isAr ? 'اختر المنتج والكمية المطلوبة:' : 'Select Product & Bulk Quantity:'}
+                  <div className="pt-4 border-t border-white/60">
+                    <h4 className="font-extrabold text-[#0b1220] mb-3">
+                      {isAr ? 'اختر المنتج والكمية المطلوبة:' : 'Select Product & Quantity:'}
                     </h4>
 
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                       <div>
-                        <label className="font-semibold text-gray-600 block mb-1">
+                        <label className="font-semibold text-slate-600 block mb-1">
                           {isAr ? 'المنتج' : 'Product'}
                         </label>
                         <select
                           value={selectedProduct}
                           onChange={(e) => setSelectedProduct(e.target.value)}
-                          className="w-full p-2.5 rounded-xl border border-gray-300 bg-white font-semibold text-xs"
+                          className="w-full p-2.5 rounded-xl border border-white/80 bg-white/80 font-bold text-xs text-[#0b1220]"
                         >
                           {mockProducts.map((p) => (
                             <option key={p.id} value={p.id}>
@@ -188,8 +175,8 @@ export default function WholesaleView({ language, currency, onBackToStore }: Who
                       </div>
 
                       <div>
-                        <label className="font-semibold text-gray-600 block mb-1">
-                          {isAr ? `الكمية (الحد الأدنى 10 قطع): ${quantity} قطعة` : `Quantity: ${quantity} units`}
+                        <label className="font-semibold text-slate-600 block mb-1 tabular-nums">
+                          {isAr ? `الكمية: ${quantity} قطعة` : `Quantity: ${quantity} units`}
                         </label>
                         <input
                           type="range"
@@ -198,12 +185,12 @@ export default function WholesaleView({ language, currency, onBackToStore }: Who
                           step="5"
                           value={quantity}
                           onChange={(e) => setQuantity(Number(e.target.value))}
-                          className="w-full accent-primary mt-2"
+                          className="w-full accent-[#0071e3] mt-2 cursor-pointer"
                         />
-                        <div className="flex justify-between text-[10px] text-gray-400 font-mono">
-                          <span>10 قطع (-12%)</span>
-                          <span>50 قطعة (-20%)</span>
-                          <span>100+ قطعة (-28%)</span>
+                        <div className="flex justify-between text-[10px] text-slate-500 font-mono">
+                          <span>10 (-12%)</span>
+                          <span>50 (-20%)</span>
+                          <span>100+ (-28%)</span>
                         </div>
                       </div>
                     </div>
@@ -211,66 +198,82 @@ export default function WholesaleView({ language, currency, onBackToStore }: Who
 
                   <button
                     type="submit"
-                    className="w-full bg-primary hover:bg-primary-hover text-white font-bold py-3.5 px-6 rounded-xl transition-all shadow-md flex items-center justify-center gap-2 mt-4 active:scale-98"
+                    className="liquid-btn-primary w-full font-extrabold py-3.5 px-6 rounded-2xl flex items-center justify-center gap-2 mt-4 cursor-pointer"
                   >
                     <Send className="w-4 h-4" />
-                    <span>{isAr ? 'إرسال طلب التسعيرة الرسمية الفورية' : 'Request Quotation Document'}</span>
+                    <span>{isAr ? 'إرسال طلب تسعيرة الجملة' : 'Submit Wholesale Request'}</span>
                   </button>
                 </form>
               )}
             </div>
           </div>
 
-          {/* Right Col: Pricing Summary Card */}
+          {/* Summary Card */}
           <div>
-            <div className="bg-white p-6 rounded-3xl border border-gray-line shadow-sm sticky top-28 space-y-4">
-              <h3 className="text-sm font-extrabold text-gray-dark pb-3 border-b border-gray-line flex items-center justify-between">
-                <span>{isAr ? 'تقدير تسعيرة الجملة' : 'Wholesale Estimate'}</span>
-                <span className="text-[10px] bg-emerald-50 text-emerald-700 font-bold px-2 py-0.5 rounded-full">
-                  {quantity >= 100 ? (isAr ? 'خصم 28%' : '28% Off') : quantity >= 50 ? (isAr ? 'خصم 20%' : '20% Off') : (isAr ? 'خصم 12%' : '12% Off')}
+            <div className="liquid-glass-strong p-6 rounded-[28px] sticky top-28 space-y-4">
+              <div className="flex items-center justify-between pb-3 border-b border-white/60">
+                <h3 className="text-sm font-black text-[#0b1220]">
+                  {isAr ? 'تقدير تسعيرة الجملة' : 'Wholesale Estimate'}
+                </h3>
+                <span className="text-xs font-extrabold text-emerald-700">
+                  {quantity >= 100
+                    ? isAr ? 'خصم 28%' : '28% Off'
+                    : quantity >= 50
+                    ? isAr ? 'خصم 20%' : '20% Off'
+                    : isAr ? 'خصم 12%' : '12% Off'}
                 </span>
-              </h3>
+              </div>
 
               <div className="flex items-center gap-3">
-                <img src={product.image} alt={product.name} className="w-14 h-16 object-cover rounded-xl border" />
+                <img
+                  src={product.image}
+                  alt={product.name}
+                  referrerPolicy="no-referrer"
+                  className="w-14 h-16 object-cover rounded-xl border border-white/80 shrink-0"
+                />
                 <div className="min-w-0">
-                  <span className="text-[10px] font-mono text-primary font-bold uppercase">{product.brand}</span>
-                  <h4 className="text-xs font-bold text-gray-dark truncate">{isAr ? product.nameAr : product.name}</h4>
-                  <span className="text-xs text-gray-400 font-mono">
-                    {isAr ? `سعر التجزئة: ${formatPrice(product.price, currency, isAr)}` : `Retail: ${formatPrice(product.price, currency, isAr)}`}
+                  <span className="text-[10px] font-mono text-[#0071e3] font-bold uppercase">
+                    {product.brand}
+                  </span>
+                  <h4 className="text-xs font-extrabold text-[#0b1220] truncate">
+                    {isAr ? product.nameAr : product.name}
+                  </h4>
+                  <span className="text-xs text-slate-500 font-mono tabular-nums">
+                    {isAr
+                      ? `التجزئة: ${formatPrice(product.price, currency, isAr)}`
+                      : `Retail: ${formatPrice(product.price, currency, isAr)}`}
                   </span>
                 </div>
               </div>
 
-              <div className="space-y-2 text-xs border-t border-gray-line pt-3">
-                <div className="flex justify-between text-gray-500">
-                  <span>{isAr ? 'سعر القطعة للجملة:' : 'Wholesale Unit Price:'}</span>
-                  <span className="font-mono font-bold text-emerald-600">
+              <div className="space-y-2 text-xs border-t border-white/60 pt-3">
+                <div className="flex justify-between text-slate-600">
+                  <span>{isAr ? 'سعر القطعة للجملة:' : 'Unit Price:'}</span>
+                  <span className="font-mono tabular-nums font-bold text-emerald-700">
                     {formatPrice(unitWholesalePrice, currency, isAr)}
                   </span>
                 </div>
-                <div className="flex justify-between text-gray-500">
-                  <span>{isAr ? 'الكمية المطلوبة:' : 'Quantity:'}</span>
-                  <span className="font-mono font-bold text-gray-dark">{quantity} {isAr ? 'قطعة' : 'units'}</span>
+                <div className="flex justify-between text-slate-600">
+                  <span>{isAr ? 'الكمية:' : 'Quantity:'}</span>
+                  <span className="font-mono tabular-nums font-bold text-[#0b1220]">
+                    {quantity} {isAr ? 'قطعة' : 'units'}
+                  </span>
                 </div>
-                <div className="flex justify-between text-gray-500">
-                  <span>{isAr ? 'الضمان المعتمد:' : 'Warranty:'}</span>
-                  <span className="font-bold text-gray-dark">{isAr ? 'سنتان وكيل رسمي' : '2-Year Official'}</span>
-                </div>
-                <div className="flex justify-between text-base font-black text-gray-dark border-t border-gray-line pt-3">
-                  <span>{isAr ? 'إجمالي الطلبية المقدر:' : 'Estimated Total:'}</span>
-                  <span className="font-mono text-primary">{formatPrice(totalWholesale, currency, isAr)}</span>
+                <div className="flex justify-between text-base font-black text-[#0b1220] border-t border-white/60 pt-3">
+                  <span>{isAr ? 'الإجمالي المقدر:' : 'Estimated Total:'}</span>
+                  <span className="font-mono tabular-nums text-[#0071e3]">
+                    {formatPrice(totalWholesale, currency, isAr)}
+                  </span>
                 </div>
               </div>
 
-              <div className="bg-gray-50 p-3 rounded-xl border border-gray-200 text-[11px] text-gray-500 space-y-1">
-                <div className="flex items-center gap-1.5 text-gray-700 font-semibold">
-                  <ShieldCheck className="w-3.5 h-3.5 text-emerald-600" />
-                  <span>{isAr ? 'مزايا حسابات الشركات المعتمدة:' : 'B2B Partner Benefits:'}</span>
+              <div className="liquid-glass-subtle p-3.5 rounded-2xl text-[11px] text-slate-600 space-y-1">
+                <div className="flex items-center gap-1.5 text-[#0b1220] font-bold mb-1">
+                  <ShieldCheck className="w-4 h-4 text-emerald-600" />
+                  <span>{isAr ? 'مزايا شركاء الجملة:' : 'Wholesale Benefits:'}</span>
                 </div>
-                <p>{isAr ? '• شحن شاحنات مجاني حتى باب المستودع' : '• Free freight delivery'}</p>
-                <p>{isAr ? '• شروط دفع ائتمانية مؤجلة (30-60 يوماً للجهات المعتمدة)' : '• Net 30/60 day terms'}</p>
-                <p>{isAr ? '• فواتير ضريبية إلكترونية متوافقة مع هيئة الزكاة والضريبة' : '• Full ZATCA compliant invoices'}</p>
+                <p>{isAr ? '· شحن آمن ومباشر إلى كافة المحافظات' : '· Direct shipping across Yemen'}</p>
+                <p>{isAr ? '· ضمان رسمي وفواتير معتمدة' : '· Official warranty & invoices'}</p>
               </div>
             </div>
           </div>

@@ -1,6 +1,15 @@
-import { useState, useEffect, type TouchEvent, type MouseEvent } from 'react';
-import { ChevronRight, ChevronLeft, ShieldCheck, ArrowRight, ArrowLeft, Cpu, MessageSquare } from 'lucide-react';
-import { Language, Currency, HeroSlideItem } from '../types';
+import { useState, useEffect, type TouchEvent } from 'react';
+import {
+  ChevronRight,
+  ChevronLeft,
+  ShieldCheck,
+  ArrowRight,
+  ArrowLeft,
+  MessageCircle,
+  Smartphone,
+  Zap,
+} from 'lucide-react';
+import { Language, Currency, HeroSlideItem, CategoryId } from '../types';
 import { soundFX } from '../utils/audioEffects';
 import { getStoredHeroSlides } from '../utils/storeStorage';
 import { getYouTubeId, getYouTubeEmbedUrl } from '../utils/videoUtils';
@@ -8,14 +17,11 @@ import { getYouTubeId, getYouTubeEmbedUrl } from '../utils/videoUtils';
 interface HeroSliderProps {
   language: Language;
   currency: Currency;
-  onExplore: (category?: string) => void;
+  onExplore: (category?: CategoryId) => void;
   onSelectProduct: (product: any) => void;
 }
 
-export default function HeroSlider({
-  language,
-  onExplore,
-}: HeroSliderProps) {
+export default function HeroSlider({ language, onExplore }: HeroSliderProps) {
   const isAr = language === 'ar';
   const [slides, setSlides] = useState<HeroSlideItem[]>(() => {
     const loaded = getStoredHeroSlides();
@@ -24,12 +30,11 @@ export default function HeroSlider({
   const [currentSlide, setCurrentSlide] = useState(0);
   const [touchStart, setTouchStart] = useState<number | null>(null);
   const [touchEnd, setTouchEnd] = useState<number | null>(null);
-  const [mouseTilt, setMouseTilt] = useState<{ x: number; y: number }>({ x: 0, y: 0 });
+  const [imgFailed, setImgFailed] = useState<Record<string, boolean>>({});
 
-  // Listen for admin changes to hero slides
   useEffect(() => {
-    const handleUpdated = (e: any) => {
-      const updated = e.detail as HeroSlideItem[];
+    const handleUpdated = (e: Event) => {
+      const updated = (e as CustomEvent).detail as HeroSlideItem[];
       if (Array.isArray(updated)) {
         const enabledOnes = updated.filter((s) => s.enabled);
         setSlides(enabledOnes.length > 0 ? enabledOnes : getStoredHeroSlides());
@@ -40,18 +45,6 @@ export default function HeroSlider({
     return () => window.removeEventListener('saddam-hero-slides-updated', handleUpdated);
   }, []);
 
-  const handleMouseMove = (e: MouseEvent<HTMLElement>) => {
-    const { clientX, clientY, currentTarget } = e;
-    const rect = currentTarget.getBoundingClientRect();
-    const x = ((clientX - rect.left) / rect.width - 0.5) * 8;
-    const y = ((clientY - rect.top) / rect.height - 0.5) * -8;
-    setMouseTilt({ x: Number(x.toFixed(2)), y: Number(y.toFixed(2)) });
-  };
-
-  const handleMouseLeave = () => {
-    setMouseTilt({ x: 0, y: 0 });
-  };
-
   const changeSlide = (newIndex: number) => {
     soundFX.playWhoosh();
     setCurrentSlide(newIndex);
@@ -61,25 +54,17 @@ export default function HeroSlider({
     if (slides.length <= 1) return;
     const timer = setInterval(() => {
       setCurrentSlide((prev) => (prev + 1) % slides.length);
-    }, 6000);
+    }, 6500);
     return () => clearInterval(timer);
   }, [slides.length]);
 
-  // Handle touch swipe for mobile phones
-  const handleTouchStart = (e: TouchEvent) => {
-    setTouchStart(e.targetTouches[0].clientX);
-  };
-
-  const handleTouchMove = (e: TouchEvent) => {
-    setTouchEnd(e.targetTouches[0].clientX);
-  };
-
+  const handleTouchStart = (e: TouchEvent) => setTouchStart(e.targetTouches[0].clientX);
+  const handleTouchMove = (e: TouchEvent) => setTouchEnd(e.targetTouches[0].clientX);
   const handleTouchEnd = () => {
     if (!touchStart || !touchEnd || slides.length <= 1) return;
     const distance = touchStart - touchEnd;
     const isLeftSwipe = distance > 50;
     const isRightSwipe = distance < -50;
-
     if (isAr) {
       if (isLeftSwipe) setCurrentSlide((prev) => (prev === 0 ? slides.length - 1 : prev - 1));
       if (isRightSwipe) setCurrentSlide((prev) => (prev + 1) % slides.length);
@@ -87,7 +72,6 @@ export default function HeroSlider({
       if (isLeftSwipe) setCurrentSlide((prev) => (prev + 1) % slides.length);
       if (isRightSwipe) setCurrentSlide((prev) => (prev === 0 ? slides.length - 1 : prev - 1));
     }
-
     setTouchStart(null);
     setTouchEnd(null);
   };
@@ -96,236 +80,262 @@ export default function HeroSlider({
   if (!slide) return null;
 
   return (
-    <section
-      className="relative w-full min-h-[500px] sm:min-h-[560px] md:min-h-[620px] flex items-center overflow-hidden bg-black text-white transform-gpu select-none"
-      onTouchStart={handleTouchStart}
-      onTouchMove={handleTouchMove}
-      onTouchEnd={handleTouchEnd}
-      onMouseMove={handleMouseMove}
-      onMouseLeave={handleMouseLeave}
-    >
-      {/* 1. Full-Bleed Top Background Media (Images or Videos) */}
-      {slides.map((item, idx) => {
-        const isCurrent = idx === currentSlide;
-        const ytId = item.mediaType === 'video' && item.videoUrl ? getYouTubeId(item.videoUrl) : null;
-        const isDirectVideo = item.mediaType === 'video' && item.videoUrl && !ytId;
-
-        return (
+    <section className="pt-3 sm:pt-5 pb-6 px-3 sm:px-5 relative z-10">
+      <div className="container mx-auto max-w-7xl">
+        {/* TrustBuy-Inspired Asymmetric Bento Hero Grid */}
+        <div className="grid grid-cols-1 lg:grid-cols-12 gap-4 sm:gap-5 items-stretch">
+          {/* Primary Dominant Hero Showcase (8 Cols) */}
           <div
-            key={item.id || idx}
-            className={`absolute inset-0 w-full h-full transition-opacity duration-1000 ease-in-out z-0 pointer-events-none ${
-              isCurrent ? 'opacity-100 scale-100' : 'opacity-0 scale-105'
-            }`}
-            style={{
-              transitionProperty: 'opacity, transform',
-              transform: isCurrent
-                ? `scale(1.04) translate3d(${-mouseTilt.x * 1.5}px, ${-mouseTilt.y * 1.5}px, 0)`
-                : 'scale(1.08)',
-              transition: 'transform 300ms ease-out, opacity 1000ms ease-in-out',
-            }}
+            className="lg:col-span-8 relative min-h-[420px] sm:min-h-[480px] lg:min-h-[520px] rounded-[32px] overflow-hidden liquid-glass-dark flex items-end select-none"
+            onTouchStart={handleTouchStart}
+            onTouchMove={handleTouchMove}
+            onTouchEnd={handleTouchEnd}
           >
-            {item.mediaType === 'video' && ytId ? (
-              <div className="w-full h-full pointer-events-none overflow-hidden scale-125">
-                <iframe
-                  src={getYouTubeEmbedUrl(ytId, { autoplay: isCurrent, mute: true, loop: true })}
-                  title={item.titleAr}
-                  className="w-full h-full border-0 pointer-events-none"
-                  allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
-                />
+            {/* Background Media Layer */}
+            {slides.map((item, idx) => {
+              const isCurrent = idx === currentSlide;
+              const ytId = item.mediaType === 'video' && item.videoUrl ? getYouTubeId(item.videoUrl) : null;
+              const isDirectVideo = item.mediaType === 'video' && item.videoUrl && !ytId;
+              const failed = imgFailed[item.id || String(idx)];
+
+              return (
+                <div
+                  key={item.id || idx}
+                  className={`absolute inset-0 w-full h-full transition-opacity duration-700 pointer-events-none ${
+                    isCurrent ? 'opacity-100' : 'opacity-0'
+                  }`}
+                >
+                  {item.mediaType === 'video' && ytId ? (
+                    <div className="w-full h-full overflow-hidden scale-125">
+                      <iframe
+                        src={getYouTubeEmbedUrl(ytId, { autoplay: isCurrent, mute: true, loop: true })}
+                        title={item.titleAr}
+                        className="w-full h-full border-0"
+                        allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+                      />
+                    </div>
+                  ) : item.mediaType === 'video' && isDirectVideo ? (
+                    <video
+                      src={item.videoUrl}
+                      autoPlay={isCurrent}
+                      loop
+                      muted
+                      playsInline
+                      className="w-full h-full object-cover object-center"
+                    />
+                  ) : failed ? (
+                    <div
+                      className="w-full h-full flex items-center justify-center"
+                      style={{
+                        background:
+                          'radial-gradient(circle at 75% 30%, rgba(10, 132, 255, 0.45), transparent 55%), linear-gradient(135deg, #0b1630 0%, #091124 100%)',
+                      }}
+                    >
+                      <Smartphone className="w-28 h-28 text-sky-300/20" />
+                    </div>
+                  ) : (
+                    <img
+                      src={item.imageUrl}
+                      alt={isAr ? item.titleAr : item.titleEn || item.titleAr}
+                      className="w-full h-full object-cover object-center"
+                      referrerPolicy="no-referrer"
+                      loading={idx === 0 ? 'eager' : 'lazy'}
+                      onError={() => setImgFailed((prev) => ({ ...prev, [item.id || String(idx)]: true }))}
+                    />
+                  )}
+                </div>
+              );
+            })}
+
+            {/* Measured High-Contrast Sapphire Scrim */}
+            <div className="absolute inset-0 bg-gradient-to-t from-[#070f21]/92 via-[#09152e]/55 to-[#09152e]/15 pointer-events-none" />
+
+            {/* Specular Top Glass Edge Highlight */}
+            <div className="absolute inset-0 rounded-[32px] ring-1 ring-inset ring-white/25 pointer-events-none" />
+
+            {/* Hero Foreground Content */}
+            <div className="relative z-10 w-full p-6 sm:p-9 lg:p-11 flex flex-col justify-end gap-4">
+              {/* Quiet Unboxed Editorial Kicker */}
+              <div className="flex flex-wrap items-center gap-2 text-xs sm:text-sm text-sky-200/95 font-semibold">
+                <span>{isAr ? slide.badgeAr || 'تسوق بثقة · متجر صدام العقاري' : slide.badgeEn || 'Shop with Confidence'}</span>
+                <span aria-hidden="true" className="opacity-50">·</span>
+                <span>{isAr ? slide.featureBadge2Ar || 'ضمان رسمي معتمد' : slide.featureBadge2En || 'Official Warranty'}</span>
               </div>
-            ) : item.mediaType === 'video' && isDirectVideo ? (
-              <video
-                src={item.videoUrl}
-                autoPlay={isCurrent}
-                loop
-                muted
-                playsInline
-                className="w-full h-full object-cover object-center filter brightness-90"
-              />
-            ) : (
-              <img
-                src={item.imageUrl || 'https://images.unsplash.com/photo-1695048133142-1a20484d2569?q=85&w=1920&auto=format&fit=crop'}
-                alt={isAr ? item.titleAr : item.titleEn}
-                className="w-full h-full object-cover object-top sm:object-center filter brightness-95"
-                referrerPolicy="no-referrer"
-                loading={idx === 0 ? 'eager' : 'lazy'}
-              />
-            )}
+
+              {/* Balanced Display Headline */}
+              <h1 className="text-2xl sm:text-4xl lg:text-[2.85rem] font-extrabold text-white leading-[1.15] tracking-tight max-w-2xl">
+                {isAr ? slide.titleAr : slide.titleEn || slide.titleAr}
+              </h1>
+
+              {/* Subtitle */}
+              {(slide.subtitleAr || slide.subtitleEn) && (
+                <p className="text-sm sm:text-base text-slate-200/90 max-w-xl leading-relaxed">
+                  {isAr ? slide.subtitleAr : slide.subtitleEn}
+                </p>
+              )}
+
+              {/* Primary CTA + Quick WhatsApp Action + Slide Controls Row */}
+              <div className="flex flex-wrap items-center justify-between gap-4 pt-2">
+                <div className="flex items-center gap-3">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      soundFX.playClick();
+                      onExplore('all');
+                    }}
+                    className="liquid-btn-primary px-6 py-3 rounded-2xl text-sm font-bold flex items-center gap-2 cursor-pointer whitespace-nowrap"
+                  >
+                    <span>{isAr ? slide.buttonTextAr || 'تصفح الأجهزة الآن' : slide.buttonTextEn || 'Explore Devices'}</span>
+                    {isAr ? <ArrowLeft className="w-4 h-4" /> : <ArrowRight className="w-4 h-4" />}
+                  </button>
+
+                  <a
+                    href={`https://wa.me/967774102030?text=${encodeURIComponent(
+                      slide.whatsappCustomTextAr ||
+                        (isAr
+                          ? `السلام عليكم متجر صدام العقاري، أود الاستفسار عن: ${slide.titleAr}`
+                          : `Hello Saddam Al-Aqari Store, I want to inquire about: ${slide.titleEn || slide.titleAr}`)
+                    )}`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    onClick={() => soundFX.playClick()}
+                    className="h-11 px-4 rounded-2xl bg-white/15 hover:bg-white/25 backdrop-blur-xl border border-white/25 text-white text-xs sm:text-sm font-bold flex items-center gap-2 transition-all whitespace-nowrap cursor-pointer"
+                  >
+                    <MessageCircle className="w-4 h-4 text-emerald-300" />
+                    <span>{isAr ? 'اطلب عبر واتساب' : 'WhatsApp Order'}</span>
+                  </a>
+                </div>
+
+                {/* Minimal Liquid Glass Slide Controls */}
+                {slides.length > 1 && (
+                  <div className="flex items-center gap-2">
+                    <div className="flex items-center gap-1.5 px-3 py-2 rounded-full bg-white/12 backdrop-blur-xl border border-white/20">
+                      {slides.map((_, idx) => (
+                        <button
+                          type="button"
+                          key={idx}
+                          onClick={() => changeSlide(idx)}
+                          className={`h-1.5 rounded-full transition-all duration-300 cursor-pointer ${
+                            currentSlide === idx ? 'w-6 bg-white' : 'w-1.5 bg-white/40 hover:bg-white/70'
+                          }`}
+                          aria-label={`Slide ${idx + 1}`}
+                        />
+                      ))}
+                    </div>
+
+                    <button
+                      type="button"
+                      onClick={() => changeSlide(currentSlide === 0 ? slides.length - 1 : currentSlide - 1)}
+                      className="w-9 h-9 rounded-full bg-white/15 hover:bg-white/25 backdrop-blur-xl border border-white/20 text-white flex items-center justify-center transition-all cursor-pointer"
+                      aria-label="Previous slide"
+                    >
+                      {isAr ? <ChevronRight className="w-4 h-4" /> : <ChevronLeft className="w-4 h-4" />}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => changeSlide((currentSlide + 1) % slides.length)}
+                      className="w-9 h-9 rounded-full bg-white/15 hover:bg-white/25 backdrop-blur-xl border border-white/20 text-white flex items-center justify-center transition-all cursor-pointer"
+                      aria-label="Next slide"
+                    >
+                      {isAr ? <ChevronLeft className="w-4 h-4" /> : <ChevronRight className="w-4 h-4" />}
+                    </button>
+                  </div>
+                )}
+              </div>
+            </div>
           </div>
-        );
-      })}
 
-      {/* 2. Light subtle gradient overlay so image/video shines through from the top */}
-      <div className="absolute inset-0 z-0 bg-gradient-to-t from-black/90 via-black/40 to-transparent md:bg-gradient-to-r md:from-black/85 md:via-black/40 md:to-transparent rtl:md:bg-gradient-to-l pointer-events-none" />
-
-      {/* Ambient glowing orbs */}
-      <div className="absolute top-10 left-10 w-72 h-72 bg-orange-500/15 rounded-full blur-3xl pointer-events-none z-0" />
-      <div className="absolute bottom-10 right-10 w-80 h-80 bg-cyan-500/10 rounded-full blur-3xl pointer-events-none z-0" />
-
-      {/* 3. Text Overlay Content with 3D Depth Layering */}
-      <div
-        className="container mx-auto px-4 sm:px-6 pt-24 sm:pt-16 pb-12 sm:pb-16 md:py-20 relative z-10 w-full transform-gpu transition-transform duration-200 ease-out"
-        style={{
-          transform: `perspective(1000px) rotateX(${mouseTilt.y * 0.8}deg) rotateY(${mouseTilt.x * 0.8}deg) translateZ(20px)`,
-          transformStyle: 'preserve-3d',
-        }}
-      >
-        <div className="max-w-3xl space-y-4 sm:space-y-5">
-          {/* Top Badge */}
-          {(slide.badgeAr || slide.badgeEn) && (
-            <div className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-black/50 backdrop-blur-md border border-orange-500/40 text-xs font-bold shadow-lg">
-              <span className="w-2 h-2 rounded-full bg-orange-500 animate-pulse" />
-              <span className="text-orange-300 font-sans tracking-wide">
-                {isAr ? slide.badgeAr : slide.badgeEn}
-              </span>
-            </div>
-          )}
-
-          {/* Slide Headline */}
-          <h1 className="text-2xl sm:text-4xl md:text-5xl lg:text-6xl font-black text-white leading-tight tracking-tight drop-shadow-[0_3px_8px_rgba(0,0,0,0.9)]">
-            {isAr ? slide.titleAr : slide.titleEn}
-          </h1>
-
-          {/* Subtitle description */}
-          {(slide.subtitleAr || slide.subtitleEn) && (
-            <p className="text-xs sm:text-sm md:text-base text-gray-200/95 max-w-2xl leading-relaxed drop-shadow-[0_2px_4px_rgba(0,0,0,0.85)]">
-              {isAr ? slide.subtitleAr : slide.subtitleEn}
-            </p>
-          )}
-
-          {/* Badges / Tech specs pills */}
-          {slide.showBadges !== false && (
-            <div className="flex flex-wrap items-center gap-2 pt-1">
-              {(slide.featureBadge1Ar || !slide.featureBadge2Ar) && (
-                <span className="bg-black/40 backdrop-blur-md border border-white/20 px-3 py-1 rounded-xl text-xs font-semibold text-gray-100 flex items-center gap-1.5 shadow-sm">
-                  <Cpu className="w-3 h-3 text-orange-400" />
-                  <span>
-                    {isAr
-                      ? (slide.featureBadge1Ar || 'أجهزة أصلية 100%')
-                      : (slide.featureBadge1En || slide.featureBadge1Ar || '100% Genuine')}
-                  </span>
-                </span>
-              )}
-              {slide.featureBadge2Ar !== '' && (
-                <span className="bg-emerald-950/60 backdrop-blur-md border border-emerald-500/40 px-3 py-1 rounded-xl text-xs font-bold text-emerald-300 flex items-center gap-1 shadow-sm">
-                  <ShieldCheck className="w-3 h-3 text-emerald-400" />
-                  <span>
-                    {isAr
-                      ? (slide.featureBadge2Ar || 'ضمان رسمي باليمن')
-                      : (slide.featureBadge2En || slide.featureBadge2Ar || 'Official Warranty')}
-                  </span>
-                </span>
-              )}
-            </div>
-          )}
-
-          {/* Action Buttons */}
-          <div className="flex items-center gap-2 pt-2.5">
-            {/* Main Action Button */}
-            {slide.buttonLink ? (
-              <a
-                href={slide.buttonLink}
-                onClick={() => soundFX.playClick()}
-                className="bg-gradient-to-r from-orange-500 to-amber-600 hover:from-orange-600 hover:to-amber-700 text-white font-bold px-3.5 sm:px-4 py-1.5 sm:py-2 rounded-lg shadow-md active:scale-95 transition-all text-xs flex items-center gap-1.5 border border-orange-400/30 cursor-pointer shrink-0"
-              >
-                <span>{isAr ? (slide.buttonTextAr || 'طلب واستعراض') : (slide.buttonTextEn || slide.buttonTextAr || 'Order & Explore')}</span>
-                {isAr ? <ArrowLeft className="w-3.5 h-3.5" /> : <ArrowRight className="w-3.5 h-3.5" />}
-              </a>
-            ) : (
-              <button
-                onClick={() => {
-                  soundFX.playClick();
-                  onExplore();
-                }}
-                className="bg-gradient-to-r from-orange-500 to-amber-600 hover:from-orange-600 hover:to-amber-700 text-white font-bold px-3.5 sm:px-4 py-1.5 sm:py-2 rounded-lg shadow-md active:scale-95 transition-all text-xs flex items-center gap-1.5 border border-orange-400/30 cursor-pointer shrink-0"
-              >
-                <span>{isAr ? (slide.buttonTextAr || 'تسوق الآن') : (slide.buttonTextEn || slide.buttonTextAr || 'Shop Now')}</span>
-                {isAr ? <ArrowLeft className="w-3.5 h-3.5" /> : <ArrowRight className="w-3.5 h-3.5" />}
-              </button>
-            )}
-
-            {/* Secondary button: browse categories or custom link */}
-            {slide.secondaryButtonLink ? (
-              <a
-                href={slide.secondaryButtonLink}
-                onClick={() => soundFX.playClick()}
-                className="bg-white/15 hover:bg-white/25 text-white/90 font-medium px-2.5 sm:px-3 py-1 sm:py-1.5 rounded-lg border border-white/25 backdrop-blur-md transition-all text-[11px] sm:text-xs text-center cursor-pointer shrink-0"
-              >
-                {isAr
-                  ? (slide.secondaryButtonTextAr || 'الأقسام')
-                  : (slide.secondaryButtonTextEn || slide.secondaryButtonTextAr || 'Categories')}
-              </a>
-            ) : (
-              <button
-                onClick={() => {
-                  soundFX.playClick();
-                  onExplore();
-                }}
-                className="bg-white/15 hover:bg-white/25 text-white/90 font-medium px-2.5 sm:px-3 py-1 sm:py-1.5 rounded-lg border border-white/25 backdrop-blur-md transition-all text-[11px] sm:text-xs text-center cursor-pointer shrink-0"
-                title={isAr ? 'استعراض كل الأقسام' : 'Browse Categories'}
-              >
-                {isAr
-                  ? (slide.secondaryButtonTextAr || 'الأقسام')
-                  : (slide.secondaryButtonTextEn || slide.secondaryButtonTextAr || 'Categories')}
-              </button>
-            )}
-
-            {/* Direct WhatsApp circular button */}
-            <a
-              href={`https://wa.me/967774102030?text=${encodeURIComponent(
-                slide.whatsappCustomTextAr ||
-                  (isAr
-                    ? `السلام عليكم متجر صدام العقاري، أود الاستفسار والطلب: ${slide.titleAr}`
-                    : `Hello Saddam Al-Aqari Store, I would like to inquire about: ${slide.titleEn || slide.titleAr}`)
-              )}`}
-              target="_blank"
-              rel="noopener noreferrer"
-              onClick={() => soundFX.playClick()}
-              className="w-8 h-8 sm:w-9 sm:h-9 rounded-full bg-emerald-600 hover:bg-emerald-500 text-white flex items-center justify-center shadow-lg border border-emerald-400/50 backdrop-blur-md transition-all hover:scale-110 active:scale-95 shrink-0 cursor-pointer"
-              title={isAr ? 'الطلب السريع عبر واتساب (+967 774 102 030)' : 'WhatsApp Order'}
+          {/* Side TrustBuy-Style Liquid Glass Bento Cards (4 Cols) */}
+          <div className="lg:col-span-4 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-1 gap-4 sm:gap-5">
+            {/* Side Glass Tile 1: Flagship Phones & Official Warranty */}
+            <button
+              type="button"
+              onClick={() => {
+                soundFX.playClick();
+                onExplore('phones');
+              }}
+              className="liquid-glass liquid-card-hover rounded-[28px] p-6 text-right rtl:text-right ltr:text-left flex flex-col justify-between min-h-[210px] lg:min-h-0 cursor-pointer group overflow-hidden relative"
             >
-              <MessageSquare className="w-4 h-4 fill-white" />
-            </a>
+              <div
+                aria-hidden="true"
+                className="absolute -bottom-10 -left-10 rtl:-left-10 ltr:-right-10 w-40 h-40 rounded-full bg-[#0071e3]/15 blur-2xl pointer-events-none"
+              />
+              <div className="flex items-start justify-between gap-4 relative z-10">
+                <div className="space-y-1.5">
+                  <span className="text-xs font-bold text-[#0071e3] block">
+                    {isAr ? 'تسوق بثقة · ضمان الوكالة' : 'Shop with Confidence'}
+                  </span>
+                  <h2 className="text-lg sm:text-xl font-extrabold text-[#0b1220] leading-snug">
+                    {isAr ? 'أحدث الهواتف الذكية 5G' : 'Latest 5G Flagship Phones'}
+                  </h2>
+                  <p className="text-xs text-slate-600 leading-relaxed">
+                    {isAr
+                      ? 'آيفون 16 برو ماكس وسامسونج ألترا بأفضل سعر وفاتورة رسمية.'
+                      : 'iPhone 16 Pro Max & Galaxy Ultra with certified warranty.'}
+                  </p>
+                </div>
+                <div className="w-11 h-11 rounded-2xl liquid-glass-strong flex items-center justify-center text-[#0071e3] shrink-0">
+                  <Smartphone className="w-5 h-5" />
+                </div>
+              </div>
+
+              <div className="pt-4 mt-4 border-t border-slate-900/8 flex items-center justify-between text-xs font-bold text-[#0071e3] relative z-10">
+                <span>{isAr ? 'استعراض الهواتف' : 'Browse Phones'}</span>
+                {isAr ? (
+                  <ArrowLeft className="w-4 h-4 group-hover:-translate-x-1 transition-transform" />
+                ) : (
+                  <ArrowRight className="w-4 h-4 group-hover:translate-x-1 transition-transform" />
+                )}
+              </div>
+            </button>
+
+            {/* Side Glass Tile 2: Fast Charging & Certified Accessories */}
+            <button
+              type="button"
+              onClick={() => {
+                soundFX.playClick();
+                onExplore('chargers');
+              }}
+              className="liquid-glass liquid-card-hover rounded-[28px] p-6 text-right rtl:text-right ltr:text-left flex flex-col justify-between min-h-[210px] lg:min-h-0 cursor-pointer group overflow-hidden relative"
+            >
+              <div
+                aria-hidden="true"
+                className="absolute -bottom-10 -left-10 rtl:-left-10 ltr:-right-10 w-40 h-40 rounded-full bg-emerald-500/15 blur-2xl pointer-events-none"
+              />
+              <div className="flex items-start justify-between gap-4 relative z-10">
+                <div className="space-y-1.5">
+                  <span className="text-xs font-bold text-emerald-700 block">
+                    {isAr ? 'شحن فائق GaN · ملحقات أصلية' : 'GaN Power & Original Gear'}
+                  </span>
+                  <h2 className="text-lg sm:text-xl font-extrabold text-[#0b1220] leading-snug">
+                    {isAr ? 'الشواحن والسماعات المعتمدة' : 'Chargers, Audio & MagSafe'}
+                  </h2>
+                  <p className="text-xs text-slate-600 leading-relaxed">
+                    {isAr
+                      ? 'Anker و Belkin و Sony مع فحص فوري قبل الدفع وتوصيل سريع.'
+                      : 'Anker, Belkin & Sony with instant inspection & fast dispatch.'}
+                  </p>
+                </div>
+                <div className="w-11 h-11 rounded-2xl liquid-glass-strong flex items-center justify-center text-emerald-600 shrink-0">
+                  <Zap className="w-5 h-5" />
+                </div>
+              </div>
+
+              <div className="pt-4 mt-4 border-t border-slate-900/8 flex items-center justify-between text-xs font-bold text-emerald-700 relative z-10">
+                <span className="flex items-center gap-1.5">
+                  <ShieldCheck className="w-4 h-4" />
+                  <span>{isAr ? 'تصفح الملحقات الأصلية' : 'Browse Accessories'}</span>
+                </span>
+                {isAr ? (
+                  <ArrowLeft className="w-4 h-4 group-hover:-translate-x-1 transition-transform" />
+                ) : (
+                  <ArrowRight className="w-4 h-4 group-hover:translate-x-1 transition-transform" />
+                )}
+              </div>
+            </button>
           </div>
         </div>
       </div>
-
-      {/* 4. Controls: Slide Indicators & Next/Prev Arrows */}
-      {slides.length > 1 && (
-        <div className="absolute bottom-4 inset-x-0 z-20 container mx-auto px-4 sm:px-6 flex items-center justify-between pointer-events-auto">
-          {/* Indicators */}
-          <div className="flex items-center gap-2 bg-black/40 backdrop-blur-md px-3 py-1.5 rounded-full border border-white/15">
-            {slides.map((_, idx) => (
-              <button
-                key={idx}
-                onClick={() => changeSlide(idx)}
-                className={`h-2 rounded-full transition-all duration-300 cursor-pointer ${
-                  currentSlide === idx ? 'w-7 sm:w-8 bg-orange-500 shadow-md' : 'w-2 bg-white/40 hover:bg-white/70'
-                }`}
-                aria-label={`Slide ${idx + 1}`}
-              />
-            ))}
-          </div>
-
-          {/* Arrow Buttons */}
-          <div className="flex items-center gap-2">
-            <button
-              onClick={() => changeSlide(currentSlide === 0 ? slides.length - 1 : currentSlide - 1)}
-              className="p-2 sm:p-2.5 rounded-xl bg-black/40 hover:bg-orange-500 text-white transition-all border border-white/20 backdrop-blur-md active:scale-95 cursor-pointer"
-              aria-label="Previous slide"
-            >
-              {isAr ? <ChevronRight className="w-4 h-4" /> : <ChevronLeft className="w-4 h-4" />}
-            </button>
-            <button
-              onClick={() => changeSlide((currentSlide + 1) % slides.length)}
-              className="p-2 sm:p-2.5 rounded-xl bg-black/40 hover:bg-orange-500 text-white transition-all border border-white/20 backdrop-blur-md active:scale-95 cursor-pointer"
-              aria-label="Next slide"
-            >
-              {isAr ? <ChevronLeft className="w-4 h-4" /> : <ChevronRight className="w-4 h-4" />}
-            </button>
-          </div>
-        </div>
-      )}
     </section>
   );
 }

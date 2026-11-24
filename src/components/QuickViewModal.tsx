@@ -1,5 +1,5 @@
 import { useState, useRef } from 'react';
-import { X, Star, ShoppingBag, Heart, Check, ShieldCheck, Zap } from 'lucide-react';
+import { X, Star, ShoppingBag, Heart, ShieldCheck, Zap } from 'lucide-react';
 import { Product, Language, Currency } from '../types';
 import { formatPrice } from '../data/mockData';
 import { triggerFlyToCart } from './FlyingCartAnimation';
@@ -27,82 +27,92 @@ export default function QuickViewModal({
   isWishlisted,
   onToggleWishlist,
 }: QuickViewModalProps) {
-  if (!product) return null;
-  const isAr = language === 'ar';
-
-  const [selectedColor, setSelectedColor] = useState(product.colors[0] || '#0f172a');
-  const [selectedVariant, setSelectedVariant] = useState(product.variants.options[0] || 'الأساسي');
-  const [activeModalImg, setActiveModalImg] = useState(product.images?.[0] || product.image);
-  const [qty, setQty] = useState(1);
+  const [selectedColor, setSelectedColor] = useState(product?.colors[0] || '#0f172a');
+  const [selectedVariant, setSelectedVariant] = useState(
+    product?.variants.options[0] || 'الأساسي'
+  );
+  const [activeModalImg, setActiveModalImg] = useState(product?.images?.[0] || product?.image || '');
   const [added, setAdded] = useState(false);
   const modalImgRef = useRef<HTMLImageElement | null>(null);
 
+  if (!product) return null;
+  const isAr = language === 'ar';
+  const displayedImg = activeModalImg || product.image;
+
   const handleAdd = () => {
     triggerFlyToCart({
-      imageUrl: activeModalImg || product.image,
+      imageUrl: displayedImg,
       productName: isAr ? product.nameAr : product.name,
       sourceElement: modalImgRef.current,
     });
-    onAddToCart(product, selectedVariant, selectedColor, qty);
+    onAddToCart(product, selectedVariant, selectedColor, 1);
     setAdded(true);
     setTimeout(() => {
       setAdded(false);
       onClose();
-    }, 700);
+    }, 650);
   };
 
   const handleQuickOrder = () => {
     triggerFlyToCart({
-      imageUrl: activeModalImg || product.image,
+      imageUrl: displayedImg,
       productName: isAr ? product.nameAr : product.name,
       sourceElement: modalImgRef.current,
     });
     if (onQuickOrder) {
-      onQuickOrder(product, selectedVariant, selectedColor, qty);
+      onQuickOrder(product, selectedVariant, selectedColor, 1);
     } else {
-      onAddToCart(product, selectedVariant, selectedColor, qty);
+      onAddToCart(product, selectedVariant, selectedColor, 1);
       onClose();
     }
   };
 
   return (
-    <div className="fixed inset-0 z-50 bg-black/70 flex items-center justify-center p-4 backdrop-blur-sm animate-in fade-in duration-200">
-      <div className="bg-white w-full max-w-2xl rounded-3xl overflow-hidden shadow-2xl relative border border-gray-line flex flex-col md:flex-row">
-        {/* Close Button */}
+    <div
+      className="fixed inset-0 z-50 bg-slate-950/55 flex items-center justify-center p-4 backdrop-blur-md"
+      onClick={onClose}
+    >
+      <div
+        className="liquid-glass-strong w-full max-w-2xl rounded-[30px] overflow-hidden relative flex flex-col md:flex-row"
+        onClick={(e) => e.stopPropagation()}
+      >
         <button
           onClick={onClose}
-          className="absolute top-4 right-4 rtl:right-auto rtl:left-4 z-20 text-gray-500 hover:text-gray-900 p-1.5 rounded-full bg-white/80 backdrop-blur-sm"
+          className="absolute top-4 right-4 rtl:right-auto rtl:left-4 z-20 text-slate-600 hover:text-[#0b1220] p-2 rounded-full liquid-glass-capsule cursor-pointer"
         >
-          <X className="w-5 h-5" />
+          <X className="w-4 h-4" />
         </button>
 
-        {/* Product Image & Multi-Thumbnails */}
-        <div className="md:w-1/2 bg-gray-50 relative p-4 flex flex-col items-center justify-between">
-          <div className="w-full aspect-square relative flex items-center justify-center overflow-hidden rounded-2xl">
+        {/* Image Stage */}
+        <div className="md:w-1/2 bg-white/40 relative p-5 flex flex-col items-center justify-between">
+          <div className="w-full aspect-square relative flex items-center justify-center overflow-hidden rounded-2xl liquid-glass-subtle p-2">
             <img
               ref={modalImgRef}
-              src={activeModalImg}
+              src={displayedImg}
               alt={product.name}
               referrerPolicy="no-referrer"
-              className="w-full h-full object-cover rounded-2xl transition-all duration-300"
+              className="w-full h-full object-cover rounded-xl transition-all duration-300"
             />
-            <div className="absolute top-2 left-2 rtl:left-auto rtl:right-2 bg-tech-dark text-white text-[10px] font-mono font-bold px-2 py-0.5 rounded">
-              {product.brand}
-            </div>
           </div>
 
-          {/* Quick Thumbnails */}
           {product.images && product.images.length > 1 && (
-            <div className="flex gap-2 mt-3 w-full overflow-x-auto pb-1 scrollbar-thin">
+            <div className="flex gap-2 mt-3 w-full overflow-x-auto pb-1 no-scrollbar">
               {product.images.map((img, idx) => (
                 <button
                   key={idx}
                   onClick={() => setActiveModalImg(img)}
-                  className={`w-12 h-12 shrink-0 rounded-xl overflow-hidden border-2 transition-all p-0.5 bg-white ${
-                    activeModalImg === img ? 'border-primary scale-105 ring-2 ring-primary/20' : 'border-gray-200'
+                  className={`w-12 h-12 shrink-0 rounded-xl overflow-hidden border-2 transition-all p-0.5 bg-white/80 cursor-pointer ${
+                    displayedImg === img
+                      ? 'border-[#0071e3] scale-105'
+                      : 'border-white/80'
                   }`}
                 >
-                  <img src={img} alt="thumb" referrerPolicy="no-referrer" className="w-full h-full object-cover rounded-lg" />
+                  <img
+                    src={img}
+                    alt="thumb"
+                    referrerPolicy="no-referrer"
+                    className="w-full h-full object-cover rounded-lg"
+                  />
                 </button>
               ))}
             </div>
@@ -112,47 +122,63 @@ export default function QuickViewModal({
         {/* Details */}
         <div className="p-6 md:w-1/2 flex flex-col justify-between space-y-4">
           <div>
-            <div className="flex items-center justify-between mb-1">
-              <span className="text-[11px] font-bold text-primary uppercase font-mono">
-                {isAr ? product.categoryNameAr : product.categoryNameEn}
+            <div className="flex items-center justify-between mb-1.5 text-xs">
+              <span className="font-bold text-[#0071e3]">
+                {product.brand} · {isAr ? product.categoryNameAr : product.categoryNameEn}
               </span>
-              <div className="flex items-center gap-1 text-amber-500 text-xs font-bold font-mono">
+              <div className="flex items-center gap-1 text-amber-500 font-bold font-mono tabular-nums">
                 <Star className="w-3.5 h-3.5 fill-amber-400 text-amber-400" />
                 <span>{product.rating}</span>
               </div>
             </div>
 
-            <h3 className="text-base sm:text-lg font-black text-gray-dark mb-1.5">
+            <h3 className="text-base sm:text-lg font-black text-[#0b1220] mb-2">
               {isAr ? product.nameAr : product.name}
             </h3>
 
-            {/* Product Description */}
-            <p className="text-xs text-gray-600 line-clamp-2 leading-relaxed mb-2.5 bg-gray-50 p-2 rounded-xl border border-gray-100">
+            <p className="text-xs text-slate-600 line-clamp-2 leading-relaxed mb-3">
               {isAr ? product.descriptionAr : product.description}
             </p>
 
-            {/* Price & Installments */}
-            <div className="mb-3 pb-2 border-b border-gray-line">
+            <div className="mb-3 pb-3 border-b border-white/60">
               <div className="flex items-baseline gap-2 mb-1">
-                <span className="text-xl font-black text-primary font-mono">
+                <span className="text-xl font-black text-[#0b1220] font-mono tabular-nums">
                   {formatPrice(product.price, currency, isAr)}
                 </span>
                 {product.originalPrice && (
-                  <span className="text-xs text-gray-400 line-through font-mono">
+                  <span className="text-xs text-slate-400 line-through font-mono tabular-nums">
                     {formatPrice(product.originalPrice, currency, isAr)}
                   </span>
                 )}
               </div>
-              <span className="text-[11px] text-emerald-700 font-bold flex items-center gap-1 bg-emerald-50 px-2 py-0.5 rounded-md inline-flex border border-emerald-200">
+              <div className="flex items-center gap-1.5 text-[11px] text-emerald-700 font-bold">
                 <ShieldCheck className="w-3.5 h-3.5 text-emerald-600" />
-                <span>{isAr ? 'منتج أصلي مضمون 100% مع الضمان' : '100% Guaranteed Authentic'}</span>
-              </span>
+                <span>
+                  {product.warrantyYears}{' '}
+                  {isAr ? 'سنوات ضمان الوكيل المعتمد' : 'Years Official Warranty'}
+                </span>
+              </div>
             </div>
 
-            {/* Variants options */}
+            {product.colors && product.colors.length > 0 && (
+              <div className="flex items-center gap-2 mb-3">
+                {product.colors.map((c) => (
+                  <button
+                    key={c}
+                    onClick={() => setSelectedColor(c)}
+                    className={`w-6 h-6 rounded-full border-2 cursor-pointer transition-transform ${
+                      selectedColor === c ? 'border-[#0071e3] scale-110' : 'border-white'
+                    }`}
+                    style={{ backgroundColor: c }}
+                    aria-label={c}
+                  />
+                ))}
+              </div>
+            )}
+
             {product.variants.options && (
-              <div className="mb-3">
-                <span className="text-xs font-bold text-gray-700 block mb-1">
+              <div className="mb-2">
+                <span className="text-xs font-bold text-slate-700 block mb-1.5">
                   {isAr ? product.variants.titleAr : product.variants.titleEn}:
                 </span>
                 <div className="flex flex-wrap gap-1.5 font-mono text-xs">
@@ -160,10 +186,10 @@ export default function QuickViewModal({
                     <button
                       key={opt}
                       onClick={() => setSelectedVariant(opt)}
-                      className={`px-2.5 py-1 rounded-lg border font-bold ${
+                      className={`px-3 py-1 rounded-xl border font-bold cursor-pointer transition-all ${
                         selectedVariant === opt
-                          ? 'bg-tech-dark text-white border-tech-dark'
-                          : 'bg-white text-gray-700 border-gray-300'
+                          ? 'liquid-btn-primary border-transparent text-white'
+                          : 'bg-white/65 text-slate-700 border-white/80 hover:bg-white'
                       }`}
                     >
                       {opt}
@@ -172,36 +198,30 @@ export default function QuickViewModal({
                 </div>
               </div>
             )}
-
-            {/* Warranty Badge */}
-            <div className="flex items-center gap-1.5 text-xs text-emerald-700 font-bold bg-emerald-50 p-2 rounded-xl">
-              <ShieldCheck className="w-4 h-4 text-emerald-600 shrink-0" />
-              <span>{product.warrantyYears} {isAr ? 'سنوات ضمان الوكيل المعتمد' : 'Years official warranty'}</span>
-            </div>
           </div>
 
-          {/* Actions */}
-          <div className="space-y-2 pt-2 border-t border-gray-line">
+          <div className="space-y-2 pt-3 border-t border-white/60">
             <div className="flex gap-2">
               <button
                 onClick={handleAdd}
-                className="flex-1 bg-white hover:bg-orange-50 text-orange-700 border border-orange-200 text-xs font-bold py-2.5 rounded-xl transition-all shadow-xs flex items-center justify-center gap-1.5 active:scale-98"
+                className="liquid-btn-primary flex-1 text-xs font-extrabold py-2.5 rounded-xl flex items-center justify-center gap-1.5 cursor-pointer"
               >
-                <ShoppingBag className="w-4 h-4 text-orange-600" />
-                <span>{added ? (isAr ? 'تمت الإضافة للسلة ✓' : 'Added! ✓') : (isAr ? 'إضافة إلى السلة' : 'Add to Cart')}</span>
+                <ShoppingBag className="w-4 h-4" />
+                <span>{added ? (isAr ? 'تمت الإضافة ✓' : 'Added ✓') : isAr ? 'للسلة' : 'Add'}</span>
               </button>
               <button
                 onClick={handleQuickOrder}
-                className="flex-1 bg-gradient-to-r from-emerald-600 to-teal-700 hover:from-emerald-700 hover:to-teal-800 text-white text-xs font-black py-2.5 rounded-xl transition-all shadow-md flex items-center justify-center gap-1.5 active:scale-98 group"
-                title={isAr ? 'طلب سريع فوري عبر واتساب وفاتورة مباشرة' : 'Quick Order via WhatsApp Invoice'}
+                className="liquid-btn-emerald flex-1 text-xs font-extrabold py-2.5 rounded-xl flex items-center justify-center gap-1.5 cursor-pointer"
               >
-                <Zap className="w-4 h-4 text-amber-300 fill-amber-300 group-hover:scale-110 transition-transform" />
-                <span>{isAr ? 'طلب سريع ⚡' : 'Quick Order ⚡'}</span>
+                <Zap className="w-4 h-4" />
+                <span>{isAr ? 'طلب سريع' : 'Quick Order'}</span>
               </button>
               <button
                 onClick={() => onToggleWishlist(product.id)}
-                className={`p-2.5 rounded-xl border flex items-center justify-center ${
-                  isWishlisted ? 'border-rose-500 text-rose-600 bg-rose-50' : 'border-gray-200 text-gray-500'
+                className={`p-2.5 rounded-xl border flex items-center justify-center cursor-pointer ${
+                  isWishlisted
+                    ? 'border-rose-400 text-rose-600 bg-rose-50/90'
+                    : 'border-white/80 bg-white/65 text-slate-600'
                 }`}
               >
                 <Heart className={`w-4 h-4 ${isWishlisted ? 'fill-rose-500' : ''}`} />
@@ -213,9 +233,9 @@ export default function QuickViewModal({
                 onClose();
                 onViewFullDetails(product);
               }}
-              className="w-full text-center text-xs text-primary font-bold hover:underline py-1"
+              className="w-full text-center text-xs text-[#0071e3] font-bold hover:underline py-1 cursor-pointer"
             >
-              {isAr ? 'عرض المواصفات الكاملة وجدول المقارنة' : 'View Full Specifications & Comparison'}
+              {isAr ? 'عرض المواصفات الكاملة' : 'View Full Specifications'}
             </button>
           </div>
         </div>

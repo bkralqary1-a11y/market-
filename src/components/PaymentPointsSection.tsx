@@ -11,103 +11,20 @@ interface PaymentItem {
   nameAr: string;
   nameEn: string;
   labelEn: string;
-  icon: string;
   number: string;
-  bgHex: string;
-  textColorHex: string;
+  accentHex: string;
 }
 
 const PAYMENT_ITEMS: PaymentItem[] = [
-  {
-    id: 'jawali',
-    nameAr: 'جوّالي',
-    nameEn: 'Jawali',
-    labelEn: 'JAWALI',
-    icon: '📱',
-    number: '934373',
-    bgHex: '#1e3a8a',
-    textColorHex: '#1e3a8a',
-  },
-  {
-    id: 'kuraimi',
-    nameAr: 'الكريمي حاسب',
-    nameEn: 'Al-Kuraimi',
-    labelEn: 'ALKURAIMI',
-    icon: '💜',
-    number: '1420180',
-    bgHex: '#6b2c91',
-    textColorHex: '#6b2c91',
-  },
-  {
-    id: 'jaib',
-    nameAr: 'جيب',
-    nameEn: 'Jaib',
-    labelEn: 'JAIB',
-    icon: '🔴',
-    number: '564992',
-    bgHex: '#dc2626',
-    textColorHex: '#dc2626',
-  },
-  {
-    id: 'onecash',
-    nameAr: 'وان كاش',
-    nameEn: 'One Cash',
-    labelEn: 'One Cash',
-    icon: '🟠',
-    number: '166756',
-    bgHex: '#f26522',
-    textColorHex: '#f26522',
-  },
-  {
-    id: 'cash',
-    nameAr: 'كاش',
-    nameEn: 'Cash',
-    labelEn: 'CASH',
-    icon: '💚',
-    number: '032632',
-    bgHex: '#059669',
-    textColorHex: '#059669',
-  },
-  {
-    id: 'yemenwallet',
-    nameAr: 'يمن ولت',
-    nameEn: 'Yemen Wallet',
-    labelEn: 'Yemen Wallet',
-    icon: '🟢',
-    number: '774102030',
-    bgHex: '#65a30d',
-    textColorHex: '#65a30d',
-  },
-  {
-    id: 'floosak',
-    nameAr: 'فلوسك',
-    nameEn: 'Floosak',
-    labelEn: 'Floosak',
-    icon: '🔵',
-    number: '455542',
-    bgHex: '#0ea5e9',
-    textColorHex: '#0ea5e9',
-  },
-  {
-    id: 'mobilemoney',
-    nameAr: 'موبايل موني',
-    nameEn: 'Mobile Money',
-    labelEn: 'Mobile Money',
-    icon: '💳',
-    number: '926990',
-    bgHex: '#1e40af',
-    textColorHex: '#1e40af',
-  },
-  {
-    id: 'banky',
-    nameAr: 'بنكي لايت',
-    nameEn: 'Banky Lite',
-    labelEn: 'BANKY',
-    icon: '🏦',
-    number: '671581',
-    bgHex: '#0369a1',
-    textColorHex: '#0369a1',
-  },
+  { id: 'jawali', nameAr: 'جوّالي', nameEn: 'Jawali', labelEn: 'JAWALI', number: '934373', accentHex: '#3b82f6' },
+  { id: 'kuraimi', nameAr: 'الكريمي حاسب', nameEn: 'Al-Kuraimi', labelEn: 'ALKURAIMI', number: '1420180', accentHex: '#a855f7' },
+  { id: 'jaib', nameAr: 'جيب', nameEn: 'Jaib', labelEn: 'JAIB', number: '564992', accentHex: '#ef4444' },
+  { id: 'onecash', nameAr: 'وان كاش', nameEn: 'One Cash', labelEn: 'ONECASH', number: '166756', accentHex: '#f97316' },
+  { id: 'cash', nameAr: 'كاش', nameEn: 'Cash', labelEn: 'CASH', number: '032632', accentHex: '#10b981' },
+  { id: 'yemenwallet', nameAr: 'يمن ولت', nameEn: 'Yemen Wallet', labelEn: 'YEMEN WALLET', number: '774102030', accentHex: '#84cc16' },
+  { id: 'floosak', nameAr: 'فلوسك', nameEn: 'Floosak', labelEn: 'FLOOSAK', number: '455542', accentHex: '#0ea5e9' },
+  { id: 'mobilemoney', nameAr: 'موبايل موني', nameEn: 'Mobile Money', labelEn: 'MOBILE MONEY', number: '926990', accentHex: '#2563eb' },
+  { id: 'banky', nameAr: 'بنكي لايت', nameEn: 'Banky Lite', labelEn: 'BANKY', number: '671581', accentHex: '#06b6d4' },
 ];
 
 export default function PaymentPointsSection({ language }: PaymentPointsSectionProps) {
@@ -120,20 +37,6 @@ export default function PaymentPointsSection({ language }: PaymentPointsSectionP
     setTimeout(() => {
       setToastMessage((current) => (current === msg ? null : current));
     }, 2200);
-  };
-
-  const handleCopy = (text: string, successMsg: string, id: string) => {
-    if (navigator.clipboard && window.isSecureContext) {
-      navigator.clipboard.writeText(text).then(() => {
-        setCopiedId(id);
-        showToast(successMsg);
-        setTimeout(() => setCopiedId(null), 1800);
-      }).catch(() => {
-        fallbackCopy(text, successMsg, id);
-      });
-    } else {
-      fallbackCopy(text, successMsg, id);
-    }
   };
 
   const fallbackCopy = (text: string, successMsg: string, id: string) => {
@@ -154,76 +57,106 @@ export default function PaymentPointsSection({ language }: PaymentPointsSectionP
     document.body.removeChild(textarea);
   };
 
+  const handleCopy = (text: string, successMsg: string, id: string) => {
+    if (navigator.clipboard && window.isSecureContext) {
+      navigator.clipboard
+        .writeText(text)
+        .then(() => {
+          setCopiedId(id);
+          showToast(successMsg);
+          setTimeout(() => setCopiedId(null), 1800);
+        })
+        .catch(() => fallbackCopy(text, successMsg, id));
+    } else {
+      fallbackCopy(text, successMsg, id);
+    }
+  };
+
   const handleCopyFullTransfer = () => {
-    const transferText = 'صدام علي علي العقاري\n774102030';
     handleCopy(
-      transferText,
+      'صدام علي علي العقاري\n774102030',
       isAr ? 'تم نسخ بيانات الحوالة كاملة (الاسم + الرقم)' : 'Transfer details copied successfully',
       'full-transfer'
     );
   };
 
   return (
-    <section className="bg-tech-dark/95 text-white py-6 sm:py-8 border-t border-white/10 relative overflow-hidden" id="payment-points">
-      {/* Background ambient subtle glow */}
-      <div className="absolute -top-20 -right-20 w-72 h-72 bg-blue-600/10 rounded-full blur-2xl pointer-events-none" />
-      <div className="absolute -bottom-20 -left-20 w-72 h-72 bg-orange-600/10 rounded-full blur-2xl pointer-events-none" />
+    <section
+      className="py-7 sm:py-9 border-b border-white/10 relative overflow-hidden"
+      id="payment-points"
+    >
+      {/* Subtle Sapphire Refraction */}
+      <div className="absolute -top-24 -right-24 w-72 h-72 bg-sky-500/15 rounded-full blur-3xl pointer-events-none" />
+      <div className="absolute -bottom-24 -left-24 w-72 h-72 bg-blue-600/15 rounded-full blur-3xl pointer-events-none" />
 
       <div className="container mx-auto px-4 relative z-10">
-        {/* Compact Section Header */}
-        <div className="flex flex-col sm:flex-row items-center justify-between gap-2 mb-4 pb-3 border-b border-white/10">
-          <div className="flex items-center gap-2">
-            <div className="w-7 h-7 rounded-lg bg-orange-500/20 text-orange-400 flex items-center justify-center border border-orange-500/30 shrink-0">
-              <Wallet className="w-3.5 h-3.5" />
+        {/* Section Header */}
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 mb-5 pb-3.5 border-b border-white/10">
+          <div className="flex items-center gap-3">
+            <div className="w-9 h-9 rounded-2xl bg-sky-500/15 text-sky-300 flex items-center justify-center border border-sky-400/25 shrink-0">
+              <Wallet className="w-4 h-4" />
             </div>
             <div>
-              <h3 className="text-sm sm:text-base font-extrabold text-white">
+              <h3 className="text-sm sm:text-base font-extrabold text-white tracking-tight">
                 {isAr ? 'نقاط الدفع الإلكتروني المعتمدة' : 'Official Payment Points'}
               </h3>
-              <p className="text-[10px] text-gray-400">
-                {isAr ? 'مربعات مصغرة سريعة - اضغط على أي رقم لنسخه فوراً' : 'Click any box or number to copy account number instantly'}
+              <p className="text-[11px] text-slate-300/80">
+                {isAr
+                  ? 'اضغط على أي محفظة أو حساب لنسخ الرقم فوراً بنقرة واحدة'
+                  : 'Tap any payment wallet to copy the account number instantly'}
               </p>
             </div>
           </div>
 
-          <span className="text-[10px] bg-emerald-500/15 text-emerald-300 border border-emerald-500/30 px-2 py-0.5 rounded-full font-medium">
-            {isAr ? 'نسخ تلقائي بنقرة واحدة' : 'One-click copy'}
+          <span className="text-[11px] text-emerald-300 font-semibold flex items-center gap-1.5">
+            <ShieldCheck className="w-3.5 h-3.5" />
+            <span>{isAr ? 'حسابات رسمية معتمدة · نسخ فوري' : 'Verified Official Accounts · Instant Copy'}</span>
           </span>
         </div>
 
-        {/* 9 Mini Payment Cards Grid - Very Small and Compact */}
-        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-2 sm:gap-2.5">
+        {/* 9 Liquid Glass Payment Tiles */}
+        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-2.5 sm:gap-3">
           {PAYMENT_ITEMS.map((item) => {
             const isCopied = copiedId === item.id;
             return (
               <div
                 key={item.id}
-                onClick={() => handleCopy(item.number, isAr ? `تم نسخ رقم ${item.nameAr}: ${item.number}` : `Copied ${item.nameEn}`, item.id)}
-                style={{ backgroundColor: item.bgHex }}
-                className="group relative rounded-xl p-2 sm:p-2.5 text-white shadow-xs hover:shadow-md transition-all duration-150 transform hover:-translate-y-0.5 active:scale-95 cursor-pointer border border-white/20 select-none overflow-hidden flex flex-col justify-between"
+                onClick={() =>
+                  handleCopy(
+                    item.number,
+                    isAr ? `تم نسخ رقم ${item.nameAr}: ${item.number}` : `Copied ${item.nameEn}`,
+                    item.id
+                  )
+                }
+                className="group relative rounded-2xl p-3 bg-white/[0.07] hover:bg-white/[0.12] backdrop-blur-xl border border-white/15 hover:border-sky-300/45 transition-all duration-200 hover:-translate-y-0.5 active:scale-95 cursor-pointer select-none overflow-hidden flex flex-col justify-between"
                 title={isAr ? `اضغط لنسخ رقم ${item.nameAr}` : `Click to copy ${item.nameEn}`}
               >
-                {/* Top subtle highlight */}
-                <div className="absolute top-0 inset-x-0 h-0.5 bg-white/30" />
+                {/* Top specular edge colored lightly by provider */}
+                <div
+                  className="absolute top-0 inset-x-0 h-[2px] opacity-80"
+                  style={{ background: `linear-gradient(90deg, transparent, ${item.accentHex}, transparent)` }}
+                />
 
-                {/* Card Title & Icon - Mini Header */}
-                <div className="flex items-center justify-between gap-1 mb-1.5">
+                {/* Title Row */}
+                <div className="flex items-center justify-between gap-1.5 mb-2">
                   <div className="flex items-center gap-1.5 min-w-0">
-                    <span className="text-xs sm:text-sm shrink-0">{item.icon}</span>
-                    <span className="font-extrabold text-[11px] sm:text-xs text-white truncate leading-none">
+                    <span
+                      className="w-2.5 h-2.5 rounded-full shrink-0 ring-2 ring-white/20"
+                      style={{ backgroundColor: item.accentHex }}
+                    />
+                    <span className="font-extrabold text-xs text-white truncate leading-none">
                       {isAr ? item.nameAr : item.nameEn}
                     </span>
                   </div>
-                  <span className="text-[8px] text-white/75 font-mono hidden xl:inline-block uppercase">
+                  <span className="text-[9px] text-slate-400 font-mono hidden xl:inline-block uppercase tracking-wider">
                     {item.labelEn}
                   </span>
                 </div>
 
-                {/* Compact White Number Box with Copy Icon */}
-                <div className="bg-white/95 group-hover:bg-white rounded-lg px-2 py-1 flex items-center justify-between shadow-xs gap-1 transition-colors">
+                {/* Translucent Account Number Strip */}
+                <div className="bg-slate-950/55 group-hover:bg-slate-950/75 border border-white/10 rounded-xl px-2.5 py-1.5 flex items-center justify-between gap-1.5 transition-colors">
                   <span
-                    className="font-mono font-black text-xs sm:text-sm tracking-wider text-center flex-1"
-                    style={{ color: item.textColorHex }}
+                    className="font-mono tabular-nums font-black text-xs sm:text-sm tracking-wider text-sky-100 flex-1 text-center"
                     dir="ltr"
                   >
                     {item.number}
@@ -233,24 +166,28 @@ export default function PaymentPointsSection({ language }: PaymentPointsSectionP
                     type="button"
                     onClick={(e) => {
                       e.stopPropagation();
-                      handleCopy(item.number, isAr ? `تم نسخ رقم ${item.nameAr}: ${item.number}` : `Copied ${item.nameEn}`, item.id);
+                      handleCopy(
+                        item.number,
+                        isAr ? `تم نسخ رقم ${item.nameAr}: ${item.number}` : `Copied ${item.nameEn}`,
+                        item.id
+                      );
                     }}
-                    className="p-0.5 rounded text-gray-500 hover:text-gray-900 transition-colors shrink-0 cursor-pointer"
+                    className="p-1 rounded-lg text-slate-300 hover:text-white hover:bg-white/10 transition-colors shrink-0 cursor-pointer"
                     title={isAr ? 'نسخ' : 'Copy'}
                   >
                     {isCopied ? (
-                      <Check className="w-3.5 h-3.5 text-emerald-600 animate-in zoom-in-50" />
+                      <Check className="w-3.5 h-3.5 text-emerald-400" />
                     ) : (
-                      <Copy className="w-3 h-3 text-gray-600" />
+                      <Copy className="w-3 h-3" />
                     )}
                   </button>
                 </div>
 
-                {/* Copied Overlay Badge */}
+                {/* Copied Overlay */}
                 {isCopied && (
-                  <div className="absolute inset-0 bg-emerald-600/90 backdrop-blur-xs flex items-center justify-center rounded-xl animate-in fade-in duration-100">
-                    <span className="text-white text-[10px] font-black flex items-center gap-1">
-                      <Check className="w-3 h-3" />
+                  <div className="absolute inset-0 bg-emerald-600/90 backdrop-blur-md flex items-center justify-center rounded-2xl">
+                    <span className="text-white text-xs font-extrabold flex items-center gap-1">
+                      <Check className="w-3.5 h-3.5" />
                       {isAr ? 'تم النسخ!' : 'Copied!'}
                     </span>
                   </div>
@@ -260,57 +197,69 @@ export default function PaymentPointsSection({ language }: PaymentPointsSectionP
           })}
         </div>
 
-        {/* Compact Transfer Section (حوالات : 774102030 - صدام علي علي العقاري) */}
-        <div className="mt-4 bg-white/5 border border-white/10 rounded-2xl p-3 sm:p-4 backdrop-blur-xs">
+        {/* Hawalat Liquid Glass Strip */}
+        <div className="mt-4 bg-white/[0.06] border border-white/15 rounded-2xl p-3.5 sm:p-4 backdrop-blur-xl">
           <div className="flex flex-col lg:flex-row items-center justify-between gap-3">
-            {/* Hawalat Number & Name in compact row */}
-            <div className="flex flex-wrap items-center justify-center lg:justify-start gap-2.5 sm:gap-4 w-full lg:w-auto text-xs">
-              {/* Number */}
+            <div className="flex flex-wrap items-center justify-center lg:justify-start gap-2.5 sm:gap-3.5 w-full lg:w-auto text-xs">
+              {/* Transfer Number */}
               <div
-                onClick={() => handleCopy('774102030', isAr ? 'تم نسخ رقم الحوالات (774102030)' : 'Copied transfer number', 'hawalat-num')}
-                className="bg-white/10 hover:bg-white/15 border border-white/20 rounded-xl px-3 py-1.5 flex items-center gap-2 cursor-pointer transition-colors group"
+                onClick={() =>
+                  handleCopy(
+                    '774102030',
+                    isAr ? 'تم نسخ رقم الحوالات (774102030)' : 'Copied transfer number',
+                    'hawalat-num'
+                  )
+                }
+                className="bg-white/[0.08] hover:bg-white/[0.14] border border-white/15 rounded-xl px-3.5 py-2 flex items-center gap-2 cursor-pointer transition-colors group"
                 title={isAr ? 'اضغط لنسخ رقم الحوالات' : 'Copy transfer number'}
               >
-                <span className="text-[10px] text-gray-400 font-semibold">{isAr ? 'رقم الحوالات:' : 'Transfer No:'}</span>
-                <span className="font-mono font-black text-amber-400 text-sm tracking-wider" dir="ltr">
+                <span className="text-[11px] text-slate-300 font-semibold">
+                  {isAr ? 'رقم الحوالات:' : 'Transfer No:'}
+                </span>
+                <span className="font-mono tabular-nums font-black text-sky-300 text-sm tracking-wider" dir="ltr">
                   774102030
                 </span>
                 {copiedId === 'hawalat-num' ? (
                   <Check className="w-3.5 h-3.5 text-emerald-400" />
                 ) : (
-                  <Copy className="w-3 h-3 text-gray-400 group-hover:text-white" />
+                  <Copy className="w-3 h-3 text-slate-400 group-hover:text-white" />
                 )}
               </div>
 
-              {/* Name */}
+              {/* Recipient Name */}
               <div
-                onClick={() => handleCopy('صدام علي علي العقاري', isAr ? 'تم نسخ الاسم الرباعي' : 'Copied recipient name', 'hawalat-name')}
-                className="bg-white/10 hover:bg-white/15 border border-white/20 rounded-xl px-3 py-1.5 flex items-center gap-2 cursor-pointer transition-colors group"
+                onClick={() =>
+                  handleCopy(
+                    'صدام علي علي العقاري',
+                    isAr ? 'تم نسخ الاسم الرباعي' : 'Copied recipient name',
+                    'hawalat-name'
+                  )
+                }
+                className="bg-white/[0.08] hover:bg-white/[0.14] border border-white/15 rounded-xl px-3.5 py-2 flex items-center gap-2 cursor-pointer transition-colors group"
                 title={isAr ? 'اضغط لنسخ الاسم' : 'Copy recipient name'}
               >
-                <span className="text-[10px] text-gray-400 font-semibold">{isAr ? 'الاسم الرباعي:' : 'Recipient:'}</span>
-                <span className="font-bold text-white text-xs sm:text-sm">
-                  صدام علي علي العقاري
+                <span className="text-[11px] text-slate-300 font-semibold">
+                  {isAr ? 'الاسم الرباعي:' : 'Recipient:'}
                 </span>
+                <span className="font-bold text-white text-xs sm:text-sm">صدام علي علي العقاري</span>
                 {copiedId === 'hawalat-name' ? (
                   <Check className="w-3.5 h-3.5 text-emerald-400" />
                 ) : (
-                  <Copy className="w-3 h-3 text-gray-400 group-hover:text-white" />
+                  <Copy className="w-3 h-3 text-slate-400 group-hover:text-white" />
                 )}
               </div>
             </div>
 
-            {/* Actions & Hint */}
-            <div className="flex items-center gap-2.5 w-full lg:w-auto justify-between lg:justify-end">
-              <span className="text-[10px] text-gray-400 hidden sm:inline-flex items-center gap-1">
+            <div className="flex items-center gap-3 w-full lg:w-auto justify-between lg:justify-end">
+              <span className="text-[11px] text-slate-300 hidden sm:inline-flex items-center gap-1.5">
                 <ShieldCheck className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
-                <span>{isAr ? 'النجم، الامتياز، يمن إكسبرس' : 'All local networks'}</span>
+                <span>{isAr ? 'النجم، الامتياز، يمن إكسبرس' : 'All local transfer networks'}</span>
               </span>
 
               <button
                 type="button"
                 onClick={handleCopyFullTransfer}
-                className="bg-gradient-to-r from-orange-500 to-amber-600 hover:from-orange-600 hover:to-amber-700 text-white font-bold text-[11px] px-3 py-1.5 rounded-lg shadow-xs flex items-center gap-1.5 active:scale-95 transition-all cursor-pointer shrink-0"
+                className="liquid-btn-primary font-bold text-xs px-4 py-2 rounded-xl flex items-center gap-1.5 cursor-pointer shrink-0 whitespace-nowrap"
               >
                 {copiedId === 'full-transfer' ? (
                   <>
@@ -319,7 +268,7 @@ export default function PaymentPointsSection({ language }: PaymentPointsSectionP
                   </>
                 ) : (
                   <>
-                    <Copy className="w-3 h-3" />
+                    <Copy className="w-3.5 h-3.5" />
                     <span>{isAr ? 'نسخ الاسم والرقم معاً' : 'Copy Name & Number'}</span>
                   </>
                 )}
@@ -329,11 +278,11 @@ export default function PaymentPointsSection({ language }: PaymentPointsSectionP
         </div>
       </div>
 
-      {/* Floating Bottom Toast Notification */}
+      {/* Liquid Glass Toast Notification */}
       {toastMessage && (
-        <div className="fixed bottom-6 inset-x-0 z-[999999] flex justify-center pointer-events-none px-4 animate-in slide-in-from-bottom-5 duration-150">
-          <div className="bg-gray-900 text-white border border-emerald-500/50 shadow-xl px-4 py-2 rounded-xl text-xs font-bold flex items-center gap-2 backdrop-blur-md">
-            <Check className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
+        <div className="fixed bottom-6 inset-x-0 z-[999999] flex justify-center pointer-events-none px-4">
+          <div className="liquid-glass-dark text-white border border-emerald-400/40 px-4 py-2.5 rounded-2xl text-xs font-bold flex items-center gap-2">
+            <Check className="w-4 h-4 text-emerald-400 shrink-0" />
             <span>{toastMessage}</span>
           </div>
         </div>

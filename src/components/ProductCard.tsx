@@ -1,5 +1,5 @@
 import { useState, useRef, type MouseEvent } from 'react';
-import { Heart, ShoppingBag, Eye, Star, ShieldCheck, SlidersHorizontal, Check, Zap } from 'lucide-react';
+import { Heart, ShoppingBag, Eye, Star, SlidersHorizontal, Check, MessageCircle, Smartphone } from 'lucide-react';
 import { Product, Language, Currency } from '../types';
 import { formatPrice } from '../data/mockData';
 import { triggerFlyToCart } from './FlyingCartAnimation';
@@ -34,8 +34,9 @@ export default function ProductCard({
   onQuickView,
 }: ProductCardProps) {
   const isAr = language === 'ar';
-  const [selectedColor, setSelectedColor] = useState(product.colors[0] || '#0f172a');
+  const [selectedColor] = useState(product.colors[0] || '#0f172a');
   const [addedAnim, setAddedAnim] = useState(false);
+  const [imgFailed, setImgFailed] = useState(false);
   const imgRef = useRef<HTMLImageElement | null>(null);
 
   const handleQuickAdd = (e: MouseEvent) => {
@@ -87,178 +88,142 @@ export default function ProductCard({
   };
 
   return (
-    <div
-      className={`relative h-full w-full min-w-0 transition-all duration-300 ${
-        addedAnim ? 'animate-pulse-forward z-30' : 'hover:-translate-y-1 hover:shadow-xl'
-      }`}
+    <article
+      className={`relative h-full w-full min-w-0 ${addedAnim ? 'animate-pulse-forward z-20' : ''}`}
     >
       <div
         onClick={() => {
           soundFX.playClick();
           onSelect(product);
         }}
-        className={`group bg-white rounded-2xl sm:rounded-3xl border transition-all duration-300 flex flex-col justify-between overflow-hidden cursor-pointer relative h-full w-full min-w-0 ${
-          addedAnim
-            ? 'border-emerald-500 ring-2 ring-emerald-400 shadow-2xl'
-            : 'border-gray-200 hover:border-primary shadow-xs hover:shadow-xl'
+        className={`group liquid-glass liquid-card-hover rounded-[26px] p-2.5 sm:p-3.5 flex flex-col justify-between overflow-hidden cursor-pointer relative h-full w-full min-w-0 ${
+          addedAnim ? 'ring-2 ring-emerald-500' : ''
         }`}
       >
-        {/* 1. Top Badges & Actions */}
-        <div className="relative aspect-square bg-gray-50 overflow-hidden p-2.5 sm:p-4">
-          {/* Floating Brand & Tag */}
-          <div className="absolute top-2.5 left-2.5 rtl:left-auto rtl:right-2.5 z-10 flex flex-col gap-1">
-            <span className="text-[9px] sm:text-[10px] font-mono font-black uppercase bg-tech-dark text-white px-1.5 sm:px-2 py-0.5 rounded-md tracking-wider shadow">
-              {product.brand}
-            </span>
-            {product.tagAr && (
-              <span className="text-[8px] sm:text-[9px] font-bold bg-primary text-white px-1.5 sm:px-2 py-0.5 rounded-md shadow">
-                {isAr ? product.tagAr : product.tag}
-              </span>
-            )}
-          </div>
-
-          {/* Action icons (Wishlist, Compare, Quick View) */}
-          <div className="absolute top-2.5 right-2.5 rtl:right-auto rtl:left-2.5 z-10 flex flex-col gap-1 sm:gap-1.5 opacity-90 group-hover:opacity-100 transition-opacity">
+        {/* 1. Product Image Stage (Translucent Frosted Glass Well) */}
+        <div className="relative aspect-square rounded-[18px] liquid-glass-subtle overflow-hidden mb-3">
+          {/* Minimal Floating Glass Action Buttons */}
+          <div className="absolute top-2.5 left-2.5 rtl:left-2.5 rtl:right-auto ltr:right-2.5 ltr:left-auto z-10 flex flex-col gap-1.5">
             <button
+              type="button"
               onClick={handleWishlist}
-              className={`p-1.5 sm:p-2 rounded-lg sm:rounded-xl shadow backdrop-blur-sm transition-all ${
+              className={`w-8 h-8 rounded-full backdrop-blur-xl border flex items-center justify-center transition-all cursor-pointer ${
                 isWishlisted
-                  ? 'bg-rose-500 text-white'
-                  : 'bg-white/90 text-gray-600 hover:text-rose-500 hover:bg-white'
+                  ? 'bg-rose-500 text-white border-rose-400 shadow'
+                  : 'bg-white/75 text-slate-700 border-white/80 hover:bg-white hover:text-rose-500'
               }`}
               title={isAr ? 'إضافة للمفضلة' : 'Wishlist'}
+              aria-label={isAr ? 'إضافة للمفضلة' : 'Wishlist'}
             >
-              <Heart className={`w-3 h-3 sm:w-3.5 sm:h-3.5 ${isWishlisted ? 'fill-white' : ''}`} />
+              <Heart className={`w-3.5 h-3.5 ${isWishlisted ? 'fill-white' : ''}`} />
             </button>
 
             <button
+              type="button"
               onClick={handleCompare}
-              className={`p-1.5 sm:p-2 rounded-lg sm:rounded-xl shadow backdrop-blur-sm transition-all hidden sm:block ${
+              className={`w-8 h-8 rounded-full backdrop-blur-xl border hidden sm:flex items-center justify-center transition-all cursor-pointer ${
                 isCompared
-                  ? 'bg-cyan-600 text-white'
-                  : 'bg-white/90 text-gray-600 hover:text-cyan-600 hover:bg-white'
+                  ? 'bg-[#0071e3] text-white border-sky-300 shadow'
+                  : 'bg-white/75 text-slate-700 border-white/80 hover:bg-white hover:text-[#0071e3]'
               }`}
-              title={isAr ? 'إضافة للمقارنة' : 'Compare'}
+              title={isAr ? 'مقارنة' : 'Compare'}
+              aria-label={isAr ? 'مقارنة' : 'Compare'}
             >
               <SlidersHorizontal className="w-3.5 h-3.5" />
             </button>
 
             <button
+              type="button"
               onClick={handleQuickView}
-              className="p-1.5 sm:p-2 rounded-lg sm:rounded-xl bg-white/90 text-gray-600 hover:text-primary hover:bg-white shadow backdrop-blur-sm transition-all"
+              className="w-8 h-8 rounded-full bg-white/75 hover:bg-white text-slate-700 hover:text-[#0071e3] border border-white/80 backdrop-blur-xl flex items-center justify-center transition-all cursor-pointer"
               title={isAr ? 'معاينة سريعة' : 'Quick view'}
+              aria-label={isAr ? 'معاينة سريعة' : 'Quick view'}
             >
-              <Eye className="w-3 h-3 sm:w-3.5 sm:h-3.5" />
+              <Eye className="w-3.5 h-3.5" />
             </button>
           </div>
 
-          {/* Product Image */}
-          <img
-            ref={imgRef}
-            src={product.image}
-            alt={product.name}
-            referrerPolicy="no-referrer"
-            onError={(e) => {
-              e.currentTarget.onerror = null;
-              e.currentTarget.src = 'https://images.unsplash.com/photo-1580910051074-3eb694886505?w=600&auto=format&fit=crop&q=80';
-            }}
-            className="w-full h-full object-cover rounded-xl sm:rounded-2xl group-hover:scale-105 transition-transform duration-500"
-          />
-
-          {/* Hover Overlay */}
-          <div className="absolute inset-0 bg-gradient-to-t from-black/75 via-black/20 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300 pointer-events-none rounded-xl sm:rounded-2xl" />
-
-          {/* Fast Delivery Pill */}
-          {product.fastShipping && (
-            <div className="absolute bottom-2 left-2 rtl:left-auto rtl:right-2 bg-emerald-50/95 backdrop-blur-sm text-emerald-800 text-[9px] sm:text-[10px] font-bold px-2 py-0.5 rounded-full border border-emerald-200 flex items-center gap-1 group-hover:opacity-0 transition-opacity duration-200">
-              <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-ping" />
-              <span>{isAr ? 'شحن فوري' : 'Express'}</span>
+          {/* Product Photo with Resilient Fallback */}
+          {imgFailed ? (
+            <div className="w-full h-full flex flex-col items-center justify-center gap-2 bg-gradient-to-br from-sky-50/90 to-blue-100/70 text-[#0071e3]/70 p-4 text-center">
+              <Smartphone className="w-10 h-10" />
+              <span className="text-[11px] font-bold text-slate-600 line-clamp-1">{product.brand}</span>
             </div>
+          ) : (
+            <img
+              ref={imgRef}
+              src={product.image}
+              alt={isAr ? product.nameAr : product.name}
+              referrerPolicy="no-referrer"
+              loading="lazy"
+              onError={() => setImgFailed(true)}
+              className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
+            />
           )}
         </div>
 
-        {/* 2. Product Details */}
-        <div className="p-3 sm:p-4 flex-grow flex flex-col justify-between space-y-2.5 bg-white">
-          <div>
-            {/* Category & Rating */}
-            <div className="flex items-center justify-between text-[10px] sm:text-[11px] text-gray-400 mb-1">
-              <span className="font-semibold text-primary truncate max-w-[65%]">
-                {isAr ? product.categoryNameAr : product.categoryNameEn}
-              </span>
-              <div className="flex items-center gap-0.5 text-amber-500 font-bold font-mono shrink-0">
+        {/* 2. Clean Unboxed Product Metadata & Info */}
+        <div className="flex-grow flex flex-col justify-between gap-3 px-0.5">
+          <div className="space-y-1.5">
+            {/* Unboxed Brand · Category & Rating */}
+            <div className="flex items-center justify-between gap-2 text-[11px] text-slate-500">
+              <div className="flex items-center gap-1.5 truncate">
+                <span className="font-bold text-[#0071e3] uppercase tracking-wide">{product.brand}</span>
+                <span aria-hidden="true">·</span>
+                <span className="truncate">{isAr ? product.categoryNameAr : product.categoryNameEn}</span>
+              </div>
+              <div className="flex items-center gap-0.5 text-amber-600 font-bold tabular-nums shrink-0">
                 <Star className="w-3 h-3 fill-amber-400 text-amber-400" />
                 <span>{product.rating}</span>
               </div>
             </div>
 
             {/* Product Name */}
-            <h3 className="font-black text-gray-900 text-xs sm:text-sm line-clamp-2 leading-snug group-hover:text-primary transition-colors min-h-[2rem]">
+            <h3 className="font-bold text-[#0b1220] text-xs sm:text-sm line-clamp-2 leading-snug group-hover:text-[#0071e3] transition-colors min-h-[2.2rem]">
               {isAr ? product.nameAr : product.name}
             </h3>
 
-            {/* Product Key Specifications Tags */}
-            {product.specs && Object.keys(product.specs).length > 0 && (
-              <div className="hidden sm:flex flex-wrap gap-1.5 my-2">
-                {Object.entries(product.specs).slice(0, 2).map(([key, val]) => (
-                  <span
-                    key={key}
-                    className="text-[10px] bg-gray-100 text-gray-700 px-2 py-0.5 rounded-md font-medium border border-gray-200 truncate max-w-full"
-                    title={isAr ? val.ar : val.en}
-                  >
-                    {isAr ? val.ar : val.en}
-                  </span>
-                ))}
-              </div>
-            )}
+            {/* Clean Quiet Warranty & Authenticity Line */}
+            <p className="text-[11px] text-slate-600 truncate">
+              {isAr
+                ? `ضمان ${product.warrantyYears} سنوات · أصلي معتمد`
+                : `${product.warrantyYears}Y Warranty · Certified Original`}
+            </p>
           </div>
 
-          {/* Price & Warranty & Order Actions */}
-          <div className="pt-2 border-t border-gray-100">
-            <div className="flex items-baseline justify-between mb-1.5">
-              <div className="flex items-baseline gap-1">
-                <span className="text-sm sm:text-base font-black text-gray-900 font-mono">
-                  {formatPrice(product.price, currency, isAr)}
-                </span>
-                {product.originalPrice && (
-                  <span className="text-[10px] sm:text-xs text-gray-400 line-through font-mono">
-                    {formatPrice(product.originalPrice, currency, isAr)}
-                  </span>
-                )}
-              </div>
-
-              <span className="text-[9px] sm:text-[10px] text-emerald-700 font-bold flex items-center gap-0.5 bg-emerald-50 px-1.5 sm:px-2 py-0.5 rounded-md border border-emerald-200 shrink-0">
-                <ShieldCheck className="w-3 h-3" />
-                <span>{product.warrantyYears} {isAr ? 'سنوات ضمان' : 'Yrs'}</span>
+          {/* Price & Dual Liquid Glass Actions */}
+          <div className="pt-2.5 border-t border-slate-900/8 space-y-2.5">
+            <div className="flex items-baseline justify-between gap-1.5 flex-wrap">
+              <span className="text-sm sm:text-base font-extrabold text-[#0b1220] tabular-nums">
+                {formatPrice(product.price, currency, isAr)}
               </span>
+              {product.originalPrice && (
+                <span className="text-[11px] text-slate-400 line-through tabular-nums">
+                  {formatPrice(product.originalPrice, currency, isAr)}
+                </span>
+              )}
             </div>
 
-            {/* Authentic Certified Badge */}
-            <div className="text-[9px] sm:text-[10px] text-gray-600 bg-gray-50 px-2 py-1 rounded-lg flex items-center justify-between mb-2.5 border border-gray-200/80">
-              <span className="font-medium truncate">{isAr ? 'دفع عند الاستلام / حوالة' : 'Cash / Transfer'}</span>
-              <span className="font-bold text-emerald-700 shrink-0">{isAr ? 'أصلي معتمد' : 'Original'}</span>
-            </div>
-
-            {/* Action Buttons: Add to Cart & One-Click Quick Order (Optimized for 2-column side-by-side grid) */}
-            <div className="grid grid-cols-2 gap-1 sm:gap-1.5 pt-1">
+            <div className="grid grid-cols-2 gap-1.5">
               <button
                 type="button"
                 onClick={handleQuickAdd}
-                className={`py-1.5 sm:py-2 px-1 sm:px-2 rounded-xl font-bold text-[10px] sm:text-xs min-w-0 flex items-center justify-center gap-1 transition-all shadow-xs active:scale-95 cursor-pointer border ${
+                className={`py-2 px-2 rounded-xl font-bold text-[11px] sm:text-xs min-w-0 flex items-center justify-center gap-1 transition-all cursor-pointer whitespace-nowrap ${
                   addedAnim
-                    ? 'bg-emerald-600 text-white border-emerald-600 ring-2 ring-emerald-300'
-                    : 'bg-white hover:bg-orange-50 text-orange-700 border-orange-200 hover:border-orange-300 shadow-xs'
+                    ? 'liquid-btn-emerald text-white'
+                    : 'liquid-glass-strong text-[#0b1220] hover:text-[#0071e3] hover:bg-white'
                 }`}
-                title={isAr ? 'إضافة إلى سلة المشتريات' : 'Add to Cart'}
+                title={isAr ? 'إضافة إلى السلة' : 'Add to Cart'}
               >
                 {addedAnim ? (
                   <>
-                    <Check className="w-3 h-3 text-white shrink-0" />
-                    <span className="truncate">{isAr ? 'أُضيف' : 'Added'}</span>
+                    <Check className="w-3.5 h-3.5 shrink-0" />
+                    <span className="truncate">{isAr ? 'تمت الإضافة' : 'Added'}</span>
                   </>
                 ) : (
                   <>
-                    <ShoppingBag className="w-3 h-3 text-orange-600 shrink-0" />
-                    <span className="truncate">{isAr ? 'أضف' : 'Add'}</span>
+                    <ShoppingBag className="w-3.5 h-3.5 text-[#0071e3] shrink-0" />
+                    <span className="truncate">{isAr ? 'أضف للسلة' : 'Add'}</span>
                   </>
                 )}
               </button>
@@ -266,17 +231,16 @@ export default function ProductCard({
               <button
                 type="button"
                 onClick={handleQuickOrder}
-                className="py-1.5 sm:py-2 px-1 sm:px-2 rounded-xl font-black text-[10px] sm:text-xs min-w-0 flex items-center justify-center gap-1 bg-gradient-to-r from-emerald-600 via-teal-600 to-emerald-700 hover:from-emerald-700 hover:to-teal-800 text-white shadow-sm active:scale-95 transition-all cursor-pointer group"
-                title={isAr ? 'طلب سريع فوري عبر واتساب وفاتورة مباشرة' : 'Quick Order via WhatsApp Invoice'}
+                className="py-2 px-2 rounded-xl liquid-btn-primary font-bold text-[11px] sm:text-xs min-w-0 flex items-center justify-center gap-1 cursor-pointer whitespace-nowrap"
+                title={isAr ? 'طلب سريع وفاتورة واتساب' : 'Quick WhatsApp Order'}
               >
-                <Zap className="w-3 h-3 text-amber-300 fill-amber-300 shrink-0 group-hover:scale-110 transition-transform" />
-                <span className="truncate">{isAr ? 'شراء ⚡' : 'Buy ⚡'}</span>
+                <MessageCircle className="w-3.5 h-3.5 shrink-0" />
+                <span className="truncate">{isAr ? 'طلب سريع' : 'Order'}</span>
               </button>
             </div>
           </div>
         </div>
       </div>
-    </div>
+    </article>
   );
 }
-

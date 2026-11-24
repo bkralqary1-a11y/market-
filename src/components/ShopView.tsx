@@ -1,5 +1,5 @@
 import { useState, useMemo, useEffect } from 'react';
-import { Filter, SlidersHorizontal, Sparkles } from 'lucide-react';
+import { Filter, SlidersHorizontal, X, SearchX } from 'lucide-react';
 import { Product, Language, Currency, CategoryId } from '../types';
 import ProductCard from './ProductCard';
 import { formatPrice } from '../data/mockData';
@@ -43,7 +43,6 @@ export default function ShopView({
   const [sortBy, setSortBy] = useState<'featured' | 'price-low' | 'price-high' | 'rating'>('featured');
   const [isMobileFilterOpen, setIsMobileFilterOpen] = useState(false);
 
-  // Sync category if initialCategory changes
   useEffect(() => {
     if (initialCategory) {
       setSelectedCategory(initialCategory);
@@ -93,150 +92,165 @@ export default function ShopView({
     setFastShippingOnly(false);
   };
 
-  return (
-    <div id="shop-view-container" className="py-10 bg-gray-50 min-h-screen">
-      <div className="container mx-auto px-4">
-        {/* Breadcrumb & Title */}
-        <div className="mb-6">
-          <h1 className="text-2xl sm:text-3xl font-extrabold text-gray-dark tracking-tight">
-            {isAr ? 'كتالوج الأجهزة والملحقات المعتمدة' : 'Official Hardware & Accessories Catalog'}
-          </h1>
-          <p className="text-xs text-gray-500 mt-1">
-            {isAr
-              ? `عرض ${filteredProducts.length} من أصل ${products.length} جهاز وملحق معتمد`
-              : `Showing ${filteredProducts.length} certified electronics`}
-          </p>
-        </div>
+  const filterPanelContent = (
+    <div className="space-y-6">
+      <div className="flex items-center justify-between pb-3 border-b border-slate-200/70">
+        <span className="font-extrabold text-[#0b1220] text-sm flex items-center gap-2">
+          <SlidersHorizontal className="w-4 h-4 text-[#0071e3]" />
+          <span>{isAr ? 'تصفية النتائج' : 'Filter Products'}</span>
+        </span>
+        <button
+          type="button"
+          onClick={resetFilters}
+          className="text-xs font-bold text-[#0071e3] hover:underline cursor-pointer"
+        >
+          {isAr ? 'إعادة ضبط' : 'Reset'}
+        </button>
+      </div>
 
-        {/* 5 Requested Category Pills Bar */}
-        <div className="flex items-center gap-2 overflow-x-auto pb-3 mb-6 scrollbar-none">
-          {categories.map((cat) => (
-            <button
-              key={cat.id}
-              onClick={() => {
-                setSelectedCategory(cat.id);
-                if (onCategoryChange) onCategoryChange(cat.id);
-              }}
-              className={`text-xs font-bold px-4 py-2 rounded-xl shrink-0 transition-all border ${
-                selectedCategory === cat.id
-                  ? 'bg-tech-dark text-white border-tech-dark shadow-md'
-                  : 'bg-white text-gray-700 border-gray-line hover:border-gray-300'
-              }`}
+      {/* Brands */}
+      <div>
+        <h4 className="text-xs font-extrabold text-[#0b1220] mb-3 uppercase tracking-wider">
+          {isAr ? 'العلامة التجارية' : 'Brands'}
+        </h4>
+        <div className="space-y-2.5 text-xs">
+          {allBrands.map((b) => (
+            <label
+              key={b}
+              className="flex items-center justify-between cursor-pointer text-slate-700 hover:text-[#0b1220]"
             >
-              {isAr ? cat.nameAr : cat.nameEn}
-            </button>
+              <div className="flex items-center gap-2.5">
+                <input
+                  type="checkbox"
+                  checked={selectedBrands.includes(b)}
+                  onChange={() => toggleBrand(b)}
+                  className="rounded border-slate-300 text-[#0071e3] accent-[#0071e3] w-4 h-4 cursor-pointer"
+                />
+                <span className="font-semibold">{b}</span>
+              </div>
+              <span className="text-[11px] font-mono tabular-nums text-slate-400">
+                {products.filter((p) => p.brand === b).length}
+              </span>
+            </label>
           ))}
         </div>
+      </div>
 
-        {/* Main Grid: Filters Sidebar (1 Col) + Product Grid (3 Cols) */}
-        <div className="grid grid-cols-1 lg:grid-cols-4 gap-6 lg:gap-8 w-full min-w-0">
-          {/* Desktop Filters Sidebar */}
-          <aside className="hidden lg:block space-y-6">
-            <div className="bg-white p-6 rounded-3xl border border-gray-line shadow-xs space-y-6">
-              <div className="flex items-center justify-between pb-3 border-b border-gray-line">
-                <span className="font-extrabold text-gray-dark text-sm flex items-center gap-1.5">
-                  <SlidersHorizontal className="w-4 h-4 text-primary" />
-                  <span>{isAr ? 'تصفية النتائج' : 'Filter Products'}</span>
-                </span>
-                <button
-                  onClick={resetFilters}
-                  className="text-[11px] font-bold text-primary hover:underline"
-                >
-                  {isAr ? 'إعادة ضبط' : 'Reset All'}
-                </button>
-              </div>
+      {/* Max Price */}
+      <div className="pt-4 border-t border-slate-200/70">
+        <div className="flex items-center justify-between mb-2">
+          <h4 className="text-xs font-extrabold text-[#0b1220] uppercase tracking-wider">
+            {isAr ? 'أقصى سعر' : 'Max Price'}
+          </h4>
+          <span className="text-xs font-mono tabular-nums font-extrabold text-[#0071e3]">
+            {formatPrice(maxPrice, currency, isAr)}
+          </span>
+        </div>
+        <input
+          type="range"
+          min="10000"
+          max="1500000"
+          step="10000"
+          value={maxPrice}
+          onChange={(e) => setMaxPrice(Number(e.target.value))}
+          className="w-full accent-[#0071e3] cursor-pointer"
+        />
+      </div>
 
-              {/* Brands filter */}
-              <div>
-                <h4 className="text-xs font-bold text-gray-dark mb-3 uppercase tracking-wider">
-                  {isAr ? 'العلامة التجارية' : 'Brands'}
-                </h4>
-                <div className="space-y-2 text-xs">
-                  {allBrands.map((b) => (
-                    <label
-                      key={b}
-                      className="flex items-center justify-between cursor-pointer text-gray-600 hover:text-gray-dark"
-                    >
-                      <div className="flex items-center gap-2">
-                        <input
-                          type="checkbox"
-                          checked={selectedBrands.includes(b)}
-                          onChange={() => toggleBrand(b)}
-                          className="rounded border-gray-300 text-primary focus:ring-primary w-4 h-4"
-                        />
-                        <span>{b}</span>
-                      </div>
-                      <span className="text-[10px] font-mono text-gray-400">
-                        {products.filter((p) => p.brand === b).length}
-                      </span>
-                    </label>
-                  ))}
-                </div>
-              </div>
+      {/* Availability Toggles */}
+      <div className="pt-4 border-t border-slate-200/70 space-y-3 text-xs">
+        <label className="flex items-center justify-between cursor-pointer">
+          <span className="text-slate-700 font-semibold">{isAr ? 'شحن فوري 24 ساعة' : 'Express 24h'}</span>
+          <input
+            type="checkbox"
+            checked={fastShippingOnly}
+            onChange={(e) => setFastShippingOnly(e.target.checked)}
+            className="rounded border-slate-300 accent-[#0071e3] w-4 h-4 cursor-pointer"
+          />
+        </label>
+        <label className="flex items-center justify-between cursor-pointer">
+          <span className="text-slate-700 font-semibold">{isAr ? 'المتوفر في المخزون فقط' : 'In Stock Only'}</span>
+          <input
+            type="checkbox"
+            checked={inStockOnly}
+            onChange={(e) => setInStockOnly(e.target.checked)}
+            className="rounded border-slate-300 accent-[#0071e3] w-4 h-4 cursor-pointer"
+          />
+        </label>
+      </div>
+    </div>
+  );
 
-              {/* Price Range */}
-              <div className="pt-4 border-t border-gray-line">
-                <div className="flex items-center justify-between mb-2">
-                  <h4 className="text-xs font-bold text-gray-dark uppercase tracking-wider">
-                    {isAr ? 'أقصى سعر' : 'Max Price'}
-                  </h4>
-                  <span className="text-xs font-mono font-bold text-orange-600">
-                    {formatPrice(maxPrice, currency, isAr)}
-                  </span>
-                </div>
-                <input
-                  type="range"
-                  min="10000"
-                  max="1500000"
-                  step="10000"
-                  value={maxPrice}
-                  onChange={(e) => setMaxPrice(Number(e.target.value))}
-                  className="w-full accent-orange-600"
-                />
-              </div>
+  return (
+    <div id="shop-view-container" className="py-8 sm:py-10 min-h-screen">
+      <div className="container mx-auto px-4">
+        {/* Header */}
+        <div className="mb-6 flex flex-col sm:flex-row sm:items-end justify-between gap-2">
+          <div>
+            <h1 className="text-2xl sm:text-3xl font-black text-[#0b1220] tracking-tight">
+              {isAr ? 'كتالوج الأجهزة والملحقات المعتمدة' : 'Official Hardware & Accessories Catalog'}
+            </h1>
+            <p className="text-xs text-slate-600 mt-1 font-medium tabular-nums">
+              {isAr
+                ? `عرض ${filteredProducts.length} من أصل ${products.length} جهاز وملحق أصلي`
+                : `Showing ${filteredProducts.length} of ${products.length} certified products`}
+            </p>
+          </div>
+        </div>
 
-              {/* Fast Shipping & Stock Toggles */}
-              <div className="pt-4 border-t border-gray-line space-y-3 text-xs">
-                <label className="flex items-center justify-between cursor-pointer">
-                  <span className="text-gray-700 font-semibold">{isAr ? 'شحن فوري 24 ساعة' : 'Express 24h'}</span>
-                  <input
-                    type="checkbox"
-                    checked={fastShippingOnly}
-                    onChange={(e) => setFastShippingOnly(e.target.checked)}
-                    className="rounded border-gray-300 text-orange-600 focus:ring-orange-500 w-4 h-4"
-                  />
-                </label>
-                <label className="flex items-center justify-between cursor-pointer">
-                  <span className="text-gray-700 font-semibold">{isAr ? 'المتوفر في المخزون فقط' : 'In Stock Only'}</span>
-                  <input
-                    type="checkbox"
-                    checked={inStockOnly}
-                    onChange={(e) => setInStockOnly(e.target.checked)}
-                    className="rounded border-gray-300 text-orange-600 focus:ring-orange-500 w-4 h-4"
-                  />
-                </label>
-              </div>
+        {/* Liquid Glass Segmented Category Bar */}
+        <div className="liquid-glass-capsule p-1.5 rounded-[22px] inline-flex max-w-full items-center gap-1 overflow-x-auto no-scrollbar mb-7">
+          {categories.map((cat) => {
+            const active = selectedCategory === cat.id;
+            return (
+              <button
+                key={cat.id}
+                onClick={() => {
+                  setSelectedCategory(cat.id);
+                  if (onCategoryChange) onCategoryChange(cat.id);
+                }}
+                className={`text-xs font-extrabold px-4 py-2 rounded-2xl shrink-0 whitespace-nowrap transition-all cursor-pointer ${
+                  active
+                    ? 'liquid-btn-primary text-white'
+                    : 'text-slate-700 hover:text-[#0071e3] hover:bg-white/60'
+                }`}
+              >
+                {isAr ? cat.nameAr : cat.nameEn}
+              </button>
+            );
+          })}
+        </div>
+
+        {/* Main Grid */}
+        <div className="grid grid-cols-1 lg:grid-cols-4 gap-6 lg:gap-7 w-full min-w-0">
+          {/* Desktop Liquid Glass Sidebar */}
+          <aside className="hidden lg:block">
+            <div className="liquid-glass-strong p-6 rounded-[28px] sticky top-28">
+              {filterPanelContent}
             </div>
           </aside>
 
-          {/* Right Product Grid Area */}
-          <div className="lg:col-span-3 space-y-6 w-full min-w-0">
-            {/* Top Toolbar: Sorting and Mobile Filter button */}
-            <div className="bg-white p-4 rounded-2xl border border-gray-line shadow-xs flex items-center justify-between gap-3">
+          {/* Product Grid Area */}
+          <div className="lg:col-span-3 space-y-5 w-full min-w-0">
+            {/* Liquid Glass Toolbar */}
+            <div className="liquid-glass p-3.5 sm:p-4 rounded-[22px] flex items-center justify-between gap-3">
               <button
+                type="button"
                 onClick={() => setIsMobileFilterOpen(true)}
-                className="lg:hidden flex items-center gap-1.5 bg-gray-100 px-3 py-2 rounded-xl text-xs font-bold text-gray-700"
+                className="lg:hidden flex items-center gap-1.5 liquid-glass-subtle px-3.5 py-2 rounded-xl text-xs font-bold text-[#0b1220] cursor-pointer"
               >
-                <Filter className="w-4 h-4" />
+                <Filter className="w-4 h-4 text-[#0071e3]" />
                 <span>{isAr ? 'الفلاتر' : 'Filters'}</span>
               </button>
 
               <div className="flex items-center gap-2 ml-auto rtl:ml-0 rtl:mr-auto text-xs">
-                <span className="text-gray-400 hidden sm:inline">{isAr ? 'ترتيب حسب:' : 'Sort by:'}</span>
+                <span className="text-slate-500 font-semibold hidden sm:inline">
+                  {isAr ? 'ترتيب حسب:' : 'Sort by:'}
+                </span>
                 <select
                   value={sortBy}
-                  onChange={(e) => setSortBy(e.target.value as any)}
-                  className="bg-gray-50 border border-gray-line rounded-xl px-3 py-1.5 text-xs font-bold text-gray-700 focus:outline-none focus:border-primary"
+                  onChange={(e) => setSortBy(e.target.value as 'featured' | 'price-low' | 'price-high' | 'rating')}
+                  className="liquid-glass-strong rounded-xl px-3.5 py-2 text-xs font-bold text-[#0b1220] focus:outline-none focus:ring-2 focus:ring-[#0071e3]/30 cursor-pointer"
                 >
                   <option value="featured">{isAr ? 'الأكثر طلباً والشائع' : 'Featured & Popular'}</option>
                   <option value="price-low">{isAr ? 'السعر: من الأقل للأعلى' : 'Price: Low to High'}</option>
@@ -246,25 +260,28 @@ export default function ShopView({
               </div>
             </div>
 
-            {/* Products Grid: Always 2 products side-by-side on mobile and small screens */}
+            {/* Grid */}
             {filteredProducts.length === 0 ? (
-              <div className="bg-white p-12 rounded-3xl border border-gray-line text-center shadow-xs">
-                <Sparkles className="w-10 h-10 text-gray-300 mx-auto mb-3" />
-                <h3 className="text-base font-bold text-gray-dark mb-1">
+              <div className="liquid-glass-strong p-12 rounded-[28px] text-center">
+                <SearchX className="w-10 h-10 text-slate-400 mx-auto mb-3" />
+                <h3 className="text-base font-extrabold text-[#0b1220] mb-1">
                   {isAr ? 'لا توجد منتجات مطابقة لخيارات الفلترة' : 'No products matched your filters'}
                 </h3>
-                <p className="text-xs text-gray-500 mb-4">
-                  {isAr ? 'جرّب توسيع نطاق السعر أو إلغاء تحديد بعض العلامات التجارية.' : 'Try widening your price range.'}
+                <p className="text-xs text-slate-600 mb-5">
+                  {isAr
+                    ? 'جرّب توسيع نطاق السعر أو إلغاء تحديد بعض العلامات التجارية.'
+                    : 'Try widening your price range or clearing selected brands.'}
                 </p>
                 <button
+                  type="button"
                   onClick={resetFilters}
-                  className="bg-primary text-white text-xs font-bold px-5 py-2 rounded-xl shadow"
+                  className="liquid-btn-primary text-xs font-extrabold px-6 py-2.5 rounded-2xl cursor-pointer"
                 >
                   {isAr ? 'إعادة ضبط الفلاتر' : 'Reset Filters'}
                 </button>
               </div>
             ) : (
-              <div className="grid grid-cols-2 sm:grid-cols-2 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-3 gap-2.5 sm:gap-4 md:gap-6 w-full min-w-0">
+              <div className="grid grid-cols-2 sm:grid-cols-2 md:grid-cols-2 lg:grid-cols-3 gap-3 sm:gap-5 w-full min-w-0">
                 {filteredProducts.map((p) => (
                   <ProductCard
                     key={p.id}
@@ -285,6 +302,40 @@ export default function ShopView({
           </div>
         </div>
       </div>
+
+      {/* Mobile Liquid Glass Filter Drawer */}
+      {isMobileFilterOpen && (
+        <div
+          className="fixed inset-0 z-50 bg-slate-950/50 backdrop-blur-sm flex items-end sm:items-center justify-center p-3 lg:hidden"
+          onClick={() => setIsMobileFilterOpen(false)}
+        >
+          <div
+            className="liquid-glass-strong w-full max-w-md rounded-[28px] p-6 max-h-[82vh] overflow-y-auto"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-between mb-4">
+              <span className="text-sm font-black text-[#0b1220]">
+                {isAr ? 'خيارات الفلترة' : 'Filter Options'}
+              </span>
+              <button
+                type="button"
+                onClick={() => setIsMobileFilterOpen(false)}
+                className="p-1.5 rounded-full hover:bg-white/60 text-slate-600 cursor-pointer"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+            {filterPanelContent}
+            <button
+              type="button"
+              onClick={() => setIsMobileFilterOpen(false)}
+              className="liquid-btn-primary w-full mt-6 py-3 rounded-2xl text-xs font-extrabold cursor-pointer"
+            >
+              {isAr ? `عرض النتائج (${filteredProducts.length})` : `Show Results (${filteredProducts.length})`}
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
