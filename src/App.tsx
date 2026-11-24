@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { onAuthStateChanged, signOut, type User } from 'firebase/auth';
+import { onAuthStateChanged, getRedirectResult, signOut, type User } from 'firebase/auth';
 import { PageView, Language, Currency, CategoryId, Product, CartItem, HeroSlideItem } from './types';
 import { mockProducts } from './data/mockData';
 import {
@@ -84,11 +84,37 @@ export default function App() {
     setTimeout(() => setAdminToast(null), 3200);
   };
 
-  // Subscribe to Firebase Auth state
+  // Subscribe to Firebase Auth state & handle redirect login completion
   useEffect(() => {
+    getRedirectResult(auth)
+      .then((result) => {
+        if (result?.user && isVerifiedAdminUser(result.user)) {
+          try {
+            sessionStorage.removeItem('saddam_pending_admin_redirect');
+          } catch {
+            // ignore
+          }
+          setAdminModeEnabled(true);
+          showAdminToast('أهلاً بك! تم تفعيل وضع التعديل المباشر للمتجر');
+        }
+      })
+      .catch((err) => {
+        console.error('Redirect auth error:', err);
+      });
+
     const unsub = onAuthStateChanged(auth, (user) => {
       setAuthUser(user);
-      if (!isVerifiedAdminUser(user)) {
+      if (isVerifiedAdminUser(user)) {
+        try {
+          if (sessionStorage.getItem('saddam_pending_admin_redirect') === '1') {
+            sessionStorage.removeItem('saddam_pending_admin_redirect');
+            setAdminModeEnabled(true);
+            showAdminToast('أهلاً بك! تم تفعيل وضع التعديل المباشر للمتجر');
+          }
+        } catch {
+          // ignore
+        }
+      } else {
         setAdminModeEnabled(false);
       }
     });
@@ -100,11 +126,11 @@ export default function App() {
     const unsubProducts = subscribeToProducts((list, hasDocs) => {
       setCloudProducts(list);
       setHasCloudProducts(hasDocs);
-    });
+    }, isAdminVerified);
     const unsubSlides = subscribeToHeroSlides((list, hasDocs) => {
       setCloudSlides(list);
       setHasCloudSlides(hasDocs);
-    });
+    }, isAdminVerified);
     const unsubConfig = subscribeToSiteConfig((cfg, hasDoc) => {
       setSiteConfig(cfg);
       setHasCloudConfig(hasDoc);
@@ -114,7 +140,7 @@ export default function App() {
       unsubSlides();
       unsubConfig();
     };
-  }, []);
+  }, [isAdminVerified]);
 
   // Navigation state
   const [currentView, setCurrentView] = useState<PageView>('home');

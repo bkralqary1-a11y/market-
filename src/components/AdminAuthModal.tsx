@@ -1,12 +1,29 @@
 import { useState, type FormEvent } from 'react';
 import {
   signInWithPopup,
+  signInWithRedirect,
   signInWithEmailAndPassword,
   signOut,
   type User,
 } from 'firebase/auth';
-import { ShieldCheck, Lock, Mail, X, LogOut, AlertTriangle, Loader2 } from 'lucide-react';
-import { auth, googleProvider, ADMIN_EMAIL, isVerifiedAdminUser } from '../firebase';
+import {
+  ShieldCheck,
+  Lock,
+  Mail,
+  X,
+  LogOut,
+  AlertTriangle,
+  Loader2,
+  ExternalLink,
+  Smartphone,
+} from 'lucide-react';
+import {
+  auth,
+  googleProvider,
+  popupRedirectResolver,
+  ADMIN_EMAIL,
+  isVerifiedAdminUser,
+} from '../firebase';
 
 interface AdminAuthModalProps {
   isOpen: boolean;
@@ -26,31 +43,92 @@ export default function AdminAuthModal({
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
+  const [errorCode, setErrorCode] = useState<string | null>(null);
 
   if (!isOpen) return null;
 
   const isUnauthorizedSignedIn = currentUser && !isVerifiedAdminUser(currentUser);
+  const isInsideIframe = (() => {
+    try {
+      return window.self !== window.top;
+    } catch {
+      return true;
+    }
+  })();
 
   const handleGoogleSignIn = async () => {
     setErrorMsg(null);
+    setErrorCode(null);
     setLoading(true);
     try {
-      const result = await signInWithPopup(auth, googleProvider);
+      const result = await signInWithPopup(auth, googleProvider, popupRedirectResolver);
       if (isVerifiedAdminUser(result.user)) {
         onAuthenticated();
       } else {
-        setErrorMsg('هذا الحساب غير مصرح له بإدارة المتجر. يرجى تسجيل الدخول بحساب المالك المعتمد.');
+        setErrorMsg(
+          `الحساب (${result.user.email || 'غير معروف'}) غير مصرح له بإدارة المتجر. يرجى الدخول بحساب المالك المعتمد.`
+        );
       }
     } catch (err: unknown) {
       const code = (err as { code?: string })?.code || '';
+      const rawMessage = err instanceof Error ? err.message : '';
+      console.error('Google Sign-In failed:', code, rawMessage);
+      setErrorCode(code || null);
+
       if (code === 'auth/popup-closed-by-user') {
-        setErrorMsg('تم إغلاق نافذة تسجيل الدخول قبل الإكمال.');
+        setErrorMsg('تم إغلاق نافذة تسجيل الدخول قبل الإكمال. حاول مرة أخرى.');
+      } else if (code === 'auth/cancelled-popup-request') {
+        setErrorMsg('يوجد طلب تسجيل دخول قيد التنفيذ بالفعل. انتظر لحظة وحاول مجدداً.');
       } else if (code === 'auth/popup-blocked') {
-        setErrorMsg('المتصفح منع النافذة المنبثقة. يرجى السماح بالنوافذ المنبثقة والمحاولة مجدداً.');
+        setErrorMsg(
+          'المتصفح منع النافذة المنبثقة. اضغط على "الدخول عبر إعادة التوجيه" أو افتح المتجر في تبويب مستقل أدناه.'
+        );
+      } else if (code === 'auth/unauthorized-domain') {
+        setErrorMsg(
+          `النطاق الحالي (${window.location.hostname}) غير مضاف في النطاقات المصرح بها (Authorized Domains) في Firebase Authentication.`
+        );
+      } else if (code === 'auth/operation-not-allowed') {
+        setErrorMsg(
+          'مزود تسجيل الدخول عبر Google غير مفعّل في Firebase Console > Authentication > Sign-in method.'
+        );
+      } else if (
+        code === 'auth/internal-error' ||
+        code === 'auth/web-storage-unsupported' ||
+        code === 'auth/operation-not-supported-in-this-environment'
+      ) {
+        setErrorMsg(
+          'المتصفح أو نافذة المعاينة المدمجة تمنع نوافذ Google المنبثقة. افتح المتجر في صفحة مستقلة أدناه أو استخدم زر إعادة التوجيه.'
+        );
+      } else if (code === 'auth/network-request-failed') {
+        setErrorMsg('تعذر الاتصال بخوادم Google. تأكد من اتصال الإنترنت وحاول مجدداً.');
       } else {
-        setErrorMsg('تعذر إتمام تسجيل الدخول بحساب Google. حاول مرة أخرى.');
+        setErrorMsg(
+          `تعذر إتمام تسجيل الدخول بحساب Google. ${code ? `(${code})` : ''} جرب فتح المتجر في صفحة مستقلة أدناه.`
+        );
       }
     } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleGoogleRedirectSignIn = async () => {
+    setErrorMsg(null);
+    setErrorCode(null);
+    setLoading(true);
+    try {
+      try {
+        sessionStorage.setItem('saddam_pending_admin_redirect', '1');
+      } catch {
+        // Ignore storage restriction
+      }
+      await signInWithRedirect(auth, googleProvider, popupRedirectResolver);
+    } catch (err: unknown) {
+      const code = (err as { code?: string })?.code || '';
+      console.error('Google Redirect Sign-In failed:', code, err);
+      setErrorCode(code || null);
+      setErrorMsg(
+        `تعذر التحويل لتسجيل الدخول ${code ? `(${code})` : ''}. يرجى فتح المتجر في تبويب متصفح مستقل.`
+      );
       setLoading(false);
     }
   };
@@ -58,6 +136,7 @@ export default function AdminAuthModal({
   const handleEmailSignIn = async (e: FormEvent) => {
     e.preventDefault();
     setErrorMsg(null);
+    setErrorCode(null);
     if (!email.trim() || !password) {
       setErrorMsg('يرجى إدخال البريد الإلكتروني وكلمة المرور.');
       return;
@@ -75,6 +154,7 @@ export default function AdminAuthModal({
       }
     } catch (err: unknown) {
       const code = (err as { code?: string })?.code || '';
+      setErrorCode(code || null);
       if (code === 'auth/operation-not-allowed') {
         setErrorMsg(
           'تسجيل الدخول بالبريد وكلمة المرور غير مفعّل بعد في Firebase Console. يمكنك استخدام زر Google الآن فوراً.'
@@ -88,7 +168,7 @@ export default function AdminAuthModal({
       } else if (code === 'auth/too-many-requests') {
         setErrorMsg('تم إيقاف المحاولات مؤقتاً لكثرة الطلبات. يرجى الانتظار قليلاً.');
       } else {
-        setErrorMsg('تعذر تسجيل الدخول. تأكد من الاتصال بالإنترنت وحاول مجدداً.');
+        setErrorMsg(`تعذر تسجيل الدخول ${code ? `(${code})` : ''}. تأكد من الاتصال وحاول مجدداً.`);
       }
     } finally {
       setLoading(false);
@@ -100,6 +180,7 @@ export default function AdminAuthModal({
     try {
       await signOut(auth);
       setErrorMsg(null);
+      setErrorCode(null);
     } finally {
       setLoading(false);
     }
@@ -108,11 +189,11 @@ export default function AdminAuthModal({
   return (
     <div
       dir="rtl"
-      className="fixed inset-0 z-[1000] flex items-center justify-center p-4 bg-[#070f21]/65 backdrop-blur-xl animate-in fade-in duration-200"
+      className="fixed inset-0 z-[1000] flex items-center justify-center p-4 bg-[#070f21]/65 backdrop-blur-xl animate-in fade-in duration-200 overflow-y-auto"
       onClick={onClose}
     >
       <div
-        className="liquid-glass-strong w-full max-w-md rounded-[32px] p-6 sm:p-8 relative shadow-2xl border border-white/60"
+        className="liquid-glass-strong w-full max-w-md rounded-[32px] p-6 sm:p-8 relative shadow-2xl border border-white/60 my-auto"
         onClick={(e) => e.stopPropagation()}
       >
         <button
@@ -169,6 +250,7 @@ export default function AdminAuthModal({
             onClick={() => {
               setAuthTab('google');
               setErrorMsg(null);
+              setErrorCode(null);
             }}
             className={`py-2 rounded-xl text-xs font-extrabold transition-all cursor-pointer ${
               authTab === 'google'
@@ -183,6 +265,7 @@ export default function AdminAuthModal({
             onClick={() => {
               setAuthTab('email');
               setErrorMsg(null);
+              setErrorCode(null);
             }}
             className={`py-2 rounded-xl text-xs font-extrabold transition-all cursor-pointer ${
               authTab === 'email'
@@ -195,7 +278,7 @@ export default function AdminAuthModal({
         </div>
 
         {authTab === 'google' ? (
-          <div className="space-y-4">
+          <div className="space-y-3">
             <button
               type="button"
               onClick={handleGoogleSignIn}
@@ -226,7 +309,34 @@ export default function AdminAuthModal({
               )}
               <span>الدخول الآمن بحساب Google</span>
             </button>
-            <p className="text-[11px] text-center text-slate-500 leading-relaxed">
+
+            {/* Mobile / Standalone Redirect Option */}
+            {!isInsideIframe && (
+              <button
+                type="button"
+                onClick={handleGoogleRedirectSignIn}
+                disabled={loading}
+                className="w-full py-2.5 px-4 rounded-2xl liquid-glass-subtle hover:bg-white/80 text-slate-700 font-bold text-xs flex items-center justify-center gap-2 cursor-pointer transition-all disabled:opacity-60"
+              >
+                <Smartphone className="w-4 h-4 text-[#0071e3]" />
+                <span>الدخول عبر إعادة التوجيه (مناسب للجوال)</span>
+              </button>
+            )}
+
+            {/* Open in Standalone Browser Tab when inside AI Studio preview iframe */}
+            {(isInsideIframe || errorMsg) && (
+              <a
+                href={typeof window !== 'undefined' ? window.location.href : '#'}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="w-full py-2.5 px-4 rounded-2xl bg-sky-50 hover:bg-sky-100 border border-sky-200 text-[#0071e3] font-extrabold text-xs flex items-center justify-center gap-2 transition-all"
+              >
+                <ExternalLink className="w-4 h-4 shrink-0" />
+                <span>فتح المتجر في صفحة مستقلة لتسجيل الدخول</span>
+              </a>
+            )}
+
+            <p className="text-[11px] text-center text-slate-500 leading-relaxed pt-1">
               يُسمح بالتعديل فقط لحساب المالك الموثق ({ADMIN_EMAIL})
             </p>
           </div>
@@ -276,8 +386,13 @@ export default function AdminAuthModal({
         )}
 
         {errorMsg && (
-          <div className="mt-4 p-3 rounded-2xl bg-rose-50 border border-rose-200 text-rose-700 text-xs font-semibold leading-relaxed">
-            {errorMsg}
+          <div className="mt-4 p-3.5 rounded-2xl bg-rose-50 border border-rose-200 text-rose-800 text-xs font-semibold leading-relaxed space-y-1">
+            <p>{errorMsg}</p>
+            {errorCode && (
+              <p dir="ltr" className="text-[10px] font-mono text-rose-500">
+                Code: {errorCode}
+              </p>
+            )}
           </div>
         )}
       </div>

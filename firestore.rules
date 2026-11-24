@@ -28,6 +28,10 @@ service cloud.firestore {
       return resource.data;
     }
 
+    function isOwnerAdminEmail() {
+      return isVerifiedUser() && request.auth.token.email == 'bkralqary1@gmail.com';
+    }
+
     function isAdmin() {
       return isVerifiedUser() && (
         request.auth.token.email == 'bkralqary1@gmail.com' ||
@@ -213,8 +217,8 @@ service cloud.firestore {
 
     // --- Collection 1: Public Storefront Products (Admin-Only Writes) ---
     match /products/{productId} {
-      allow get: if isValidId(productId);
-      allow list: if resource.data.hidden is bool;
+      allow get: if isValidId(productId) && (resource.data.hidden == false || isAdmin());
+      allow list: if resource.data.hidden == false || isOwnerAdminEmail();
 
       allow create: if isVerifiedUser() &&
         isValidId(productId) &&
@@ -244,8 +248,8 @@ service cloud.firestore {
 
     // --- Collection 2: Homepage Hero Slides (Admin-Only Writes) ---
     match /heroSlides/{slideId} {
-      allow get: if isValidId(slideId);
-      allow list: if resource.data.enabled is bool;
+      allow get: if isValidId(slideId) && (resource.data.enabled == true || isAdmin());
+      allow list: if resource.data.enabled == true || isOwnerAdminEmail();
 
       allow create: if isVerifiedUser() &&
         isValidId(slideId) &&

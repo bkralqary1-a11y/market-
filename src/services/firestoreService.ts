@@ -6,6 +6,8 @@ import {
   deleteDoc,
   serverTimestamp,
   getDoc,
+  query,
+  where,
   Timestamp,
 } from 'firebase/firestore';
 import { db, OperationType, handleFirestoreError } from '../firebase';
@@ -324,11 +326,13 @@ export function sanitizeSiteConfigForFirestore(config: SiteConfig): Record<strin
 // --- Real-Time Listeners ---
 
 export function subscribeToProducts(
-  onData: (products: Product[], hasCloudDocs: boolean) => void
+  onData: (products: Product[], hasCloudDocs: boolean) => void,
+  includeHidden = false
 ) {
   const colRef = collection(db, 'products');
+  const q = includeHidden ? colRef : query(colRef, where('hidden', '==', false));
   return onSnapshot(
-    colRef,
+    q,
     (snapshot) => {
       if (snapshot.empty) {
         onData([], false);
@@ -352,8 +356,6 @@ export function subscribeToProducts(
       onData(list, true);
     },
     (error) => {
-      console.error('Products listener error:', error);
-      // Do not crash public storefront on transient network error
       try {
         handleFirestoreError(error, OperationType.LIST, 'products');
       } catch {
@@ -364,11 +366,13 @@ export function subscribeToProducts(
 }
 
 export function subscribeToHeroSlides(
-  onData: (slides: (HeroSlideItem & { order?: number })[], hasCloudDocs: boolean) => void
+  onData: (slides: (HeroSlideItem & { order?: number })[], hasCloudDocs: boolean) => void,
+  includeDisabled = false
 ) {
   const colRef = collection(db, 'heroSlides');
+  const q = includeDisabled ? colRef : query(colRef, where('enabled', '==', true));
   return onSnapshot(
-    colRef,
+    q,
     (snapshot) => {
       if (snapshot.empty) {
         onData([], false);

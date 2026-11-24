@@ -1,16 +1,47 @@
-import { initializeApp } from 'firebase/app';
-import { getAuth, GoogleAuthProvider } from 'firebase/auth';
+import { initializeApp, getApps, getApp } from 'firebase/app';
+import {
+  initializeAuth,
+  getAuth,
+  GoogleAuthProvider,
+  indexedDBLocalPersistence,
+  browserLocalPersistence,
+  browserSessionPersistence,
+  inMemoryPersistence,
+  browserPopupRedirectResolver,
+  type Auth,
+} from 'firebase/auth';
 import { getFirestore, doc, getDocFromServer } from 'firebase/firestore';
 import firebaseConfig from '../firebase-applet-config.json';
 
 export const ADMIN_EMAIL = 'bkralqary1@gmail.com';
 
-const app = initializeApp(firebaseConfig);
+const app = getApps().length > 0 ? getApp() : initializeApp(firebaseConfig);
 
 // Connect specifically to the provisioned named Firestore database
 export const db = getFirestore(app, firebaseConfig.firestoreDatabaseId);
-export const auth = getAuth(app);
+
+// Initialize Auth with resilient persistence fallback for mobile browsers & embedded iframes
+let authInstance: Auth;
+try {
+  authInstance = initializeAuth(app, {
+    persistence: [
+      indexedDBLocalPersistence,
+      browserLocalPersistence,
+      browserSessionPersistence,
+      inMemoryPersistence,
+    ],
+    popupRedirectResolver: browserPopupRedirectResolver,
+  });
+} catch {
+  authInstance = getAuth(app);
+}
+
+export const auth = authInstance;
+export const popupRedirectResolver = browserPopupRedirectResolver;
+
 export const googleProvider = new GoogleAuthProvider();
+googleProvider.addScope('email');
+googleProvider.addScope('profile');
 googleProvider.setCustomParameters({ prompt: 'select_account' });
 
 export enum OperationType {
@@ -69,7 +100,9 @@ export function handleFirestoreError(
   throw new Error(JSON.stringify(errInfo));
 }
 
-export function isVerifiedAdminUser(user: { email?: string | null; emailVerified?: boolean } | null): boolean {
+export function isVerifiedAdminUser(
+  user: { email?: string | null; emailVerified?: boolean } | null
+): boolean {
   if (!user) return false;
   return Boolean(
     user.emailVerified &&
