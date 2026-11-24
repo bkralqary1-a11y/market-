@@ -19,7 +19,7 @@ import {
 import { PageView, Language, Currency, CategoryId } from '../types';
 import { formatPrice } from '../data/mockData';
 import { soundFX } from '../utils/audioEffects';
-import { SiteConfig, DEFAULT_SITE_CONFIG } from '../services/firestoreService';
+import { SiteConfig, DEFAULT_SITE_CONFIG, getStoreCategories } from '../services/firestoreService';
 
 interface HeaderProps {
   currentView: PageView;
@@ -81,13 +81,20 @@ export default function Header({
     };
   }, [mobileMenuOpen]);
 
-  const categoryLinks: { id: CategoryId; nameEn: string; nameAr: string; icon: ReactNode }[] = [
-    { id: 'phones', nameEn: 'Phones', nameAr: 'الهواتف', icon: <Smartphone className="w-4 h-4" /> },
-    { id: 'audio', nameEn: 'Audio', nameAr: 'السماعات', icon: <Headphones className="w-4 h-4" /> },
-    { id: 'cases', nameEn: 'Cases', nameAr: 'الكفرات', icon: <Shield className="w-4 h-4" /> },
-    { id: 'chargers', nameEn: 'Chargers', nameAr: 'الشواحن', icon: <Zap className="w-4 h-4" /> },
-    { id: 'cables', nameEn: 'Cables', nameAr: 'الكيابل', icon: <Cable className="w-4 h-4" /> },
-  ];
+  const iconMap: Record<string, ReactNode> = {
+    phones: <Smartphone className="w-4 h-4" />,
+    audio: <Headphones className="w-4 h-4" />,
+    cases: <Shield className="w-4 h-4" />,
+    chargers: <Zap className="w-4 h-4" />,
+    cables: <Cable className="w-4 h-4" />,
+  };
+
+  const categoryLinks = getStoreCategories(siteConfig, false).map((cat) => ({
+    id: cat.id,
+    nameEn: cat.nameEn,
+    nameAr: cat.nameAr,
+    icon: iconMap[cat.id] || <Smartphone className="w-4 h-4" />,
+  }));
 
   return (
     <header className={`sticky top-0 ${mobileMenuOpen ? 'z-[9999]' : 'z-40'} px-3 sm:px-5 pt-2.5 pb-1.5 transition-all`}>

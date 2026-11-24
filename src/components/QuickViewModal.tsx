@@ -1,5 +1,5 @@
-import { useState, useRef } from 'react';
-import { X, Star, ShoppingBag, Heart, ShieldCheck, Zap } from 'lucide-react';
+import { useState, useEffect, useRef } from 'react';
+import { X, Star, ShoppingBag, Heart, Zap, Smartphone } from 'lucide-react';
 import { Product, Language, Currency } from '../types';
 import { formatPrice } from '../data/mockData';
 import { triggerFlyToCart } from './FlyingCartAnimation';
@@ -27,22 +27,32 @@ export default function QuickViewModal({
   isWishlisted,
   onToggleWishlist,
 }: QuickViewModalProps) {
-  const [selectedColor, setSelectedColor] = useState(product?.colors[0] || '#0f172a');
-  const [selectedVariant, setSelectedVariant] = useState(
-    product?.variants.options[0] || 'الأساسي'
-  );
+  const [selectedColor, setSelectedColor] = useState(product?.colors?.[0] || '');
+  const [selectedVariant, setSelectedVariant] = useState(product?.variants?.options?.[0] || '');
   const [activeModalImg, setActiveModalImg] = useState(product?.images?.[0] || product?.image || '');
   const [added, setAdded] = useState(false);
   const modalImgRef = useRef<HTMLImageElement | null>(null);
 
+  useEffect(() => {
+    if (!product) return;
+    setSelectedColor(product.colors?.[0] || '');
+    setSelectedVariant(product.variants?.options?.[0] || '');
+    setActiveModalImg(product.images?.[0] || product.image || '');
+    setAdded(false);
+  }, [product]);
+
   if (!product) return null;
   const isAr = language === 'ar';
   const displayedImg = activeModalImg || product.image;
+  const hasBrand = Boolean(product.brand?.trim());
+  const hasRating = Number(product.rating) > 0;
+  const displayDesc = (isAr ? product.descriptionAr : product.description || product.descriptionAr)?.trim() || '';
+  const variantOptions = (product.variants?.options || []).filter((o) => Boolean(o?.trim()));
 
   const handleAdd = () => {
     triggerFlyToCart({
       imageUrl: displayedImg,
-      productName: isAr ? product.nameAr : product.name,
+      productName: isAr ? product.nameAr : product.name || product.nameAr,
       sourceElement: modalImgRef.current,
     });
     onAddToCart(product, selectedVariant, selectedColor, 1);
@@ -56,7 +66,7 @@ export default function QuickViewModal({
   const handleQuickOrder = () => {
     triggerFlyToCart({
       imageUrl: displayedImg,
-      productName: isAr ? product.nameAr : product.name,
+      productName: isAr ? product.nameAr : product.name || product.nameAr,
       sourceElement: modalImgRef.current,
     });
     if (onQuickOrder) {
@@ -86,35 +96,42 @@ export default function QuickViewModal({
         {/* Image Stage */}
         <div className="md:w-1/2 bg-white/40 relative p-5 flex flex-col items-center justify-between">
           <div className="w-full aspect-square relative flex items-center justify-center overflow-hidden rounded-2xl liquid-glass-subtle p-2">
-            <img
-              ref={modalImgRef}
-              src={displayedImg}
-              alt={product.name}
-              referrerPolicy="no-referrer"
-              className="w-full h-full object-cover rounded-xl transition-all duration-300"
-            />
+            {displayedImg?.trim() ? (
+              <img
+                ref={modalImgRef}
+                src={displayedImg}
+                alt={product.nameAr || product.name}
+                referrerPolicy="no-referrer"
+                className="w-full h-full object-cover rounded-xl transition-all duration-300"
+              />
+            ) : (
+              <div className="w-full h-full rounded-xl bg-gradient-to-br from-sky-50 to-blue-100/70 flex flex-col items-center justify-center gap-1.5 text-[#0071e3] text-xs font-bold">
+                <Smartphone className="w-10 h-10 opacity-70" />
+                {hasBrand && <span>{product.brand}</span>}
+              </div>
+            )}
           </div>
 
-          {product.images && product.images.length > 1 && (
+          {product.images && product.images.filter((u) => Boolean(u?.trim())).length > 1 && (
             <div className="flex gap-2 mt-3 w-full overflow-x-auto pb-1 no-scrollbar">
-              {product.images.map((img, idx) => (
-                <button
-                  key={idx}
-                  onClick={() => setActiveModalImg(img)}
-                  className={`w-12 h-12 shrink-0 rounded-xl overflow-hidden border-2 transition-all p-0.5 bg-white/80 cursor-pointer ${
-                    displayedImg === img
-                      ? 'border-[#0071e3] scale-105'
-                      : 'border-white/80'
-                  }`}
-                >
-                  <img
-                    src={img}
-                    alt="thumb"
-                    referrerPolicy="no-referrer"
-                    className="w-full h-full object-cover rounded-lg"
-                  />
-                </button>
-              ))}
+              {product.images
+                .filter((u) => Boolean(u?.trim()))
+                .map((img, idx) => (
+                  <button
+                    key={idx}
+                    onClick={() => setActiveModalImg(img)}
+                    className={`w-12 h-12 shrink-0 rounded-xl overflow-hidden border-2 transition-all p-0.5 bg-white/80 cursor-pointer ${
+                      displayedImg === img ? 'border-[#0071e3] scale-105' : 'border-white/80'
+                    }`}
+                  >
+                    <img
+                      src={img}
+                      alt="thumb"
+                      referrerPolicy="no-referrer"
+                      className="w-full h-full object-cover rounded-lg"
+                    />
+                  </button>
+                ))}
             </div>
           )}
         </div>
@@ -122,49 +139,50 @@ export default function QuickViewModal({
         {/* Details */}
         <div className="p-6 md:w-1/2 flex flex-col justify-between space-y-4">
           <div>
-            <div className="flex items-center justify-between mb-1.5 text-xs">
-              <span className="font-bold text-[#0071e3]">
-                {product.brand} · {isAr ? product.categoryNameAr : product.categoryNameEn}
-              </span>
-              <div className="flex items-center gap-1 text-amber-500 font-bold font-mono tabular-nums">
-                <Star className="w-3.5 h-3.5 fill-amber-400 text-amber-400" />
-                <span>{product.rating}</span>
+            {(hasBrand || product.categoryNameAr || hasRating) && (
+              <div className="flex items-center justify-between mb-1.5 text-xs">
+                <span className="font-bold text-[#0071e3]">
+                  {[hasBrand ? product.brand : '', isAr ? product.categoryNameAr : product.categoryNameEn]
+                    .filter(Boolean)
+                    .join(' · ')}
+                </span>
+                {hasRating && (
+                  <div className="flex items-center gap-1 text-amber-500 font-bold font-mono tabular-nums">
+                    <Star className="w-3.5 h-3.5 fill-amber-400 text-amber-400" />
+                    <span>{product.rating}</span>
+                  </div>
+                )}
               </div>
-            </div>
+            )}
 
             <h3 className="text-base sm:text-lg font-black text-[#0b1220] mb-2">
-              {isAr ? product.nameAr : product.name}
+              {isAr ? product.nameAr : product.name || product.nameAr}
             </h3>
 
-            <p className="text-xs text-slate-600 line-clamp-2 leading-relaxed mb-3">
-              {isAr ? product.descriptionAr : product.description}
-            </p>
+            {displayDesc && (
+              <p className="text-xs text-slate-600 line-clamp-2 leading-relaxed mb-3">
+                {displayDesc}
+              </p>
+            )}
 
             <div className="mb-3 pb-3 border-b border-white/60">
-              <div className="flex items-baseline gap-2 mb-1">
+              <div className="flex items-baseline gap-2">
                 <span className="text-xl font-black text-[#0b1220] font-mono tabular-nums">
                   {formatPrice(product.price, currency, isAr)}
                 </span>
-                {product.originalPrice && (
+                {product.originalPrice && product.originalPrice > product.price ? (
                   <span className="text-xs text-slate-400 line-through font-mono tabular-nums">
                     {formatPrice(product.originalPrice, currency, isAr)}
                   </span>
-                )}
-              </div>
-              <div className="flex items-center gap-1.5 text-[11px] text-emerald-700 font-bold">
-                <ShieldCheck className="w-3.5 h-3.5 text-emerald-600" />
-                <span>
-                  {product.warrantyYears}{' '}
-                  {isAr ? 'سنوات ضمان الوكيل المعتمد' : 'Years Official Warranty'}
-                </span>
+                ) : null}
               </div>
             </div>
 
             {product.colors && product.colors.length > 0 && (
               <div className="flex items-center gap-2 mb-3">
-                {product.colors.map((c) => (
+                {product.colors.map((c, idx) => (
                   <button
-                    key={c}
+                    key={`${c}-${idx}`}
                     onClick={() => setSelectedColor(c)}
                     className={`w-6 h-6 rounded-full border-2 cursor-pointer transition-transform ${
                       selectedColor === c ? 'border-[#0071e3] scale-110' : 'border-white'
@@ -176,13 +194,16 @@ export default function QuickViewModal({
               </div>
             )}
 
-            {product.variants.options && (
+            {variantOptions.length > 0 && (
               <div className="mb-2">
                 <span className="text-xs font-bold text-slate-700 block mb-1.5">
-                  {isAr ? product.variants.titleAr : product.variants.titleEn}:
+                  {isAr
+                    ? product.variants.titleAr || 'السعة / الموديل'
+                    : product.variants.titleEn || 'Option'}
+                  :
                 </span>
                 <div className="flex flex-wrap gap-1.5 font-mono text-xs">
-                  {product.variants.options.map((opt) => (
+                  {variantOptions.map((opt) => (
                     <button
                       key={opt}
                       onClick={() => setSelectedVariant(opt)}
@@ -235,7 +256,7 @@ export default function QuickViewModal({
               }}
               className="w-full text-center text-xs text-[#0071e3] font-bold hover:underline py-1 cursor-pointer"
             >
-              {isAr ? 'عرض المواصفات الكاملة' : 'View Full Specifications'}
+              {isAr ? 'عرض التفاصيل الكاملة' : 'View Full Details'}
             </button>
           </div>
         </div>

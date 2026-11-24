@@ -1,16 +1,16 @@
 import { useState, useEffect } from 'react';
 import { onAuthStateChanged, getRedirectResult, signOut, type User } from 'firebase/auth';
 import { PageView, Language, Currency, CategoryId, Product, CartItem, HeroSlideItem } from './types';
-import { mockProducts } from './data/mockData';
 import {
   DEFAULT_HERO_SLIDES,
   INITIAL_PRODUCTS_LIST,
 } from './utils/storeStorage';
-import { MessageCircle, ArrowLeft, ArrowRight, Pencil } from 'lucide-react';
+import { MessageCircle, ArrowLeft, ArrowRight, Pencil, Eye, EyeOff } from 'lucide-react';
 import { auth, isVerifiedAdminUser } from './firebase';
 import {
   SiteConfig,
   DEFAULT_SITE_CONFIG,
+  getStoreCategories,
   subscribeToProducts,
   subscribeToHeroSlides,
   subscribeToSiteConfig,
@@ -55,16 +55,18 @@ import VisualSectionEditorModal, {
 import { soundFX } from './utils/audioEffects';
 
 export default function App() {
-  // Live Firestore Data (falls back cleanly to defaults until first admin save/seed)
+  // Live Firestore Data (strictly reflects cloud catalog once synced — never resurrects deleted products)
   const [cloudProducts, setCloudProducts] = useState<Product[]>([]);
   const [hasCloudProducts, setHasCloudProducts] = useState(false);
+  const [productsSynced, setProductsSynced] = useState(false);
   const [cloudSlides, setCloudSlides] = useState<HeroSlideItem[]>([]);
   const [hasCloudSlides, setHasCloudSlides] = useState(false);
   const [siteConfig, setSiteConfig] = useState<SiteConfig>(DEFAULT_SITE_CONFIG);
   const [hasCloudConfig, setHasCloudConfig] = useState(false);
 
-  const products = hasCloudProducts ? cloudProducts : INITIAL_PRODUCTS_LIST;
+  const products = productsSynced ? cloudProducts : [];
   const heroSlides = hasCloudSlides ? cloudSlides : DEFAULT_HERO_SLIDES;
+  const allStoreCategories = getStoreCategories(siteConfig, true);
 
   // Firebase Auth & Hidden Visual Admin Mode State
   const [authUser, setAuthUser] = useState<User | null>(null);
@@ -126,6 +128,7 @@ export default function App() {
     const unsubProducts = subscribeToProducts((list, hasDocs) => {
       setCloudProducts(list);
       setHasCloudProducts(hasDocs);
+      setProductsSynced(true);
     }, isAdminVerified);
     const unsubSlides = subscribeToHeroSlides((list, hasDocs) => {
       setCloudSlides(list);
@@ -146,19 +149,22 @@ export default function App() {
   const [currentView, setCurrentView] = useState<PageView>('home');
   const [language, setLanguage] = useState<Language>('ar');
   const [currency, setCurrency] = useState<Currency>('YER');
-  const [selectedProduct, setSelectedProduct] = useState<Product>(() =>
-    products.length > 0 ? products[0] : mockProducts[0]
-  );
+  const [selectedProduct, setSelectedProduct] = useState<Product | null>(null);
   const [selectedCategory, setSelectedCategory] = useState<CategoryId>('all');
 
-  // Keep selectedProduct fresh if updated in Firestore
+  // Keep selectedProduct fresh if updated or deleted in Firestore
   useEffect(() => {
     if (!selectedProduct) return;
     const match = products.find((p) => p.id === selectedProduct.id);
-    if (match && match !== selectedProduct) {
-      setSelectedProduct(match);
+    if (match) {
+      if (match !== selectedProduct) setSelectedProduct(match);
+    } else if (productsSynced) {
+      setSelectedProduct(null);
+      if (currentView === 'product') {
+        setCurrentView('home');
+      }
     }
-  }, [products, selectedProduct]);
+  }, [products, selectedProduct, productsSynced, currentView]);
 
   // Cart state
   const [cart, setCart] = useState<CartItem[]>(() => {
@@ -232,12 +238,18 @@ export default function App() {
 
   const handleAdminDeleteProduct = async (productId: string) => {
     await deleteProductFromCloud(productId);
-    showAdminToast('تم حذف المنتج من السحابة');
+    setCart((prev) => prev.filter((item) => item.product.id !== productId));
+    setWishlist((prev) => prev.filter((id) => id !== productId));
+    setComparedProductIds((prev) => prev.filter((id) => id !== productId));
+    if (selectedProduct?.id === productId) {
+      setSelectedProduct(null);
+      setCurrentView('home');
+    }
+    showAdminToast('تم حذف المنتج نهائياً من السحابة');
   };
 
   const handleAdminSaveHeroSlide = async (slide: HeroSlideItem, order: number) => {
     if (!hasCloudSlides) {
-      // Seed other default slides first so editing one doesn't hide the rest
       for (let i = 0; i < DEFAULT_HERO_SLIDES.length; i++) {
         if (DEFAULT_HERO_SLIDES[i].id !== slide.id) {
           await saveHeroSlideToCloud(DEFAULT_HERO_SLIDES[i], i);
@@ -258,10 +270,52 @@ export default function App() {
     showAdminToast('تم حفظ تعديلات الواجهة والإعدادات');
   };
 
+  const handleToggleSiteBlock = async (
+    field:
+      | 'hideHero'
+      | 'hideBento1'
+      | 'hideBento2'
+      | 'hideTrustPillars'
+      | 'hideBrandsBar'
+      | 'hideCategoriesSection'
+      | 'hideProductsSection'
+  ) => {
+    const nextValue = !Boolean(siteConfig[field]);
+    const nextCfg: SiteConfig = { ...siteConfig, [field]: nextValue };
+    setSiteConfig(nextCfg);
+    await saveSiteConfigToCloud(nextCfg);
+    showAdminToast(nextValue ? 'تم إخفاء هذا المربع عن الزوار' : 'تم إظهار هذا المربع مجدداً');
+  };
+
+  const handleToggleCategoryHide = async (catId: string, isCustom: boolean) => {
+    let nextCfg: SiteConfig;
+    if (isCustom) {
+      const updated = (siteConfig.customCategories || []).map((c) =>
+        c.id === catId ? { ...c, hidden: !c.hidden } : c
+      );
+      nextCfg = { ...siteConfig, customCategories: updated };
+    } else {
+      const current = new Set(siteConfig.hiddenCategories || []);
+      if (current.has(catId)) {
+        current.delete(catId);
+      } else {
+        current.add(catId);
+      }
+      nextCfg = { ...siteConfig, hiddenCategories: Array.from(current) };
+    }
+    setSiteConfig(nextCfg);
+    await saveSiteConfigToCloud(nextCfg);
+    showAdminToast('تم تحديث ظهور القسم في المتجر');
+  };
+
   const handleSeedCloud = async () => {
     setSeedingCloud(true);
     try {
-      await seedDefaultDataToCloud(products, heroSlides, siteConfig);
+      await seedDefaultDataToCloud(
+        products.length > 0 ? products : INITIAL_PRODUCTS_LIST,
+        heroSlides,
+        siteConfig
+      );
       showAdminToast('تم رفع كافة بيانات المتجر للسحابة بنجاح');
     } catch {
       showAdminToast('تعذر الرفع — تأكد من تسجيل الدخول بحساب المالك');
@@ -280,8 +334,8 @@ export default function App() {
   // Cart operations
   const handleAddToCart = (
     product: Product,
-    variant = product.variants.options[0] || 'الأساسي',
-    color = product.colors[0] || '#0f172a',
+    variant = product.variants?.options?.[0] || '',
+    color = product.colors?.[0] || '',
     qty = 1
   ) => {
     soundFX.playAddToCart();
@@ -309,8 +363,8 @@ export default function App() {
 
   const handleQuickOrder = (
     product: Product,
-    variant = product.variants.options[0] || 'الأساسي',
-    color = product.colors[0] || '#0f172a'
+    variant = product.variants?.options?.[0] || '',
+    color = product.colors?.[0] || ''
   ) => {
     handleAddToCart(product, variant, color, 1);
     setInvoiceModalOpen(true);
@@ -484,12 +538,18 @@ export default function App() {
               siteConfig={siteConfig}
               isAdminMode={isAdminMode}
               onAdminEditSection={(target) => setEditingSection(target)}
+              onToggleBlockHide={(field) => handleToggleSiteBlock(field)}
             />
 
-            {/* Section 2: TrustBuy Trust Pillars + Authorized Brands Ribbon */}
-            <BrandTicker language={language} />
+            {/* Section 2: Trust Pillars + Authorized Brands Ribbon */}
+            <BrandTicker
+              language={language}
+              siteConfig={siteConfig}
+              isAdminMode={isAdminMode}
+              onToggleBlockHide={(field) => handleToggleSiteBlock(field)}
+            />
 
-            {/* Section 3: Curated Liquid Glass Categories */}
+            {/* Section 3: Curated Liquid Glass Categories (Swipeable + Admin Add Category) */}
             <CategoriesSection
               language={language}
               onSelectCategory={handleSelectCategory}
@@ -498,158 +558,195 @@ export default function App() {
               products={products}
               isAdminMode={isAdminMode}
               onAdminEditSection={(target) => setEditingSection(target)}
+              onToggleSectionHide={() => handleToggleSiteBlock('hideCategoriesSection')}
+              onToggleCategoryHide={handleToggleCategoryHide}
             />
 
             {/* Section 4: Featured & Best-Selling Products Grid */}
-            <section id="trending-products-section" className="py-10 sm:py-14 px-3 sm:px-5">
-              <div className="container mx-auto max-w-7xl">
-                <div className="flex flex-col md:flex-row md:items-end justify-between gap-4 mb-8">
-                  <div className="flex items-center gap-2.5">
-                    <div>
-                      <span className="text-xs font-bold text-[#0071e3] block mb-1">
-                        {isAr ? siteConfig.productsSectionBadgeAr : 'Trusted Bestsellers'}
-                      </span>
-                      <h2 className="text-2xl sm:text-3xl font-extrabold text-[#0b1220] tracking-tight">
-                        {isAr ? siteConfig.productsSectionTitleAr : 'Featured Devices & Accessories'}
-                      </h2>
+            {siteConfig.hideProductsSection && !isAdminMode ? null : siteConfig.hideProductsSection &&
+              isAdminMode ? (
+              <section className="py-4 px-3 sm:px-5">
+                <div className="container mx-auto max-w-7xl">
+                  <div className="liquid-glass rounded-2xl border-2 border-dashed border-amber-400/70 bg-amber-50/50 px-4 py-3 flex items-center justify-between gap-3">
+                    <span className="text-xs font-extrabold text-amber-900 flex items-center gap-2">
+                      <EyeOff className="w-4 h-4 text-amber-600" />
+                      <span>قسم المنتجات في الواجهة الرئيسية مخفي عن الزوار حالياً</span>
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => handleToggleSiteBlock('hideProductsSection')}
+                      className="px-3.5 py-1.5 rounded-xl bg-[#0071e3] text-white text-xs font-extrabold flex items-center gap-1.5 cursor-pointer"
+                    >
+                      <Eye className="w-3.5 h-3.5" />
+                      <span>إظهار القسم</span>
+                    </button>
+                  </div>
+                </div>
+              </section>
+            ) : (
+              <section id="trending-products-section" className="py-10 sm:py-14 px-3 sm:px-5">
+                <div className="container mx-auto max-w-7xl">
+                  <div className="flex flex-col md:flex-row md:items-end justify-between gap-4 mb-8">
+                    <div className="flex items-center gap-2.5 flex-wrap">
+                      <div>
+                        <span className="text-xs font-bold text-[#0071e3] block mb-1">
+                          {isAr ? siteConfig.productsSectionBadgeAr : 'Trusted Bestsellers'}
+                        </span>
+                        <h2 className="text-2xl sm:text-3xl font-extrabold text-[#0b1220] tracking-tight">
+                          {isAr ? siteConfig.productsSectionTitleAr : 'Featured Devices & Accessories'}
+                        </h2>
+                      </div>
+                      {isAdminMode && (
+                        <div className="flex items-center gap-1.5">
+                          <button
+                            type="button"
+                            onClick={() => setEditingSection({ type: 'productsHeader' })}
+                            className="w-8 h-8 rounded-xl bg-[#0071e3] hover:bg-[#005bbf] text-white flex items-center justify-center shadow-md cursor-pointer shrink-0"
+                            title="تعديل عنوان قسم المنتجات"
+                          >
+                            <Pencil className="w-3.5 h-3.5" />
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => handleToggleSiteBlock('hideProductsSection')}
+                            className="px-2.5 h-8 rounded-xl bg-amber-400 hover:bg-amber-500 text-slate-950 text-[11px] font-extrabold flex items-center gap-1 shadow-md cursor-pointer shrink-0"
+                            title="إخفاء قسم المنتجات"
+                          >
+                            <EyeOff className="w-3.5 h-3.5" />
+                            <span className="hidden sm:inline">إخفاء القسم</span>
+                          </button>
+                        </div>
+                      )}
                     </div>
-                    {isAdminMode && (
+
+                    {/* iOS 27 Liquid Glass Segmented Filter Control */}
+                    <div className="liquid-glass-capsule p-1 rounded-2xl inline-flex items-center gap-1 self-start md:self-auto">
                       <button
                         type="button"
-                        onClick={() => setEditingSection({ type: 'productsHeader' })}
-                        className="w-8 h-8 rounded-xl bg-[#0071e3] hover:bg-[#005bbf] text-white flex items-center justify-center shadow-md cursor-pointer shrink-0"
-                        title="تعديل عنوان قسم المنتجات"
-                      >
-                        <Pencil className="w-3.5 h-3.5" />
-                      </button>
-                    )}
-                  </div>
-
-                  {/* iOS 27 Liquid Glass Segmented Filter Control */}
-                  <div className="liquid-glass-capsule p-1 rounded-2xl inline-flex items-center gap-1 self-start md:self-auto">
-                    <button
-                      type="button"
-                      onClick={() => {
-                        soundFX.playClick();
-                        setSelectedCategory('all');
-                        setHomeFilter('trending');
-                      }}
-                      className={`text-xs font-bold px-4 py-2 rounded-xl transition-all cursor-pointer whitespace-nowrap ${
-                        homeFilter === 'trending' && selectedCategory === 'all'
-                          ? 'liquid-btn-primary text-white'
-                          : 'text-slate-700 hover:text-[#0b1220]'
-                      }`}
-                    >
-                      {isAr ? 'الأكثر طلباً' : 'Trending'}
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        soundFX.playClick();
-                        setSelectedCategory('all');
-                        setHomeFilter('popular');
-                      }}
-                      className={`text-xs font-bold px-4 py-2 rounded-xl transition-all cursor-pointer whitespace-nowrap ${
-                        homeFilter === 'popular' && selectedCategory === 'all'
-                          ? 'liquid-btn-primary text-white'
-                          : 'text-slate-700 hover:text-[#0b1220]'
-                      }`}
-                    >
-                      {isAr ? 'الأعلى تقييماً' : 'Top Rated'}
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        soundFX.playClick();
-                        setSelectedCategory('all');
-                        setHomeFilter('all');
-                      }}
-                      className={`text-xs font-bold px-4 py-2 rounded-xl transition-all cursor-pointer whitespace-nowrap ${
-                        homeFilter === 'all' && selectedCategory === 'all'
-                          ? 'liquid-btn-primary text-white'
-                          : 'text-slate-700 hover:text-[#0b1220]'
-                      }`}
-                    >
-                      {isAr ? 'عرض الكل' : 'All'}
-                    </button>
-                  </div>
-                </div>
-
-                {/* Products Grid */}
-                {displayableProducts.length === 0 && !isAdminMode ? (
-                  <div className="text-center py-14 px-6 liquid-glass rounded-[30px] max-w-xl mx-auto my-4">
-                    <h3 className="text-lg font-extrabold text-[#0b1220] mb-2">
-                      {isAr ? siteConfig.storeNameAr : siteConfig.storeNameEn}
-                    </h3>
-                    <p className="text-sm text-slate-600 mb-6 leading-relaxed">
-                      {isAr
-                        ? 'يمكنك الاستفسار والطلب المباشر لكافة الأجهزة والملحقات الأصلية عبر الواتساب فوراً.'
-                        : 'Contact us directly on WhatsApp for inquiries and instant orders.'}
-                    </p>
-                    <a
-                      href={`https://wa.me/967${waClean}`}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="inline-flex items-center gap-2 liquid-btn-emerald font-bold text-sm px-6 py-3 rounded-2xl"
-                    >
-                      <MessageCircle className="w-4 h-4" />
-                      <span>
-                        {isAr ? `تواصل عبر الواتساب (${waClean})` : `Chat on WhatsApp (${waClean})`}
-                      </span>
-                    </a>
-                  </div>
-                ) : (
-                  <div className="grid grid-cols-2 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3 sm:gap-5 w-full min-w-0">
-                    {(isAdminMode ? displayedHomeProducts : displayedHomeProducts.slice(0, 8)).map(
-                      (prod) => (
-                        <ProductCard
-                          key={prod.id}
-                          product={prod}
-                          language={language}
-                          currency={currency}
-                          onSelect={handleSelectProduct}
-                          onAddToCart={(p, vr, col) => handleAddToCart(p, vr, col, 1)}
-                          onQuickOrder={handleQuickOrder}
-                          isWishlisted={wishlist.includes(prod.id)}
-                          onToggleWishlist={handleToggleWishlist}
-                          isCompared={comparedProductIds.includes(prod.id)}
-                          onToggleCompare={handleToggleCompare}
-                          onQuickView={(p) => setQuickViewProduct(p)}
-                          isAdminMode={isAdminMode}
-                          onAdminEdit={(p) => setEditingProduct(p)}
-                        />
-                      )
-                    )}
-                    {/* Identical-shaped Rectangular "+" Add Product Card right after the last product */}
-                    {isAdminMode && (
-                      <AddProductTile
-                        language={language}
                         onClick={() => {
-                          setNewProductDefaultCat('phones');
-                          setEditingProduct(null);
+                          soundFX.playClick();
+                          setSelectedCategory('all');
+                          setHomeFilter('trending');
                         }}
-                      />
-                    )}
+                        className={`text-xs font-bold px-4 py-2 rounded-xl transition-all cursor-pointer whitespace-nowrap ${
+                          homeFilter === 'trending' && selectedCategory === 'all'
+                            ? 'liquid-btn-primary text-white'
+                            : 'text-slate-700 hover:text-[#0b1220]'
+                        }`}
+                      >
+                        {isAr ? 'الأكثر طلباً' : 'Trending'}
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          soundFX.playClick();
+                          setSelectedCategory('all');
+                          setHomeFilter('popular');
+                        }}
+                        className={`text-xs font-bold px-4 py-2 rounded-xl transition-all cursor-pointer whitespace-nowrap ${
+                          homeFilter === 'popular' && selectedCategory === 'all'
+                            ? 'liquid-btn-primary text-white'
+                            : 'text-slate-700 hover:text-[#0b1220]'
+                        }`}
+                      >
+                        {isAr ? 'الأعلى تقييماً' : 'Top Rated'}
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          soundFX.playClick();
+                          setSelectedCategory('all');
+                          setHomeFilter('all');
+                        }}
+                        className={`text-xs font-bold px-4 py-2 rounded-xl transition-all cursor-pointer whitespace-nowrap ${
+                          homeFilter === 'all' && selectedCategory === 'all'
+                            ? 'liquid-btn-primary text-white'
+                            : 'text-slate-700 hover:text-[#0b1220]'
+                        }`}
+                      >
+                        {isAr ? 'عرض الكل' : 'All'}
+                      </button>
+                    </div>
                   </div>
-                )}
 
-                {/* Explore Full Catalog Button */}
-                <div className="text-center mt-10">
-                  <button
-                    type="button"
-                    onClick={() => {
-                      soundFX.playClick();
-                      setSelectedCategory('all');
-                      setCurrentView('shop');
-                    }}
-                    className="inline-flex items-center gap-2.5 liquid-glass-strong hover:bg-white text-[#0b1220] hover:text-[#0071e3] text-sm font-extrabold px-8 py-3.5 rounded-2xl transition-all cursor-pointer"
-                  >
-                    <span>{isAr ? 'استعراض جميع الأجهزة في الكتالوج' : 'Explore Complete Tech Catalog'}</span>
-                    {isAr ? <ArrowLeft className="w-4 h-4" /> : <ArrowRight className="w-4 h-4" />}
-                  </button>
+                  {/* Products Grid */}
+                  {displayableProducts.length === 0 && !isAdminMode ? (
+                    <div className="text-center py-14 px-6 liquid-glass rounded-[30px] max-w-xl mx-auto my-4">
+                      <h3 className="text-lg font-extrabold text-[#0b1220] mb-2">
+                        {isAr ? siteConfig.storeNameAr : siteConfig.storeNameEn}
+                      </h3>
+                      <p className="text-sm text-slate-600 mb-6 leading-relaxed">
+                        {isAr
+                          ? 'يمكنك الاستفسار والطلب المباشر لكافة الأجهزة والملحقات عبر الواتساب فوراً.'
+                          : 'Contact us directly on WhatsApp for inquiries and instant orders.'}
+                      </p>
+                      <a
+                        href={`https://wa.me/967${waClean}`}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="inline-flex items-center gap-2 liquid-btn-emerald font-bold text-sm px-6 py-3 rounded-2xl"
+                      >
+                        <MessageCircle className="w-4 h-4" />
+                        <span>
+                          {isAr ? `تواصل عبر الواتساب (${waClean})` : `Chat on WhatsApp (${waClean})`}
+                        </span>
+                      </a>
+                    </div>
+                  ) : (
+                    <div className="grid grid-cols-2 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3 sm:gap-5 w-full min-w-0">
+                      {(isAdminMode ? displayedHomeProducts : displayedHomeProducts.slice(0, 8)).map(
+                        (prod) => (
+                          <ProductCard
+                            key={prod.id}
+                            product={prod}
+                            language={language}
+                            currency={currency}
+                            onSelect={handleSelectProduct}
+                            onAddToCart={(p, vr, col) => handleAddToCart(p, vr, col, 1)}
+                            onQuickOrder={handleQuickOrder}
+                            isWishlisted={wishlist.includes(prod.id)}
+                            onToggleWishlist={handleToggleWishlist}
+                            isCompared={comparedProductIds.includes(prod.id)}
+                            onToggleCompare={handleToggleCompare}
+                            onQuickView={(p) => setQuickViewProduct(p)}
+                            isAdminMode={isAdminMode}
+                            onAdminEdit={(p) => setEditingProduct(p)}
+                          />
+                        )
+                      )}
+                      {isAdminMode && (
+                        <AddProductTile
+                          language={language}
+                          onClick={() => {
+                            setNewProductDefaultCat(allStoreCategories[0]?.id || 'phones');
+                            setEditingProduct(null);
+                          }}
+                        />
+                      )}
+                    </div>
+                  )}
+
+                  {displayableProducts.length > 0 && (
+                    <div className="text-center mt-10">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          soundFX.playClick();
+                          setSelectedCategory('all');
+                          setCurrentView('shop');
+                        }}
+                        className="inline-flex items-center gap-2.5 liquid-glass-strong hover:bg-white text-[#0b1220] hover:text-[#0071e3] text-sm font-extrabold px-8 py-3.5 rounded-2xl transition-all cursor-pointer"
+                      >
+                        <span>
+                          {isAr ? 'استعراض جميع المنتجات في الكتالوج' : 'Explore Complete Catalog'}
+                        </span>
+                        {isAr ? <ArrowLeft className="w-4 h-4" /> : <ArrowRight className="w-4 h-4" />}
+                      </button>
+                    </div>
+                  )}
                 </div>
-              </div>
-            </section>
+              </section>
+            )}
           </>
         )}
 
@@ -668,19 +765,21 @@ export default function App() {
             onToggleCompare={handleToggleCompare}
             initialCategory={selectedCategory}
             onCategoryChange={(cat) => setSelectedCategory(cat)}
+            siteConfig={siteConfig}
             isAdminMode={isAdminMode}
             onAdminEditProduct={(p) => setEditingProduct(p)}
             onAdminAddProduct={(cat) => {
-              setNewProductDefaultCat(cat);
+              setNewProductDefaultCat(cat === 'all' ? allStoreCategories[0]?.id || 'phones' : cat);
               setEditingProduct(null);
             }}
           />
         )}
 
         {/* VIEW 3: PRODUCT DETAIL */}
-        {currentView === 'product' && (
+        {currentView === 'product' && selectedProduct && (
           <ProductDetailView
             product={selectedProduct}
+            allProducts={displayableProducts}
             language={language}
             currency={currency}
             onBack={() => setCurrentView('shop')}
@@ -921,6 +1020,7 @@ export default function App() {
             isOpen={editingProduct !== undefined}
             product={editingProduct ?? null}
             defaultCategory={newProductDefaultCat}
+            categories={allStoreCategories}
             onClose={() => setEditingProduct(undefined)}
             onSave={handleAdminSaveProduct}
             onDelete={handleAdminDeleteProduct}

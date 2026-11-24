@@ -1,12 +1,9 @@
-import { useState, type FormEvent } from 'react';
+import { useState, useEffect, type FormEvent } from 'react';
 import {
   Star,
   ShoppingBag,
   Heart,
   Check,
-  ShieldCheck,
-  Truck,
-  RotateCcw,
   ArrowRight,
   ArrowLeft,
   SlidersHorizontal,
@@ -19,13 +16,14 @@ import {
   Smartphone,
 } from 'lucide-react';
 import { Product, Language, Currency, Review } from '../types';
-import { mockReviews, mockProducts, formatPrice } from '../data/mockData';
+import { formatPrice } from '../data/mockData';
 import { triggerFlyToCart } from './FlyingCartAnimation';
 import ProductCard from './ProductCard';
 import { getYouTubeId, getYouTubeEmbedUrl } from '../utils/videoUtils';
 
 interface ProductDetailViewProps {
   product: Product;
+  allProducts: Product[];
   language: Language;
   currency: Currency;
   onBack: () => void;
@@ -40,6 +38,7 @@ interface ProductDetailViewProps {
 
 export default function ProductDetailView({
   product,
+  allProducts,
   language,
   currency,
   onBack,
@@ -53,15 +52,31 @@ export default function ProductDetailView({
 }: ProductDetailViewProps) {
   const isAr = language === 'ar';
 
-  const [activeImage, setActiveImage] = useState<string>(product.images[0] || product.image);
+  const validImages = (product.images || []).filter((u) => Boolean(u?.trim()));
+  const primaryImage = validImages[0] || product.image || '';
+  const hasBrand = Boolean(product.brand?.trim());
+  const hasSku = Boolean(product.sku?.trim());
+  const hasRating = Number(product.rating) > 0;
+  const displayDesc = (isAr ? product.descriptionAr : product.description || product.descriptionAr)?.trim() || '';
+  const hasColors = Array.isArray(product.colors) && product.colors.length > 0;
+  const variantOptions = (product.variants?.options || []).filter((opt) => Boolean(opt?.trim()));
+  const hasVariants = variantOptions.length > 0;
+  const specEntries = Object.entries(product.specs || {}).filter(
+    ([k, v]) => Boolean(k?.trim()) && Boolean((isAr ? v?.ar : v?.en || v?.ar)?.trim())
+  );
+  const hasSpecs = specEntries.length > 0;
+
+  const [activeImage, setActiveImage] = useState<string>(primaryImage);
   const [imgFailed, setImgFailed] = useState(false);
-  const [selectedColor, setSelectedColor] = useState<string>(product.colors[0] || '#0f172a');
+  const [selectedColor, setSelectedColor] = useState<string>(hasColors ? product.colors[0] : '');
   const [selectedVariant, setSelectedVariant] = useState<string>(
-    product.variants.options[0] || 'الأساسي'
+    hasVariants ? variantOptions[0] : ''
   );
   const [quantity, setQuantity] = useState<number>(1);
-  const [activeTab, setActiveTab] = useState<'specs' | 'desc' | 'reviews' | 'warranty'>('desc');
-  const [reviewsList, setReviewsList] = useState<Review[]>(mockReviews);
+  const [activeTab, setActiveTab] = useState<'specs' | 'desc' | 'reviews'>(() =>
+    displayDesc ? 'desc' : hasSpecs ? 'specs' : 'reviews'
+  );
+  const [reviewsList, setReviewsList] = useState<Review[]>([]);
   const [newReviewAuthor, setNewReviewAuthor] = useState('');
   const [newReviewComment, setNewReviewComment] = useState('');
   const [newReviewRating, setNewReviewRating] = useState(5);
@@ -69,15 +84,28 @@ export default function ProductDetailView({
   const [addedAlert, setAddedAlert] = useState(false);
   const [mediaMode, setMediaMode] = useState<'photo' | 'video'>('photo');
 
-  const variantIndex = product.variants.options.indexOf(selectedVariant);
-  const variantPriceExtra = variantIndex > 0 ? variantIndex * (product.price > 2000 ? 500 : 40) : 0;
-  const currentPrice = product.price + variantPriceExtra;
+  useEffect(() => {
+    const imgs = (product.images || []).filter((u) => Boolean(u?.trim()));
+    const opts = (product.variants?.options || []).filter((o) => Boolean(o?.trim()));
+    const desc = (isAr ? product.descriptionAr : product.description || product.descriptionAr)?.trim() || '';
+    const specsCount = Object.keys(product.specs || {}).length;
+
+    setActiveImage(imgs[0] || product.image || '');
+    setImgFailed(false);
+    setSelectedColor(product.colors?.[0] || '');
+    setSelectedVariant(opts[0] || '');
+    setQuantity(1);
+    setMediaMode('photo');
+    setActiveTab(desc ? 'desc' : specsCount > 0 ? 'specs' : 'reviews');
+  }, [product, isAr]);
+
+  const currentPrice = product.price;
 
   const handleAdd = () => {
     const mainImg = document.getElementById('product-detail-main-img');
     triggerFlyToCart({
       imageUrl: activeImage || product.image,
-      productName: isAr ? product.nameAr : product.name,
+      productName: isAr ? product.nameAr : product.name || product.nameAr,
       sourceElement: mainImg,
     });
     onAddToCart(product, selectedVariant, selectedColor, quantity);
@@ -89,7 +117,7 @@ export default function ProductDetailView({
     const mainImg = document.getElementById('product-detail-main-img');
     triggerFlyToCart({
       imageUrl: activeImage || product.image,
-      productName: isAr ? product.nameAr : product.name,
+      productName: isAr ? product.nameAr : product.name || product.nameAr,
       sourceElement: mainImg,
     });
     if (onQuickOrder) {
@@ -104,11 +132,11 @@ export default function ProductDetailView({
     if (newReviewAuthor.trim() && newReviewComment.trim()) {
       const newRev: Review = {
         id: `rev-${Date.now()}`,
-        author: newReviewAuthor,
+        author: newReviewAuthor.trim(),
         rating: newReviewRating,
         date: isAr ? 'الآن' : 'Just now',
-        comment: newReviewComment,
-        commentAr: newReviewComment,
+        comment: newReviewComment.trim(),
+        commentAr: newReviewComment.trim(),
         verifiedPurchase: true,
       };
       setReviewsList([newRev, ...reviewsList]);
@@ -119,9 +147,21 @@ export default function ProductDetailView({
     }
   };
 
-  const relatedProducts = mockProducts
-    .filter((p) => p.id !== product.id && p.category === product.category)
+  // ONLY show real related products from the live store catalog (NEVER fake mock products)
+  const relatedProducts = allProducts
+    .filter((p) => p.id !== product.id && !p.hidden && p.category === product.category)
     .slice(0, 4);
+
+  const availableTabs: { id: 'desc' | 'specs' | 'reviews'; icon: typeof Info; ar: string; en: string }[] = [
+    ...(displayDesc ? [{ id: 'desc' as const, icon: Info, ar: 'الوصف والمميزات', en: 'Overview' }] : []),
+    ...(hasSpecs ? [{ id: 'specs' as const, icon: Cpu, ar: 'المواصفات التقنية', en: 'Specifications' }] : []),
+    {
+      id: 'reviews' as const,
+      icon: Star,
+      ar: reviewsList.length > 0 ? `آراء المشترين (${reviewsList.length})` : 'آراء المشترين',
+      en: reviewsList.length > 0 ? `Reviews (${reviewsList.length})` : 'Reviews',
+    },
+  ];
 
   return (
     <div id="product-detail-page" className="py-8 sm:py-10 pb-24 lg:pb-12 min-h-screen">
@@ -136,7 +176,7 @@ export default function ProductDetailView({
             <span>{isAr ? 'العودة للمتجر والكتالوج' : 'Back to Catalog'}</span>
           </button>
 
-          <span className="font-mono text-slate-500">SKU: {product.sku}</span>
+          {hasSku && <span className="font-mono text-slate-500">SKU: {product.sku}</span>}
         </div>
 
         {/* Main Liquid Glass Product Showcase */}
@@ -144,7 +184,7 @@ export default function ProductDetailView({
           <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 lg:gap-10">
             {/* Gallery Column */}
             <div className="lg:col-span-5 space-y-4">
-              {product.videoUrl && (
+              {product.videoUrl?.trim() && (
                 <div className="liquid-glass-capsule inline-flex items-center gap-1 p-1 rounded-2xl">
                   <button
                     onClick={() => setMediaMode('photo')}
@@ -157,8 +197,8 @@ export default function ProductDetailView({
                     <ImageIcon className="w-3.5 h-3.5" />
                     <span>
                       {isAr
-                        ? `الصور (${product.images?.length || 1})`
-                        : `Photos (${product.images?.length || 1})`}
+                        ? `الصور (${validImages.length || 1})`
+                        : `Photos (${validImages.length || 1})`}
                     </span>
                   </button>
 
@@ -180,11 +220,11 @@ export default function ProductDetailView({
               <div className="aspect-square liquid-glass-subtle rounded-[26px] overflow-hidden relative p-4 group flex items-center justify-center">
                 {mediaMode === 'photo' ? (
                   <>
-                    {!imgFailed ? (
+                    {!imgFailed && activeImage?.trim() ? (
                       <img
                         id="product-detail-main-img"
                         src={activeImage}
-                        alt={product.name}
+                        alt={product.nameAr || product.name}
                         referrerPolicy="no-referrer"
                         onError={() => setImgFailed(true)}
                         className="w-full h-full object-cover rounded-2xl group-hover:scale-105 transition-transform duration-500"
@@ -192,7 +232,7 @@ export default function ProductDetailView({
                     ) : (
                       <div className="flex flex-col items-center justify-center text-slate-400 gap-2">
                         <Smartphone className="w-16 h-16 opacity-60" />
-                        <span className="text-xs font-bold">{product.brand}</span>
+                        {hasBrand && <span className="text-xs font-bold">{product.brand}</span>}
                       </div>
                     )}
                   </>
@@ -210,7 +250,7 @@ export default function ProductDetailView({
                                 controls: true,
                                 loop: true,
                               })}
-                              title={product.name}
+                              title={product.nameAr || product.name}
                               allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
                               allowFullScreen
                               className="w-full h-full border-0"
@@ -227,26 +267,26 @@ export default function ProductDetailView({
                           </div>
                         );
                       }
-                      return (
+                      return product.videoUrl?.trim() ? (
                         <video
                           src={product.videoUrl}
-                          poster={activeImage}
+                          poster={activeImage?.trim() || undefined}
                           autoPlay
                           controls
                           loop
                           playsInline
                           className="w-full h-full object-contain"
                         />
-                      );
+                      ) : null;
                     })()}
                   </div>
                 )}
               </div>
 
               {/* Thumbnails Strip */}
-              {product.images && product.images.length > 1 && (
+              {validImages.length > 1 && (
                 <div className="flex gap-2.5 overflow-x-auto pb-1 no-scrollbar">
-                  {product.images.map((img, i) => (
+                  {validImages.map((img, i) => (
                     <button
                       key={i}
                       onClick={() => {
@@ -272,61 +312,73 @@ export default function ProductDetailView({
               )}
             </div>
 
-            {/* Configuration Column */}
+            {/* Configuration Column — Strictly renders ONLY populated fields */}
             <div className="lg:col-span-7 flex flex-col justify-between space-y-6">
               <div>
-                {/* Clean Unboxed Metadata */}
-                <div className="flex flex-wrap items-center justify-between gap-2 text-xs text-slate-500 mb-2">
-                  <div className="flex items-center gap-1.5 font-bold">
-                    <span className="text-[#0071e3] uppercase font-mono">{product.brand}</span>
-                    <span>·</span>
-                    <span>{isAr ? product.categoryNameAr : product.categoryNameEn}</span>
+                {/* Clean Metadata Row */}
+                {(hasBrand || product.categoryNameAr || hasRating) && (
+                  <div className="flex flex-wrap items-center justify-between gap-2 text-xs text-slate-500 mb-2">
+                    <div className="flex items-center gap-1.5 font-bold">
+                      {hasBrand && (
+                        <span className="text-[#0071e3] uppercase font-mono">{product.brand}</span>
+                      )}
+                      {hasBrand && (product.categoryNameAr || product.categoryNameEn) && (
+                        <span>·</span>
+                      )}
+                      {(product.categoryNameAr || product.categoryNameEn) && (
+                        <span>{isAr ? product.categoryNameAr : product.categoryNameEn || product.categoryNameAr}</span>
+                      )}
+                    </div>
+                    {hasRating && (
+                      <div className="flex items-center gap-1 text-amber-500 font-bold font-mono tabular-nums">
+                        <Star className="w-4 h-4 fill-amber-400 text-amber-400" />
+                        <span>{product.rating}</span>
+                        {product.reviewsCount > 0 && (
+                          <span className="text-slate-500 font-sans">
+                            ({product.reviewsCount} {isAr ? 'تقييم' : 'reviews'})
+                          </span>
+                        )}
+                      </div>
+                    )}
                   </div>
-                  <div className="flex items-center gap-1 text-amber-500 font-bold font-mono tabular-nums">
-                    <Star className="w-4 h-4 fill-amber-400 text-amber-400" />
-                    <span>{product.rating}</span>
-                    <span className="text-slate-500 font-sans">
-                      ({product.reviewsCount} {isAr ? 'تقييم' : 'reviews'})
-                    </span>
-                  </div>
-                </div>
+                )}
 
                 <h1 className="text-xl sm:text-3xl font-black text-[#0b1220] tracking-tight leading-snug mb-3">
-                  {isAr ? product.nameAr : product.name}
+                  {isAr ? product.nameAr : product.name || product.nameAr}
                 </h1>
 
-                <p className="text-xs sm:text-sm text-slate-600 leading-relaxed mb-5">
-                  {isAr ? product.descriptionAr : product.description}
-                </p>
+                {displayDesc && (
+                  <p className="text-xs sm:text-sm text-slate-600 leading-relaxed mb-5">
+                    {displayDesc}
+                  </p>
+                )}
 
-                {/* Price & Trust Block */}
-                <div className="p-4 sm:p-5 rounded-2xl liquid-glass-subtle mb-5 space-y-3">
+                {/* Clean Price Block (No forced warranty/delivery boilerplate) */}
+                <div className="p-4 sm:p-5 rounded-2xl liquid-glass-subtle mb-5">
                   <div className="flex flex-wrap items-baseline gap-3">
                     <span className="text-2xl sm:text-3xl font-black text-[#0b1220] font-mono tabular-nums">
                       {formatPrice(currentPrice, currency, isAr)}
                     </span>
-                    {product.originalPrice && (
+                    {product.originalPrice && product.originalPrice > currentPrice ? (
                       <span className="text-sm text-slate-400 line-through font-mono tabular-nums">
-                        {formatPrice(product.originalPrice + variantPriceExtra, currency, isAr)}
+                        {formatPrice(product.originalPrice, currency, isAr)}
+                      </span>
+                    ) : null}
+                    {product.discountPercentage && product.discountPercentage > 0 ? (
+                      <span className="px-2 py-0.5 rounded-lg bg-rose-600 text-white text-xs font-black tabular-nums">
+                        -{product.discountPercentage}%
+                      </span>
+                    ) : null}
+                    {product.inStock && (
+                      <span className="text-xs text-emerald-700 font-bold">
+                        · {isAr ? 'متوفر فوري' : 'In Stock'}
                       </span>
                     )}
-                    <span className="text-xs text-emerald-700 font-bold">
-                      · {isAr ? 'متوفر فوري' : 'In Stock'}
-                    </span>
-                  </div>
-
-                  <div className="flex items-center gap-2 text-xs text-slate-700 pt-2 border-t border-white/60">
-                    <ShieldCheck className="w-4 h-4 text-emerald-600 shrink-0" />
-                    <span className="font-bold">
-                      {isAr
-                        ? `منتج أصلي 100% معتمد مع ضمان ${product.warrantyYears} سنوات وفاتورة رسمية`
-                        : `100% Certified Original with ${product.warrantyYears}-Year Official Warranty`}
-                    </span>
                   </div>
                 </div>
 
-                {/* Color Selection */}
-                {product.colors && product.colors.length > 0 && (
+                {/* Color Selection — ONLY if admin added colors */}
+                {hasColors && (
                   <div className="mb-5">
                     <span className="text-xs font-extrabold text-slate-700 block mb-2">
                       {isAr ? 'اللون والتشطيب:' : 'Color Finish:'}
@@ -334,7 +386,7 @@ export default function ProductDetailView({
                     <div className="flex flex-wrap gap-2">
                       {product.colors.map((c, i) => (
                         <button
-                          key={c}
+                          key={`${c}-${i}`}
                           onClick={() => setSelectedColor(c)}
                           className={`px-3.5 py-2 rounded-xl border flex items-center gap-2 text-xs font-bold transition-all cursor-pointer ${
                             selectedColor === c
@@ -353,14 +405,17 @@ export default function ProductDetailView({
                   </div>
                 )}
 
-                {/* Variants Selection */}
-                {product.variants?.options && (
+                {/* Variants / Storage Selection — ONLY if admin added options */}
+                {hasVariants && (
                   <div className="mb-6">
                     <span className="text-xs font-extrabold text-slate-700 block mb-2">
-                      {isAr ? product.variants.titleAr : product.variants.titleEn}:
+                      {isAr
+                        ? product.variants.titleAr || 'السعة / الموديل'
+                        : product.variants.titleEn || product.variants.titleAr || 'Option'}
+                      :
                     </span>
                     <div className="flex flex-wrap gap-2">
-                      {product.variants.options.map((opt) => (
+                      {variantOptions.map((opt) => (
                         <button
                           key={opt}
                           onClick={() => setSelectedVariant(opt)}
@@ -378,7 +433,7 @@ export default function ProductDetailView({
                 )}
               </div>
 
-              {/* Action Buttons */}
+              {/* Action Buttons (No forced delivery/warranty cards below) */}
               <div className="space-y-4 pt-4 border-t border-white/60">
                 <div className="flex flex-wrap gap-3">
                   {/* Stepper */}
@@ -456,42 +511,21 @@ export default function ProductDetailView({
                     <span>{isAr ? 'تمت إضافة المنتج بنجاح إلى سلة الشراء!' : 'Item added to your cart!'}</span>
                   </div>
                 )}
-
-                {/* Clean Trust Row */}
-                <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5 pt-2 text-[11px] text-slate-600 font-semibold">
-                  <div className="flex items-center gap-2 liquid-glass-subtle p-2.5 rounded-xl">
-                    <Truck className="w-4 h-4 text-[#0071e3] shrink-0" />
-                    <span>{isAr ? 'توصيل سريع 24-48 ساعة' : 'Fast 24-48h Delivery'}</span>
-                  </div>
-                  <div className="flex items-center gap-2 liquid-glass-subtle p-2.5 rounded-xl">
-                    <ShieldCheck className="w-4 h-4 text-emerald-600 shrink-0" />
-                    <span>{isAr ? `ضمان رسمي ${product.warrantyYears} سنوات` : `${product.warrantyYears}-Year Warranty`}</span>
-                  </div>
-                  <div className="flex items-center gap-2 liquid-glass-subtle p-2.5 rounded-xl">
-                    <RotateCcw className="w-4 h-4 text-sky-600 shrink-0" />
-                    <span>{isAr ? 'فحص واستبدال عند الاستلام' : 'Inspect on Delivery'}</span>
-                  </div>
-                </div>
               </div>
             </div>
           </div>
         </div>
 
-        {/* Technical Specs & Details Tabs */}
+        {/* Dynamic Details & Specs Tabs (Strictly populated content only) */}
         <div className="liquid-glass-strong rounded-[30px] overflow-hidden mb-10">
           <div className="flex border-b border-white/60 bg-white/40 px-4 sm:px-6 text-xs font-extrabold overflow-x-auto no-scrollbar">
-            {[
-              { id: 'desc', icon: Info, ar: 'الوصف والمميزات', en: 'Overview' },
-              { id: 'specs', icon: Cpu, ar: 'المواصفات التقنية', en: 'Specifications' },
-              { id: 'reviews', icon: Star, ar: `آراء المشترين (${reviewsList.length})`, en: `Reviews (${reviewsList.length})` },
-              { id: 'warranty', icon: ShieldCheck, ar: 'الضمان الرسمي', en: 'Warranty' },
-            ].map((tab) => {
+            {availableTabs.map((tab) => {
               const Icon = tab.icon;
               const active = activeTab === tab.id;
               return (
                 <button
                   key={tab.id}
-                  onClick={() => setActiveTab(tab.id as 'specs' | 'desc' | 'reviews' | 'warranty')}
+                  onClick={() => setActiveTab(tab.id)}
                   className={`py-3.5 px-4 border-b-2 transition-colors flex items-center gap-1.5 shrink-0 whitespace-nowrap cursor-pointer ${
                     active
                       ? 'border-[#0071e3] text-[#0071e3]'
@@ -506,13 +540,13 @@ export default function ProductDetailView({
           </div>
 
           <div className="p-6 sm:p-8 text-xs sm:text-sm">
-            {activeTab === 'specs' && (
+            {activeTab === 'specs' && hasSpecs && (
               <div className="space-y-4">
                 <h3 className="font-extrabold text-[#0b1220] text-base">
-                  {isAr ? 'جدول المواصفات والخصائص الهندسية' : 'Hardware Specifications'}
+                  {isAr ? 'جدول المواصفات والخصائص' : 'Specifications'}
                 </h3>
                 <div className="divide-y divide-white/60 border border-white/70 rounded-2xl overflow-hidden bg-white/45">
-                  {Object.entries(product.specs || {}).map(([key, val]) => (
+                  {specEntries.map(([key, val]) => (
                     <div
                       key={key}
                       className="p-3.5 flex flex-col sm:flex-row sm:items-center justify-between gap-1 hover:bg-white/50"
@@ -535,32 +569,19 @@ export default function ProductDetailView({
                           : key}
                       </span>
                       <span className="font-semibold text-[#0b1220] sm:w-2/3 leading-relaxed">
-                        {isAr ? val.ar : val.en}
+                        {isAr ? val.ar : val.en || val.ar}
                       </span>
                     </div>
                   ))}
-                  <div className="p-3.5 flex flex-col sm:flex-row sm:items-center justify-between gap-1">
-                    <span className="font-bold text-slate-500 uppercase tracking-wider text-[11px] sm:w-1/3">
-                      {isAr ? 'الضمان المعتمد' : 'Warranty'}
-                    </span>
-                    <span className="font-bold text-emerald-700 sm:w-2/3">
-                      {product.warrantyYears} {isAr ? 'سنوات ضمان الوكيل الرسمي' : 'Years official authorized warranty'}
-                    </span>
-                  </div>
                 </div>
               </div>
             )}
 
-            {activeTab === 'desc' && (
-              <div className="space-y-4 leading-relaxed text-slate-700">
-                <p className="text-sm font-semibold text-[#0b1220]">
-                  {isAr ? product.descriptionAr : product.description}
+            {activeTab === 'desc' && displayDesc && (
+              <div className="leading-relaxed text-slate-700">
+                <p className="text-sm font-semibold text-[#0b1220] whitespace-pre-line">
+                  {displayDesc}
                 </p>
-                <div className="bg-[#0071e3]/8 p-4 rounded-2xl border border-[#0071e3]/20 text-xs text-[#005bbf] font-semibold">
-                  {isAr
-                    ? 'جميع الهواتف والملحقات المعروضة في متجر صدام العقاري للإلكترونيات أصلية 100% ومستوردة من الوكلاء الرسميين مع الضمان المعتمد.'
-                    : 'All devices and accessories at Saddam Al-Aqari Electronics are 100% genuine with official authorized warranty.'}
-                </div>
               </div>
             )}
 
@@ -571,7 +592,7 @@ export default function ProductDetailView({
                   className="liquid-glass-subtle p-5 rounded-2xl space-y-3"
                 >
                   <h4 className="font-extrabold text-[#0b1220] text-xs">
-                    {isAr ? 'أضف تقييمك وتجربتك للجهاز:' : 'Leave a verified review:'}
+                    {isAr ? 'أضف تقييمك وتجربتك للمنتج:' : 'Leave a review:'}
                   </h4>
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                     <input
@@ -598,7 +619,7 @@ export default function ProductDetailView({
                   <textarea
                     required
                     rows={3}
-                    placeholder={isAr ? 'اكتب رأيك الصادق في جودة المنتج وسرعة التسليم...' : 'Your detailed feedback...'}
+                    placeholder={isAr ? 'اكتب رأيك في المنتج...' : 'Your feedback...'}
                     value={newReviewComment}
                     onChange={(e) => setNewReviewComment(e.target.value)}
                     className="w-full p-2.5 rounded-xl border border-white/80 bg-white/80 text-xs text-[#0b1220] focus:outline-none focus:ring-2 focus:ring-[#0071e3]/30"
@@ -618,51 +639,34 @@ export default function ProductDetailView({
                   </div>
                 </form>
 
-                <div className="space-y-3">
-                  {reviewsList.map((rev) => (
-                    <div key={rev.id} className="p-4 rounded-2xl liquid-glass-subtle space-y-2">
-                      <div className="flex items-center justify-between">
-                        <div className="flex items-center gap-2">
+                {reviewsList.length > 0 && (
+                  <div className="space-y-3">
+                    {reviewsList.map((rev) => (
+                      <div key={rev.id} className="p-4 rounded-2xl liquid-glass-subtle space-y-2">
+                        <div className="flex items-center justify-between">
                           <span className="font-extrabold text-[#0b1220]">{rev.author}</span>
-                          {rev.verifiedPurchase && (
-                            <span className="text-[11px] text-emerald-700 font-bold">
-                              · {isAr ? 'مشتري موثق' : 'Verified Buyer'}
-                            </span>
-                          )}
+                          <span className="text-amber-500 font-mono text-xs">
+                            {'★'.repeat(rev.rating)}
+                          </span>
                         </div>
-                        <span className="text-amber-500 font-mono text-xs">{'★'.repeat(rev.rating)}</span>
+                        <p className="text-xs text-slate-600 leading-relaxed">
+                          {isAr ? rev.commentAr : rev.comment}
+                        </p>
+                        <span className="text-[10px] text-slate-400 font-mono block">{rev.date}</span>
                       </div>
-                      <p className="text-xs text-slate-600 leading-relaxed">
-                        {isAr ? rev.commentAr : rev.comment}
-                      </p>
-                      <span className="text-[10px] text-slate-400 font-mono block">{rev.date}</span>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            )}
-
-            {activeTab === 'warranty' && (
-              <div className="bg-emerald-50/80 p-5 rounded-2xl border border-emerald-200/80 text-emerald-950 space-y-2">
-                <h4 className="font-black text-sm flex items-center gap-2">
-                  <ShieldCheck className="w-5 h-5 text-emerald-600" />
-                  <span>{isAr ? 'شهادة الضمان الذهبي المعتمد' : 'Official Comprehensive Warranty'}</span>
-                </h4>
-                <p className="text-xs text-emerald-900 leading-relaxed">
-                  {isAr
-                    ? 'يغطي الضمان كافة العيوب المصنعية والأعطال الفنية مع إمكانية فحص الجهاز والتأكد من ملحقاته قبل الاستلام مع فاتورة رسمية من محلات صدام العقاري.'
-                    : 'Comprehensive coverage for manufacturing and hardware defects backed by an official invoice from Saddam Al-Aqari Store.'}
-                </p>
+                    ))}
+                  </div>
+                )}
               </div>
             )}
           </div>
         </div>
 
-        {/* Related Products */}
+        {/* Real Related Products ONLY (Hidden if none exist in Firestore) */}
         {relatedProducts.length > 0 && (
           <div>
             <h3 className="text-lg sm:text-xl font-black text-[#0b1220] mb-5">
-              {isAr ? 'منتجات وملحقات مشابهة' : 'Related Hardware & Accessories'}
+              {isAr ? 'منتجات مشابهة' : 'Related Products'}
             </h3>
             <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-5">
               {relatedProducts.map((p) => (
@@ -689,7 +693,7 @@ export default function ProductDetailView({
       <div className="lg:hidden fixed bottom-0 inset-x-0 z-40 liquid-glass-strong p-2.5 border-t border-white/80 flex items-center gap-2">
         <div className="flex-1 min-w-0">
           <div className="text-[10px] text-slate-600 truncate font-semibold">
-            {isAr ? product.nameAr : product.name}
+            {isAr ? product.nameAr : product.name || product.nameAr}
           </div>
           <div className="text-sm font-black text-[#0b1220] font-mono tabular-nums leading-tight">
             {formatPrice(currentPrice, currency, isAr)}

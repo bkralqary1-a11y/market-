@@ -1,4 +1,13 @@
-export type CategoryId = 'all' | 'phones' | 'audio' | 'cases' | 'chargers' | 'cables';
+export type CategoryId = string;
+
+export interface StoreCategoryItem {
+  id: string;
+  nameAr: string;
+  nameEn: string;
+  image: string;
+  hidden?: boolean;
+  isCustom?: boolean;
+}
 
 export interface Product {
   id: string;

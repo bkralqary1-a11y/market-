@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, type ChangeEvent } from 'react';
 import {
   X,
   Plus,
@@ -14,14 +14,17 @@ import {
   Loader2,
   CheckCircle2,
   Sparkles,
+  Upload,
 } from 'lucide-react';
-import { Product, CategoryId } from '../types';
-import { CATEGORY_META, normalizeSafeId } from '../services/firestoreService';
+import { Product, CategoryId, StoreCategoryItem } from '../types';
+import { normalizeSafeId } from '../services/firestoreService';
+import { compressImageFileToDataUrl } from '../utils/imageUpload';
 
 interface VisualProductEditorModalProps {
   isOpen: boolean;
   product: Product | null; // null => Add new product
   defaultCategory?: CategoryId;
+  categories: StoreCategoryItem[];
   onClose: () => void;
   onSave: (product: Product) => Promise<void>;
   onDelete?: (productId: string) => Promise<void>;
@@ -38,46 +41,47 @@ interface SpecRow {
   en: string;
 }
 
-function createEmptyProduct(defaultCategory: CategoryId = 'phones'): Product {
-  const safeCat: Exclude<CategoryId, 'all'> =
-    defaultCategory === 'all' ? 'phones' : defaultCategory;
-  const meta = CATEGORY_META[safeCat];
-  const randomCode = Math.floor(1000 + Math.random() * 9000);
+function createEmptyProduct(
+  defaultCategory: CategoryId,
+  categories: StoreCategoryItem[]
+): Product {
+  const matchedCat =
+    categories.find((c) => c.id === defaultCategory) ||
+    categories[0] || { id: 'phones', nameAr: 'الهواتف الذكية', nameEn: 'Smartphones' };
+
   return {
     id: `prod-${Date.now().toString(36)}`,
-    sku: `SDM-${randomCode}`,
+    sku: '',
     name: '',
     nameAr: '',
-    brand: 'Apple',
+    brand: '',
     price: 0,
     originalPrice: 0,
     discountPercentage: 0,
-    category: safeCat,
-    categoryNameEn: meta.nameEn,
-    categoryNameAr: meta.nameAr,
+    category: matchedCat.id,
+    categoryNameEn: matchedCat.nameEn || matchedCat.nameAr,
+    categoryNameAr: matchedCat.nameAr,
     image: '',
     images: [],
-    rating: 5.0,
-    reviewsCount: 1,
+    rating: 0,
+    reviewsCount: 0,
     description: '',
     descriptionAr: '',
     inStock: true,
-    stock: 10,
-    fastShipping: true,
-    warrantyYears: 1,
+    stock: 0,
+    fastShipping: false,
+    warrantyYears: 0,
     isTrending: true,
-    isPopular: true,
+    isPopular: false,
     isFeatured: false,
-    colors: ['#1e293b'],
-    colorNamesAr: ['أسود ليلي'],
+    colors: [],
+    colorNamesAr: [],
     variants: {
-      titleEn: 'Storage / Model',
-      titleAr: 'السعة / الموديل',
-      options: ['256GB'],
+      titleEn: '',
+      titleAr: '',
+      options: [],
     },
-    specs: {
-      warranty: { en: 'Official Warranty', ar: 'ضمان رسمي معتمد' },
-    },
+    specs: {},
     tagAr: '',
     videoUrl: '',
     hidden: false,
@@ -88,18 +92,20 @@ export default function VisualProductEditorModal({
   isOpen,
   product,
   defaultCategory = 'phones',
+  categories,
   onClose,
   onSave,
   onDelete,
 }: VisualProductEditorModalProps) {
   const isNew = !product;
   const [form, setForm] = useState<Product>(() =>
-    product ? { ...product } : createEmptyProduct(defaultCategory)
+    product ? { ...product } : createEmptyProduct(defaultCategory, categories)
   );
   const [galleryUrls, setGalleryUrls] = useState<string[]>([]);
   const [colorEntries, setColorEntries] = useState<ColorEntry[]>([]);
   const [variantOptionsText, setVariantOptionsText] = useState('');
   const [specRows, setSpecRows] = useState<SpecRow[]>([]);
+  const [uploadingImage, setUploadingImage] = useState(false);
   const [saving, setSaving] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
@@ -107,11 +113,11 @@ export default function VisualProductEditorModal({
 
   useEffect(() => {
     if (!isOpen) return;
-    const base = product ? { ...product } : createEmptyProduct(defaultCategory);
+    const base = product ? { ...product } : createEmptyProduct(defaultCategory, categories);
     setForm(base);
 
     const extraImages = (base.images || []).filter((img) => img && img !== base.image);
-    setGalleryUrls(extraImages.length > 0 ? extraImages : ['']);
+    setGalleryUrls(extraImages);
 
     const cols = base.colors || [];
     const names = base.colorNamesAr || [];
@@ -133,18 +139,93 @@ export default function VisualProductEditorModal({
       ar: val?.ar || '',
       en: val?.en || '',
     }));
-    setSpecRows(
-      existingSpecs.length > 0 ? existingSpecs : [{ key: 'المواصفة 1', ar: '', en: '' }]
-    );
+    setSpecRows(existingSpecs);
 
     setConfirmDelete(false);
     setStatusError(null);
-  }, [isOpen, product, defaultCategory]);
+  }, [isOpen, product, defaultCategory, categories]);
 
   if (!isOpen) return null;
 
-  const handlePriceChange = (newPrice: number) => {
-    const safePrice = Math.max(0, newPrice);
+  const handlePrimaryFileUpload = async (e: ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    e.target.value = '';
+    if (!file) return;
+    setUploadingImage(true);
+    setStatusError(null);
+    try {
+      const dataUrl = await compressImageFileToDataUrl(file, {
+        maxDimension: 760,
+        quality: 0.76,
+        maxChars: 170000,
+      });
+      setForm((prev) => ({ ...prev, image: dataUrl }));
+    } catch (err) {
+      setStatusError(err instanceof Error ? err.message : 'تعذر رفع الصورة المختارة.');
+    } finally {
+      setUploadingImage(false);
+    }
+  };
+
+  const handleGalleryFilesUpload = async (e: ChangeEvent<HTMLInputElement>) => {
+    const files: File[] = e.target.files ? Array.from(e.target.files) : [];
+    e.target.value = '';
+    if (files.length === 0) return;
+    setUploadingImage(true);
+    setStatusError(null);
+    try {
+      const remainingSlots = Math.max(0, 6 - galleryUrls.length);
+      const selected = files.slice(0, remainingSlots);
+      const uploaded: string[] = [];
+      for (const file of selected) {
+        const dataUrl = await compressImageFileToDataUrl(file, {
+          maxDimension: 640,
+          quality: 0.72,
+          maxChars: 110000,
+        });
+        uploaded.push(dataUrl);
+      }
+      if (!form.image.trim() && uploaded.length > 0) {
+        setForm((prev) => ({ ...prev, image: uploaded[0] }));
+        if (uploaded.length > 1) {
+          setGalleryUrls((prev) => [...prev, ...uploaded.slice(1)]);
+        }
+      } else {
+        setGalleryUrls((prev) => [...prev, ...uploaded]);
+      }
+    } catch (err) {
+      setStatusError(err instanceof Error ? err.message : 'تعذر رفع بعض الصور.');
+    } finally {
+      setUploadingImage(false);
+    }
+  };
+
+  const handleSingleGalleryUpload = async (idx: number, e: ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    e.target.value = '';
+    if (!file) return;
+    setUploadingImage(true);
+    setStatusError(null);
+    try {
+      const dataUrl = await compressImageFileToDataUrl(file, {
+        maxDimension: 640,
+        quality: 0.72,
+        maxChars: 110000,
+      });
+      setGalleryUrls((prev) => {
+        const next = [...prev];
+        next[idx] = dataUrl;
+        return next;
+      });
+    } catch (err) {
+      setStatusError(err instanceof Error ? err.message : 'تعذر رفع الصورة.');
+    } finally {
+      setUploadingImage(false);
+    }
+  };
+
+  const handlePriceChange = (val: string) => {
+    const safePrice = val === '' ? 0 : Math.max(0, Number(val) || 0);
     setForm((prev) => {
       const orig = prev.originalPrice || 0;
       const calcDiscount =
@@ -153,8 +234,8 @@ export default function VisualProductEditorModal({
     });
   };
 
-  const handleOriginalPriceChange = (newOrig: number) => {
-    const safeOrig = Math.max(0, newOrig);
+  const handleOriginalPriceChange = (val: string) => {
+    const safeOrig = val === '' ? 0 : Math.max(0, Number(val) || 0);
     setForm((prev) => {
       const calcDiscount =
         safeOrig > prev.price && safeOrig > 0
@@ -164,8 +245,8 @@ export default function VisualProductEditorModal({
     });
   };
 
-  const handleDiscountChange = (newPct: number) => {
-    const safePct = Math.min(99, Math.max(0, Math.round(newPct)));
+  const handleDiscountChange = (val: string) => {
+    const safePct = val === '' ? 0 : Math.min(99, Math.max(0, Math.round(Number(val) || 0)));
     setForm((prev) => {
       if (prev.originalPrice && prev.originalPrice > 0) {
         const discountedPrice = Math.round(prev.originalPrice * (1 - safePct / 100));
@@ -179,13 +260,13 @@ export default function VisualProductEditorModal({
     });
   };
 
-  const handleCategoryChange = (cat: Exclude<CategoryId, 'all'>) => {
-    const meta = CATEGORY_META[cat];
+  const handleCategoryChange = (catId: string) => {
+    const matched = categories.find((c) => c.id === catId);
     setForm((prev) => ({
       ...prev,
-      category: cat,
-      categoryNameAr: meta.nameAr,
-      categoryNameEn: meta.nameEn,
+      category: catId,
+      categoryNameAr: matched?.nameAr || catId,
+      categoryNameEn: matched?.nameEn || matched?.nameAr || catId,
     }));
   };
 
@@ -201,7 +282,19 @@ export default function VisualProductEditorModal({
       const cleanImages = [
         form.image.trim(),
         ...galleryUrls.map((u) => u.trim()),
-      ].filter((u, idx, arr) => u.length > 0 && arr.indexOf(u) === idx);
+      ]
+        .filter((u, idx, arr) => u.length > 0 && arr.indexOf(u) === idx)
+        .slice(0, 7);
+
+      // Guard total payload size comfortably below Firestore's 1MB document limit
+      const totalImageBytes = cleanImages.reduce((sum, s) => sum + s.length, 0);
+      if (totalImageBytes > 780000) {
+        setStatusError(
+          'مجموع حجم الصور كبير جداً. يرجى تقليل عدد الصور الإضافية أو استخدام روابط مباشرة لبعضها.'
+        );
+        setSaving(false);
+        return;
+      }
 
       const cleanColors = colorEntries.map((c) => c.hex.trim()).filter(Boolean);
       const cleanColorNames = colorEntries.map((c) => c.nameAr.trim() || c.hex.trim());
@@ -222,17 +315,24 @@ export default function VisualProductEditorModal({
 
       const finalProduct: Product = {
         ...form,
-        id: normalizeSafeId(form.id, 'prod'),
-        name: form.name.trim() || form.nameAr.trim(),
+        id: isNew ? normalizeSafeId(form.id, 'prod') : form.id,
+        name: form.name.trim(),
         nameAr: form.nameAr.trim(),
+        brand: form.brand.trim(),
+        sku: form.sku.trim(),
+        description: form.description.trim(),
+        descriptionAr: form.descriptionAr.trim(),
         image: cleanImages[0] || '',
         images: cleanImages,
         colors: cleanColors,
         colorNamesAr: cleanColorNames,
         variants: {
-          titleAr: form.variants.titleAr.trim() || 'الخيار',
-          titleEn: form.variants.titleEn.trim() || form.variants.titleAr.trim() || 'Option',
-          options: parsedOptions.length > 0 ? parsedOptions : ['الأساسي'],
+          titleAr: parsedOptions.length > 0 ? form.variants.titleAr.trim() || 'السعة / الموديل' : '',
+          titleEn:
+            parsedOptions.length > 0
+              ? form.variants.titleEn.trim() || form.variants.titleAr.trim() || 'Option'
+              : '',
+          options: parsedOptions, // Empty array when left blank => never shows!
         },
         specs: specsRecord,
         originalPrice:
@@ -284,14 +384,18 @@ export default function VisualProductEditorModal({
         <div className="px-5 sm:px-7 py-4 border-b border-slate-900/10 flex items-center justify-between gap-3 bg-white/50">
           <div className="flex items-center gap-3 min-w-0">
             <div className="w-10 h-10 rounded-2xl liquid-btn-primary flex items-center justify-center shrink-0">
-              {isNew ? <Plus className="w-5 h-5 text-white" /> : <Sparkles className="w-5 h-5 text-white" />}
+              {isNew ? (
+                <Plus className="w-5 h-5 text-white" />
+              ) : (
+                <Sparkles className="w-5 h-5 text-white" />
+              )}
             </div>
             <div className="min-w-0">
               <h2 className="text-base sm:text-lg font-extrabold text-[#0b1220] truncate">
                 {isNew ? 'إضافة منتج جديد للمتجر' : `تعديل المنتج: ${form.nameAr || product?.nameAr}`}
               </h2>
               <p className="text-[11px] text-slate-600">
-                عدّل الصورة، السعر، نسبة الخصم، الألوان، الخيارات، والمواصفات داخل المربعات أدناه
+                كل المربعات اختيارية — أي مربع تكتب فيه سيظهر في صفحة المنتج، وأي مربع تتركه فارغاً لن يظهر
               </p>
             </div>
           </div>
@@ -314,38 +418,78 @@ export default function VisualProductEditorModal({
             </div>
           )}
 
-          {/* BLOCK 1: الصـور والفيديو + معاينة فورية */}
+          {/* BLOCK 1: الصور (رفع مباشر من المعرض + رابط اختياري) */}
           <div className="p-4 sm:p-5 rounded-2xl bg-white/70 border border-white/90 shadow-sm space-y-4">
-            <div className="flex items-center justify-between gap-2">
+            <div className="flex flex-wrap items-center justify-between gap-2">
               <h3 className="text-sm font-extrabold text-[#0b1220] flex items-center gap-2">
                 <ImageIcon className="w-4 h-4 text-[#0071e3]" />
-                <span>الصورة الرئيسية ومعرض صور المنتج</span>
+                <span>صور المنتج (اختر من المعرض أو أضف رابطاً)</span>
               </h3>
-              <button
-                type="button"
-                onClick={() => setGalleryUrls((prev) => [...prev, ''])}
-                className="text-xs font-bold text-[#0071e3] hover:bg-sky-50 px-3 py-1.5 rounded-xl border border-sky-200/80 flex items-center gap-1 cursor-pointer"
-              >
-                <Plus className="w-3.5 h-3.5" />
-                <span>إضافة صورة إضافية</span>
-              </button>
+              <div className="flex flex-wrap items-center gap-2">
+                <label className="text-xs font-bold bg-[#0071e3] hover:bg-[#005bbf] text-white px-3 py-1.5 rounded-xl flex items-center gap-1.5 cursor-pointer shadow-sm">
+                  {uploadingImage ? (
+                    <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                  ) : (
+                    <Upload className="w-3.5 h-3.5" />
+                  )}
+                  <span>رفع صور من المعرض</span>
+                  <input
+                    type="file"
+                    accept="image/*"
+                    multiple
+                    onChange={handleGalleryFilesUpload}
+                    className="hidden"
+                    disabled={uploadingImage}
+                  />
+                </label>
+                <button
+                  type="button"
+                  onClick={() => setGalleryUrls((prev) => [...prev, ''])}
+                  className="text-xs font-bold text-[#0071e3] hover:bg-sky-50 px-3 py-1.5 rounded-xl border border-sky-200/80 flex items-center gap-1 cursor-pointer"
+                >
+                  <Plus className="w-3.5 h-3.5" />
+                  <span>مربع رابط إضافي</span>
+                </button>
+              </div>
             </div>
 
             <div className="grid grid-cols-1 md:grid-cols-12 gap-4 items-start">
-              {/* Live Square Preview */}
-              <div className="md:col-span-4 aspect-square rounded-2xl bg-slate-100/80 border-2 border-dashed border-slate-300 overflow-hidden flex items-center justify-center relative">
+              {/* Live Square Preview + Direct Tap to Upload */}
+              <div className="md:col-span-4 aspect-square rounded-2xl bg-slate-100/80 border-2 border-dashed border-slate-300 overflow-hidden flex items-center justify-center relative group">
                 {form.image ? (
-                  <img
-                    src={form.image}
-                    alt={form.nameAr || 'معاينة'}
-                    referrerPolicy="no-referrer"
-                    className="w-full h-full object-cover"
-                  />
+                  <>
+                    <img
+                      src={form.image}
+                      alt={form.nameAr || 'معاينة'}
+                      referrerPolicy="no-referrer"
+                      className="w-full h-full object-cover"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setForm((p) => ({ ...p, image: '' }))}
+                      className="absolute bottom-2.5 left-2.5 px-2.5 py-1 rounded-xl bg-rose-600/90 text-white text-[10px] font-bold flex items-center gap-1 cursor-pointer shadow"
+                    >
+                      <Trash2 className="w-3 h-3" />
+                      <span>مسح الصورة</span>
+                    </button>
+                  </>
                 ) : (
-                  <div className="text-center p-4 text-slate-400">
-                    <ImageIcon className="w-10 h-10 mx-auto mb-1.5 opacity-60" />
-                    <span className="text-xs font-bold block">معاينة صورة المنتج</span>
-                  </div>
+                  <label className="w-full h-full flex flex-col items-center justify-center p-4 text-slate-500 hover:text-[#0071e3] cursor-pointer text-center transition-colors">
+                    {uploadingImage ? (
+                      <Loader2 className="w-9 h-9 animate-spin text-[#0071e3] mb-2" />
+                    ) : (
+                      <Upload className="w-9 h-9 mb-2 opacity-75" />
+                    )}
+                    <span className="text-xs font-extrabold block">اضغط لاختيار صورة من جهازك</span>
+                    <span className="text-[10px] text-slate-400 mt-1">يتم ضغطها تلقائياً للحفظ السريع</span>
+                    <input
+                      type="file"
+                      accept="image/*"
+                      onChange={handlePrimaryFileUpload}
+                      className="hidden"
+                      disabled={uploadingImage}
+                    />
+                  </label>
                 )}
                 {form.discountPercentage ? (
                   <span className="absolute top-2.5 right-2.5 bg-rose-600 text-white text-xs font-black px-2.5 py-1 rounded-xl shadow">
@@ -354,18 +498,35 @@ export default function VisualProductEditorModal({
                 ) : null}
               </div>
 
-              {/* Rectangular URL Boxes */}
+              {/* Primary & Gallery Upload / URL Boxes */}
               <div className="md:col-span-8 space-y-3">
-                <div className="p-3 rounded-xl bg-white border border-slate-200/90">
-                  <label className="block text-[11px] font-extrabold text-slate-600 mb-1">
-                    رابط الصورة الرئيسية (URL)
-                  </label>
+                <div className="p-3 rounded-xl bg-white border border-slate-200/90 space-y-2">
+                  <div className="flex items-center justify-between gap-2">
+                    <label className="text-[11px] font-extrabold text-slate-600">
+                      الصورة الرئيسية (ارفع من الجهاز أو الصق رابطاً)
+                    </label>
+                    <label className="text-[11px] font-extrabold text-[#0071e3] hover:underline flex items-center gap-1 cursor-pointer">
+                      <Upload className="w-3.5 h-3.5" />
+                      <span>اختر من المعرض</span>
+                      <input
+                        type="file"
+                        accept="image/*"
+                        onChange={handlePrimaryFileUpload}
+                        className="hidden"
+                        disabled={uploadingImage}
+                      />
+                    </label>
+                  </div>
                   <input
-                    type="url"
+                    type="text"
                     dir="ltr"
-                    value={form.image}
+                    value={form.image.startsWith('data:') ? '' : form.image}
                     onChange={(e) => setForm((p) => ({ ...p, image: e.target.value }))}
-                    placeholder="https://example.com/product-photo.jpg"
+                    placeholder={
+                      form.image.startsWith('data:')
+                        ? 'تم رفع الصورة من جهازك بنجاح ✓ (أو الصق رابطاً لاستبدالها)'
+                        : 'https://example.com/product-photo.jpg (اختياري)'
+                    }
                     className="w-full px-3 py-2 rounded-lg bg-slate-50 border border-slate-200 text-xs text-[#0b1220] focus:outline-none focus:ring-2 focus:ring-[#0071e3]"
                   />
                 </div>
@@ -375,7 +536,7 @@ export default function VisualProductEditorModal({
                     key={idx}
                     className="p-2.5 rounded-xl bg-white border border-slate-200/90 flex items-center gap-2"
                   >
-                    <div className="w-10 h-10 rounded-lg bg-slate-100 border border-slate-200 overflow-hidden shrink-0 flex items-center justify-center">
+                    <div className="w-11 h-11 rounded-lg bg-slate-100 border border-slate-200 overflow-hidden shrink-0 flex items-center justify-center">
                       {url ? (
                         <img
                           src={url}
@@ -388,21 +549,38 @@ export default function VisualProductEditorModal({
                       )}
                     </div>
                     <input
-                      type="url"
+                      type="text"
                       dir="ltr"
-                      value={url}
+                      value={url.startsWith('data:') ? '' : url}
                       onChange={(e) => {
                         const next = [...galleryUrls];
                         next[idx] = e.target.value;
                         setGalleryUrls(next);
                       }}
-                      placeholder={`رابط صورة إضافية ${idx + 2}`}
-                      className="flex-1 px-3 py-2 rounded-lg bg-slate-50 border border-slate-200 text-xs text-[#0b1220] focus:outline-none focus:ring-2 focus:ring-[#0071e3]"
+                      placeholder={
+                        url.startsWith('data:')
+                          ? `صورة إضافية ${idx + 2} مرفوعة من الجهاز ✓`
+                          : `رابط صورة إضافية ${idx + 2}`
+                      }
+                      className="flex-1 min-w-0 px-3 py-2 rounded-lg bg-slate-50 border border-slate-200 text-xs text-[#0b1220] focus:outline-none focus:ring-2 focus:ring-[#0071e3]"
                     />
+                    <label
+                      className="p-2 rounded-lg text-[#0071e3] hover:bg-sky-50 cursor-pointer shrink-0"
+                      title="رفع من المعرض"
+                    >
+                      <Upload className="w-4 h-4" />
+                      <input
+                        type="file"
+                        accept="image/*"
+                        onChange={(e) => handleSingleGalleryUpload(idx, e)}
+                        className="hidden"
+                        disabled={uploadingImage}
+                      />
+                    </label>
                     <button
                       type="button"
                       onClick={() => setGalleryUrls((prev) => prev.filter((_, i) => i !== idx))}
-                      className="p-2 rounded-lg text-rose-500 hover:bg-rose-50 cursor-pointer"
+                      className="p-2 rounded-lg text-rose-500 hover:bg-rose-50 cursor-pointer shrink-0"
                       aria-label="حذف الصورة"
                     >
                       <Trash2 className="w-4 h-4" />
@@ -412,14 +590,14 @@ export default function VisualProductEditorModal({
 
                 <div className="p-3 rounded-xl bg-white border border-slate-200/90">
                   <label className="block text-[11px] font-extrabold text-slate-600 mb-1">
-                    رابط فيديو استعراض المنتج (اختياري - YouTube أو MP4)
+                    رابط فيديو للمنتج (اختياري)
                   </label>
                   <input
                     type="url"
                     dir="ltr"
                     value={form.videoUrl || ''}
                     onChange={(e) => setForm((p) => ({ ...p, videoUrl: e.target.value }))}
-                    placeholder="https://youtube.com/watch?v=..."
+                    placeholder="اتركه فارغاً إذا لا يوجد فيديو"
                     className="w-full px-3 py-2 rounded-lg bg-slate-50 border border-slate-200 text-xs text-[#0b1220] focus:outline-none focus:ring-2 focus:ring-[#0071e3]"
                   />
                 </div>
@@ -439,7 +617,7 @@ export default function VisualProductEditorModal({
                   type="text"
                   value={form.nameAr}
                   onChange={(e) => setForm((p) => ({ ...p, nameAr: e.target.value }))}
-                  placeholder="مثال: آيفون 16 برو ماكس 256 جيجا"
+                  placeholder="اكتب اسم المنتج هنا..."
                   className="w-full px-3 py-2 rounded-lg bg-slate-50 border border-slate-200 text-sm font-bold text-[#0b1220] focus:outline-none focus:ring-2 focus:ring-[#0071e3]"
                 />
               </div>
@@ -450,70 +628,68 @@ export default function VisualProductEditorModal({
                 </label>
                 <select
                   value={form.category}
-                  onChange={(e) =>
-                    handleCategoryChange(e.target.value as Exclude<CategoryId, 'all'>)
-                  }
+                  onChange={(e) => handleCategoryChange(e.target.value)}
                   className="w-full px-3 py-2 rounded-lg bg-slate-50 border border-slate-200 text-sm font-bold text-[#0b1220] focus:outline-none focus:ring-2 focus:ring-[#0071e3]"
                 >
-                  <option value="phones">الهواتف الذكية</option>
-                  <option value="audio">السماعات</option>
-                  <option value="cases">الكفرات والحماية</option>
-                  <option value="chargers">الشواحن</option>
-                  <option value="cables">الكيابل</option>
+                  {categories.map((cat) => (
+                    <option key={cat.id} value={cat.id}>
+                      {cat.nameAr}
+                    </option>
+                  ))}
                 </select>
               </div>
 
               <div className="p-3 rounded-xl bg-white border border-slate-200/90">
                 <label className="block text-[11px] font-extrabold text-slate-600 mb-1">
-                  اسم المنتج (بالإنجليزي - اختياري)
-                </label>
-                <input
-                  type="text"
-                  dir="ltr"
-                  value={form.name}
-                  onChange={(e) => setForm((p) => ({ ...p, name: e.target.value }))}
-                  placeholder="iPhone 16 Pro Max"
-                  className="w-full px-3 py-2 rounded-lg bg-slate-50 border border-slate-200 text-xs text-[#0b1220] focus:outline-none focus:ring-2 focus:ring-[#0071e3]"
-                />
-              </div>
-
-              <div className="p-3 rounded-xl bg-white border border-slate-200/90">
-                <label className="block text-[11px] font-extrabold text-slate-600 mb-1">
-                  الشركة / الماركة
+                  الشركة / الماركة (اختياري)
                 </label>
                 <input
                   type="text"
                   value={form.brand}
                   onChange={(e) => setForm((p) => ({ ...p, brand: e.target.value }))}
-                  placeholder="Apple, Samsung, Anker..."
+                  placeholder="اتركه فارغاً إن لم ترغب بإظهاره"
                   className="w-full px-3 py-2 rounded-lg bg-slate-50 border border-slate-200 text-xs font-bold text-[#0b1220] focus:outline-none focus:ring-2 focus:ring-[#0071e3]"
                 />
               </div>
 
               <div className="p-3 rounded-xl bg-white border border-slate-200/90">
                 <label className="block text-[11px] font-extrabold text-slate-600 mb-1">
-                  كود المنتج (SKU)
+                  اسم المنتج بالإنجليزي (اختياري)
+                </label>
+                <input
+                  type="text"
+                  dir="ltr"
+                  value={form.name}
+                  onChange={(e) => setForm((p) => ({ ...p, name: e.target.value }))}
+                  placeholder="Optional English Name"
+                  className="w-full px-3 py-2 rounded-lg bg-slate-50 border border-slate-200 text-xs text-[#0b1220] focus:outline-none focus:ring-2 focus:ring-[#0071e3]"
+                />
+              </div>
+
+              <div className="p-3 rounded-xl bg-white border border-slate-200/90">
+                <label className="block text-[11px] font-extrabold text-slate-600 mb-1">
+                  كود المنتج SKU (اختياري)
                 </label>
                 <input
                   type="text"
                   dir="ltr"
                   value={form.sku}
                   onChange={(e) => setForm((p) => ({ ...p, sku: e.target.value }))}
-                  placeholder="SDM-1001"
+                  placeholder="اتركه فارغاً للإخفاء"
                   className="w-full px-3 py-2 rounded-lg bg-slate-50 border border-slate-200 text-xs font-mono text-[#0b1220] focus:outline-none focus:ring-2 focus:ring-[#0071e3]"
                 />
               </div>
             </div>
           </div>
 
-          {/* BLOCK 3: السعر، السعر قبل الخصم، النسبة %، المخزون والضمان */}
+          {/* BLOCK 3: السعر، الخصم، المخزون */}
           <div className="p-4 sm:p-5 rounded-2xl bg-white/70 border border-white/90 shadow-sm space-y-3">
             <h3 className="text-sm font-extrabold text-[#0b1220] flex items-center gap-2">
               <Percent className="w-4 h-4 text-[#0071e3]" />
-              <span>السعر ونسبة الخصم والمخزون والضمان</span>
+              <span>السعر ونسبة الخصم</span>
             </h3>
 
-            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
+            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
               <div className="p-3 rounded-xl bg-white border border-slate-200/90">
                 <label className="block text-[11px] font-extrabold text-slate-600 mb-1">
                   السعر الحالي (ر.ي)
@@ -521,98 +697,100 @@ export default function VisualProductEditorModal({
                 <input
                   type="number"
                   min={0}
-                  value={form.price}
-                  onChange={(e) => handlePriceChange(Number(e.target.value))}
+                  value={form.price || ''}
+                  onChange={(e) => handlePriceChange(e.target.value)}
+                  placeholder="مثال: 15000"
                   className="w-full px-2.5 py-2 rounded-lg bg-slate-50 border border-slate-200 text-sm font-black text-[#0071e3] tabular-nums focus:outline-none focus:ring-2 focus:ring-[#0071e3]"
                 />
               </div>
 
               <div className="p-3 rounded-xl bg-white border border-slate-200/90">
                 <label className="block text-[11px] font-extrabold text-slate-600 mb-1">
-                  السعر قبل الخصم
+                  السعر قبل الخصم (اختياري)
                 </label>
                 <input
                   type="number"
                   min={0}
-                  value={form.originalPrice || 0}
-                  onChange={(e) => handleOriginalPriceChange(Number(e.target.value))}
+                  value={form.originalPrice || ''}
+                  onChange={(e) => handleOriginalPriceChange(e.target.value)}
+                  placeholder="فارغ"
                   className="w-full px-2.5 py-2 rounded-lg bg-slate-50 border border-slate-200 text-sm font-bold text-slate-600 tabular-nums focus:outline-none focus:ring-2 focus:ring-[#0071e3]"
                 />
               </div>
 
               <div className="p-3 rounded-xl bg-rose-50/70 border border-rose-200/90">
                 <label className="block text-[11px] font-extrabold text-rose-700 mb-1">
-                  نسبة الخصم (%)
+                  نسبة الخصم % (اختياري)
                 </label>
                 <input
                   type="number"
                   min={0}
                   max={99}
-                  value={form.discountPercentage || 0}
-                  onChange={(e) => handleDiscountChange(Number(e.target.value))}
+                  value={form.discountPercentage || ''}
+                  onChange={(e) => handleDiscountChange(e.target.value)}
+                  placeholder="فارغ"
                   className="w-full px-2.5 py-2 rounded-lg bg-white border border-rose-200 text-sm font-black text-rose-600 tabular-nums focus:outline-none focus:ring-2 focus:ring-rose-500"
                 />
               </div>
 
               <div className="p-3 rounded-xl bg-white border border-slate-200/90">
                 <label className="block text-[11px] font-extrabold text-slate-600 mb-1">
-                  الكمية بالمخزون
+                  الكمية بالمخزون (اختياري)
                 </label>
                 <input
                   type="number"
                   min={0}
-                  value={form.stock ?? 10}
-                  onChange={(e) => setForm((p) => ({ ...p, stock: Number(e.target.value) }))}
-                  className="w-full px-2.5 py-2 rounded-lg bg-slate-50 border border-slate-200 text-sm font-bold text-[#0b1220] tabular-nums focus:outline-none focus:ring-2 focus:ring-[#0071e3]"
-                />
-              </div>
-
-              <div className="p-3 rounded-xl bg-white border border-slate-200/90">
-                <label className="block text-[11px] font-extrabold text-slate-600 mb-1">
-                  سنوات الضمان
-                </label>
-                <input
-                  type="number"
-                  min={0}
-                  max={10}
-                  value={form.warrantyYears}
+                  value={form.stock || ''}
                   onChange={(e) =>
-                    setForm((p) => ({ ...p, warrantyYears: Number(e.target.value) }))
+                    setForm((p) => ({
+                      ...p,
+                      stock: e.target.value === '' ? 0 : Math.max(0, Number(e.target.value) || 0),
+                    }))
                   }
+                  placeholder="فارغ"
                   className="w-full px-2.5 py-2 rounded-lg bg-slate-50 border border-slate-200 text-sm font-bold text-[#0b1220] tabular-nums focus:outline-none focus:ring-2 focus:ring-[#0071e3]"
                 />
               </div>
 
               <div className="p-3 rounded-xl bg-white border border-slate-200/90">
                 <label className="block text-[11px] font-extrabold text-slate-600 mb-1">
-                  التقييم (من 5)
+                  التقييم من 5 (اختياري)
                 </label>
                 <input
                   type="number"
-                  min={1}
+                  min={0}
                   max={5}
                   step={0.1}
-                  value={form.rating}
-                  onChange={(e) => setForm((p) => ({ ...p, rating: Number(e.target.value) }))}
+                  value={form.rating || ''}
+                  onChange={(e) =>
+                    setForm((p) => ({
+                      ...p,
+                      rating:
+                        e.target.value === ''
+                          ? 0
+                          : Math.min(5, Math.max(0, Number(e.target.value) || 0)),
+                    }))
+                  }
+                  placeholder="فارغ للإخفاء"
                   className="w-full px-2.5 py-2 rounded-lg bg-slate-50 border border-slate-200 text-sm font-bold text-amber-600 tabular-nums focus:outline-none focus:ring-2 focus:ring-[#0071e3]"
                 />
               </div>
             </div>
           </div>
 
-          {/* BLOCK 4: الألوان والخيارات */}
+          {/* BLOCK 4: الألوان والخيارات (تظهر فقط عند الإضافة!) */}
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
             {/* Colors Box */}
             <div className="p-4 sm:p-5 rounded-2xl bg-white/70 border border-white/90 shadow-sm space-y-3">
               <div className="flex items-center justify-between">
                 <h3 className="text-sm font-extrabold text-[#0b1220] flex items-center gap-2">
                   <Palette className="w-4 h-4 text-[#0071e3]" />
-                  <span>الألوان المتوفرة</span>
+                  <span>الألوان المتوفرة (اختياري)</span>
                 </h3>
                 <button
                   type="button"
                   onClick={() =>
-                    setColorEntries((prev) => [...prev, { hex: '#0071e3', nameAr: 'أزرق' }])
+                    setColorEntries((prev) => [...prev, { hex: '#1e293b', nameAr: '' }])
                   }
                   className="text-xs font-bold text-[#0071e3] hover:bg-sky-50 px-2.5 py-1 rounded-xl border border-sky-200 flex items-center gap-1 cursor-pointer"
                 >
@@ -623,7 +801,7 @@ export default function VisualProductEditorModal({
 
               {colorEntries.length === 0 ? (
                 <p className="text-xs text-slate-500 py-2">
-                  لا توجد ألوان محددة (اضغط "+ إضافة لون" لإضافة ألوان لهذا المنتج)
+                  فارغ — لن يظهر قسم الألوان في صفحة المنتج إلا إذا أضفت لوناً هنا.
                 </p>
               ) : (
                 <div className="space-y-2">
@@ -650,7 +828,7 @@ export default function VisualProductEditorModal({
                           next[idx] = { ...next[idx], nameAr: e.target.value };
                           setColorEntries(next);
                         }}
-                        placeholder="اسم اللون (مثال: تيتانيوم صحراوي)"
+                        placeholder="اسم اللون (مثال: أسود، أزرق، وردي)"
                         className="flex-1 px-3 py-1.5 rounded-lg bg-slate-50 border border-slate-200 text-xs font-bold text-[#0b1220]"
                       />
                       <button
@@ -673,12 +851,15 @@ export default function VisualProductEditorModal({
             <div className="p-4 sm:p-5 rounded-2xl bg-white/70 border border-white/90 shadow-sm space-y-3">
               <h3 className="text-sm font-extrabold text-[#0b1220] flex items-center gap-2">
                 <Layers className="w-4 h-4 text-[#0071e3]" />
-                <span>الخيارات (السعة / الموديل / المقاس)</span>
+                <span>السعة التخزينية / الموديل (اختياري)</span>
               </h3>
+              <p className="text-[11px] text-slate-500 leading-relaxed">
+                للهواتف اكتب السعات مثل (128GB, 256GB, 512GB). للأغلفة والملحقات اتركه فارغاً تماماً ولن يظهر في الصفحة!
+              </p>
               <div className="space-y-2.5">
                 <div className="p-2.5 rounded-xl bg-white border border-slate-200">
                   <label className="block text-[11px] font-extrabold text-slate-600 mb-1">
-                    عنوان الخيار (مثال: السعة التخزينية أو الموديل)
+                    عنوان الخيار (اختياري)
                   </label>
                   <input
                     type="text"
@@ -689,19 +870,19 @@ export default function VisualProductEditorModal({
                         variants: { ...p.variants, titleAr: e.target.value },
                       }))
                     }
-                    placeholder="السعة / الموديل"
+                    placeholder="مثال: السعة التخزينية أو الموديل"
                     className="w-full px-3 py-1.5 rounded-lg bg-slate-50 border border-slate-200 text-xs font-bold text-[#0b1220]"
                   />
                 </div>
                 <div className="p-2.5 rounded-xl bg-white border border-slate-200">
                   <label className="block text-[11px] font-extrabold text-slate-600 mb-1">
-                    القيم المتاحة (افصل بينها بفاصلة: 256GB, 512GB, 1TB)
+                    القيم المتاحة (افصل بفاصلة — اتركه فارغاً للإخفاء)
                   </label>
                   <input
                     type="text"
                     value={variantOptionsText}
                     onChange={(e) => setVariantOptionsText(e.target.value)}
-                    placeholder="256GB ، 512GB ، 1TB"
+                    placeholder="مثال: 128GB ، 256GB ، 512GB"
                     className="w-full px-3 py-1.5 rounded-lg bg-slate-50 border border-slate-200 text-xs font-bold text-[#0b1220]"
                   />
                 </div>
@@ -709,23 +890,23 @@ export default function VisualProductEditorModal({
             </div>
           </div>
 
-          {/* BLOCK 5: الوصف والمواصفات التقنية */}
+          {/* BLOCK 5: الوصف والمواصفات (تظهر فقط عند الكتابة فيها) */}
           <div className="p-4 sm:p-5 rounded-2xl bg-white/70 border border-white/90 shadow-sm space-y-4">
             <h3 className="text-sm font-extrabold text-[#0b1220] flex items-center gap-2">
               <ListChecks className="w-4 h-4 text-[#0071e3]" />
-              <span>الوصف التفصيلي والمواصفات التقنية</span>
+              <span>الوصف والمواصفات (اختياري)</span>
             </h3>
 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
               <div className="p-3 rounded-xl bg-white border border-slate-200/90">
                 <label className="block text-[11px] font-extrabold text-slate-600 mb-1">
-                  وصف المنتج بالعربية
+                  وصف المنتج بالعربية (اختياري)
                 </label>
                 <textarea
                   rows={3}
                   value={form.descriptionAr}
                   onChange={(e) => setForm((p) => ({ ...p, descriptionAr: e.target.value }))}
-                  placeholder="اكتب مميزات المنتج وتفاصيل الضمان..."
+                  placeholder="اكتب وصف المنتج إذا أردت، أو اتركه فارغاً..."
                   className="w-full px-3 py-2 rounded-lg bg-slate-50 border border-slate-200 text-xs text-[#0b1220] focus:outline-none focus:ring-2 focus:ring-[#0071e3]"
                 />
               </div>
@@ -749,7 +930,7 @@ export default function VisualProductEditorModal({
             <div className="space-y-2">
               <div className="flex items-center justify-between">
                 <span className="text-xs font-extrabold text-slate-700">
-                  جدول المواصفات (المعالج، الشاشة، الكاميرا، البطارية...)
+                  جدول المواصفات (يظهر فقط ما تضيفه هنا)
                 </span>
                 <button
                   type="button"
@@ -763,43 +944,49 @@ export default function VisualProductEditorModal({
                 </button>
               </div>
 
-              {specRows.map((row, idx) => (
-                <div
-                  key={idx}
-                  className="grid grid-cols-12 gap-2 p-2 rounded-xl bg-white border border-slate-200 items-center"
-                >
-                  <input
-                    type="text"
-                    value={row.key}
-                    onChange={(e) => {
-                      const next = [...specRows];
-                      next[idx] = { ...next[idx], key: e.target.value };
-                      setSpecRows(next);
-                    }}
-                    placeholder="المواصفة (مثال: المعالج)"
-                    className="col-span-4 px-2.5 py-1.5 rounded-lg bg-slate-50 border border-slate-200 text-xs font-bold text-[#0b1220]"
-                  />
-                  <input
-                    type="text"
-                    value={row.ar}
-                    onChange={(e) => {
-                      const next = [...specRows];
-                      next[idx] = { ...next[idx], ar: e.target.value };
-                      setSpecRows(next);
-                    }}
-                    placeholder="القيمة (مثال: A18 Pro)"
-                    className="col-span-7 px-2.5 py-1.5 rounded-lg bg-slate-50 border border-slate-200 text-xs text-[#0b1220]"
-                  />
-                  <button
-                    type="button"
-                    onClick={() => setSpecRows((prev) => prev.filter((_, i) => i !== idx))}
-                    className="col-span-1 flex items-center justify-center p-1.5 text-rose-500 hover:bg-rose-50 rounded-lg cursor-pointer"
-                    aria-label="حذف"
+              {specRows.length === 0 ? (
+                <p className="text-xs text-slate-500 py-1">
+                  لا توجد مواصفات مضافة — اضغط "+ إضافة مواصفة" لإضافة المعالج أو البطارية أو أي تفاصيل أخرى.
+                </p>
+              ) : (
+                specRows.map((row, idx) => (
+                  <div
+                    key={idx}
+                    className="grid grid-cols-12 gap-2 p-2 rounded-xl bg-white border border-slate-200 items-center"
                   >
-                    <Trash2 className="w-4 h-4" />
-                  </button>
-                </div>
-              ))}
+                    <input
+                      type="text"
+                      value={row.key}
+                      onChange={(e) => {
+                        const next = [...specRows];
+                        next[idx] = { ...next[idx], key: e.target.value };
+                        setSpecRows(next);
+                      }}
+                      placeholder="المواصفة (مثال: البطارية)"
+                      className="col-span-4 px-2.5 py-1.5 rounded-lg bg-slate-50 border border-slate-200 text-xs font-bold text-[#0b1220]"
+                    />
+                    <input
+                      type="text"
+                      value={row.ar}
+                      onChange={(e) => {
+                        const next = [...specRows];
+                        next[idx] = { ...next[idx], ar: e.target.value };
+                        setSpecRows(next);
+                      }}
+                      placeholder="القيمة (مثال: 5000 مللي أمبير)"
+                      className="col-span-7 px-2.5 py-1.5 rounded-lg bg-slate-50 border border-slate-200 text-xs text-[#0b1220]"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setSpecRows((prev) => prev.filter((_, i) => i !== idx))}
+                      className="col-span-1 flex items-center justify-center p-1.5 text-rose-500 hover:bg-rose-50 rounded-lg cursor-pointer"
+                      aria-label="حذف"
+                    >
+                      <Trash2 className="w-4 h-4" />
+                    </button>
+                  </div>
+                ))
+              )}
             </div>
           </div>
 
@@ -812,17 +999,7 @@ export default function VisualProductEditorModal({
                 onChange={(e) => setForm((p) => ({ ...p, inStock: e.target.checked }))}
                 className="accent-[#0071e3] w-4 h-4"
               />
-              <span>متوفر في المخزون</span>
-            </label>
-
-            <label className="inline-flex items-center gap-2 px-3 py-2 rounded-xl bg-white border border-slate-200 cursor-pointer">
-              <input
-                type="checkbox"
-                checked={form.fastShipping}
-                onChange={(e) => setForm((p) => ({ ...p, fastShipping: e.target.checked }))}
-                className="accent-[#0071e3] w-4 h-4"
-              />
-              <span>توصيل سريع 24 ساعة</span>
+              <span>متوفر حالياً</span>
             </label>
 
             <label className="inline-flex items-center gap-2 px-3 py-2 rounded-xl bg-white border border-slate-200 cursor-pointer">
@@ -911,7 +1088,7 @@ export default function VisualProductEditorModal({
             <button
               type="button"
               onClick={handleSubmit}
-              disabled={saving}
+              disabled={saving || uploadingImage}
               className="px-6 py-2.5 rounded-2xl liquid-btn-primary text-xs sm:text-sm font-extrabold flex items-center gap-2 cursor-pointer disabled:opacity-60"
             >
               {saving ? (

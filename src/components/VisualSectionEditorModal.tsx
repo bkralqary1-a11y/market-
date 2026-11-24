@@ -1,13 +1,31 @@
-import { useState, useEffect } from 'react';
-import { X, Save, Plus, Trash2, Loader2, Pencil, Image as ImageIcon } from 'lucide-react';
-import { HeroSlideItem, CategoryId } from '../types';
-import { SiteConfig } from '../services/firestoreService';
+import { useState, useEffect, type ChangeEvent } from 'react';
+import {
+  X,
+  Save,
+  Plus,
+  Trash2,
+  Loader2,
+  Pencil,
+  Image as ImageIcon,
+  Upload,
+  Eye,
+  EyeOff,
+} from 'lucide-react';
+import { HeroSlideItem } from '../types';
+import {
+  SiteConfig,
+  CustomCategoryConfig,
+  normalizeSafeId,
+} from '../services/firestoreService';
+import { compressImageFileToDataUrl } from '../utils/imageUpload';
 
 export type EditableSectionTarget =
   | { type: 'hero'; slideIndex: number }
   | { type: 'bento1' }
   | { type: 'bento2' }
-  | { type: 'category'; categoryId: Exclude<CategoryId, 'all'> }
+  | { type: 'category'; categoryId: 'phones' | 'audio' | 'cases' | 'chargers' | 'cables' }
+  | { type: 'addCategory' }
+  | { type: 'editCustomCategory'; categoryId: string }
   | { type: 'categoriesHeader' }
   | { type: 'productsHeader' }
   | { type: 'storeSettings' };
@@ -23,7 +41,7 @@ interface VisualSectionEditorModalProps {
 }
 
 const CAT_CONFIG_KEYS: Record<
-  Exclude<CategoryId, 'all'>,
+  'phones' | 'audio' | 'cases' | 'chargers' | 'cables',
   { nameKey: keyof SiteConfig; imgKey: keyof SiteConfig; label: string }
 > = {
   phones: { nameKey: 'catPhonesNameAr', imgKey: 'catPhonesImg', label: 'قسم الهواتف الذكية' },
@@ -46,6 +64,14 @@ export default function VisualSectionEditorModal({
   const [activeSlideIdx, setActiveSlideIdx] = useState(0);
   const [slideDraft, setSlideDraft] = useState<HeroSlideItem | null>(null);
   const [isNewSlide, setIsNewSlide] = useState(false);
+  const [customCatDraft, setCustomCatDraft] = useState<CustomCategoryConfig>({
+    id: '',
+    nameAr: '',
+    nameEn: '',
+    image: '',
+    hidden: false,
+  });
+  const [uploadingImg, setUploadingImg] = useState(false);
   const [saving, setSaving] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
 
@@ -53,6 +79,7 @@ export default function VisualSectionEditorModal({
     if (!target) return;
     setCfg(siteConfig);
     setErrorMsg(null);
+
     if (target.type === 'hero') {
       const idx = Math.min(target.slideIndex, Math.max(0, heroSlides.length - 1));
       setActiveSlideIdx(idx);
@@ -62,20 +89,65 @@ export default function VisualSectionEditorModal({
           ? { ...heroSlides[idx] }
           : {
               id: `slide-${Date.now().toString(36)}`,
-              badgeAr: 'متجر صدام العقاري',
-              titleAr: 'عرض جديد',
+              badgeAr: '',
+              titleAr: '',
               subtitleAr: '',
               mediaType: 'image',
               imageUrl: '',
               buttonTextAr: 'تصفح الأجهزة الآن',
-              featureBadge2Ar: 'ضمان رسمي معتمد',
+              featureBadge2Ar: '',
               enabled: true,
+            }
+      );
+    } else if (target.type === 'addCategory') {
+      setCustomCatDraft({
+        id: `cat-${Date.now().toString(36)}`,
+        nameAr: '',
+        nameEn: '',
+        image: '',
+        hidden: false,
+      });
+    } else if (target.type === 'editCustomCategory') {
+      const found = (siteConfig.customCategories || []).find((c) => c.id === target.categoryId);
+      setCustomCatDraft(
+        found
+          ? { ...found }
+          : {
+              id: target.categoryId,
+              nameAr: '',
+              nameEn: '',
+              image: '',
+              hidden: false,
             }
       );
     }
   }, [target, siteConfig, heroSlides]);
 
   if (!target) return null;
+
+  const handleUploadImage = async (
+    e: ChangeEvent<HTMLInputElement>,
+    onResult: (dataUrl: string) => void,
+    maxChars = 110000
+  ) => {
+    const file = e.target.files?.[0];
+    e.target.value = '';
+    if (!file) return;
+    setUploadingImg(true);
+    setErrorMsg(null);
+    try {
+      const dataUrl = await compressImageFileToDataUrl(file, {
+        maxDimension: 620,
+        quality: 0.72,
+        maxChars,
+      });
+      onResult(dataUrl);
+    } catch (err) {
+      setErrorMsg(err instanceof Error ? err.message : 'تعذر رفع الصورة.');
+    } finally {
+      setUploadingImg(false);
+    }
+  };
 
   const handleSelectSlide = (idx: number) => {
     setActiveSlideIdx(idx);
@@ -87,13 +159,13 @@ export default function VisualSectionEditorModal({
     setIsNewSlide(true);
     setSlideDraft({
       id: `slide-${Date.now().toString(36)}`,
-      badgeAr: 'عرض حصري • متجر صدام العقاري',
+      badgeAr: '',
       titleAr: '',
       subtitleAr: '',
       mediaType: 'image',
       imageUrl: '',
-      buttonTextAr: 'تصفح الأجهزة الآن',
-      featureBadge2Ar: 'ضمان رسمي معتمد',
+      buttonTextAr: 'تصفح الآن',
+      featureBadge2Ar: '',
       enabled: true,
     });
   };
@@ -110,6 +182,51 @@ export default function VisualSectionEditorModal({
         }
         const order = isNewSlide ? heroSlides.length : activeSlideIdx;
         await onSaveHeroSlide(slideDraft, order);
+      } else if (target.type === 'addCategory') {
+        if (!customCatDraft.nameAr.trim()) {
+          setErrorMsg('يرجى كتابة اسم القسم الجديد.');
+          setSaving(false);
+          return;
+        }
+        const existing = cfg.customCategories || [];
+        if (existing.length >= 15) {
+          setErrorMsg('وصلت للحد الأقصى للأقسام الإضافية (15 قسماً).');
+          setSaving(false);
+          return;
+        }
+        const nextCat: CustomCategoryConfig = {
+          id: normalizeSafeId(customCatDraft.id || '', 'cat'),
+          nameAr: customCatDraft.nameAr.trim(),
+          nameEn: customCatDraft.nameEn.trim() || customCatDraft.nameAr.trim(),
+          image: customCatDraft.image.trim(),
+          hidden: Boolean(customCatDraft.hidden),
+        };
+        await onSaveSiteConfig({
+          ...cfg,
+          customCategories: [...existing, nextCat],
+        });
+      } else if (target.type === 'editCustomCategory') {
+        if (!customCatDraft.nameAr.trim()) {
+          setErrorMsg('يرجى كتابة اسم القسم.');
+          setSaving(false);
+          return;
+        }
+        const existing = cfg.customCategories || [];
+        const updated = existing.map((c) =>
+          c.id === target.categoryId
+            ? {
+                ...c,
+                nameAr: customCatDraft.nameAr.trim(),
+                nameEn: customCatDraft.nameEn.trim() || customCatDraft.nameAr.trim(),
+                image: customCatDraft.image.trim(),
+                hidden: Boolean(customCatDraft.hidden),
+              }
+            : c
+        );
+        await onSaveSiteConfig({
+          ...cfg,
+          customCategories: updated,
+        });
       } else {
         await onSaveSiteConfig(cfg);
       }
@@ -134,6 +251,30 @@ export default function VisualSectionEditorModal({
     }
   };
 
+  const handleDeleteCustomCategory = async () => {
+    if (target.type !== 'editCustomCategory') return;
+    setSaving(true);
+    try {
+      const remaining = (cfg.customCategories || []).filter((c) => c.id !== target.categoryId);
+      await onSaveSiteConfig({ ...cfg, customCategories: remaining });
+      onClose();
+    } catch {
+      setErrorMsg('تعذر حذف القسم.');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const toggleBuiltInCategoryHidden = (catId: string) => {
+    const current = new Set(cfg.hiddenCategories || []);
+    if (current.has(catId)) {
+      current.delete(catId);
+    } else {
+      current.add(catId);
+    }
+    setCfg({ ...cfg, hiddenCategories: Array.from(current) });
+  };
+
   const getModalTitle = () => {
     switch (target.type) {
       case 'hero':
@@ -144,6 +285,10 @@ export default function VisualSectionEditorModal({
         return 'تعديل البطاقة الجانبية الثانية';
       case 'category':
         return `تعديل ${CAT_CONFIG_KEYS[target.categoryId].label}`;
+      case 'addCategory':
+        return 'إضافة قسم جديد للمتجر';
+      case 'editCustomCategory':
+        return 'تعديل القسم الإضافي';
       case 'categoriesHeader':
         return 'تعديل عنوان قسم الأقسام';
       case 'productsHeader':
@@ -167,7 +312,11 @@ export default function VisualSectionEditorModal({
         <div className="px-6 py-4 border-b border-slate-900/10 flex items-center justify-between bg-white/55">
           <div className="flex items-center gap-2.5">
             <div className="w-9 h-9 rounded-2xl liquid-btn-primary flex items-center justify-center">
-              <Pencil className="w-4 h-4 text-white" />
+              {target.type === 'addCategory' ? (
+                <Plus className="w-4 h-4 text-white" />
+              ) : (
+                <Pencil className="w-4 h-4 text-white" />
+              )}
             </div>
             <h2 className="text-base font-extrabold text-[#0b1220]">{getModalTitle()}</h2>
           </div>
@@ -191,7 +340,6 @@ export default function VisualSectionEditorModal({
           {/* HERO SLIDE EDITOR */}
           {target.type === 'hero' && slideDraft && (
             <div className="space-y-4">
-              {/* Slide Selector Bar */}
               <div className="flex flex-wrap items-center gap-2">
                 {heroSlides.map((s, idx) => (
                   <button
@@ -221,15 +369,21 @@ export default function VisualSectionEditorModal({
                 </button>
               </div>
 
-              {/* Image Preview */}
               {slideDraft.imageUrl && (
-                <div className="w-full h-40 rounded-2xl overflow-hidden bg-slate-900 border border-slate-200">
+                <div className="w-full h-40 rounded-2xl overflow-hidden bg-slate-900 border border-slate-200 relative">
                   <img
                     src={slideDraft.imageUrl}
                     alt={slideDraft.titleAr}
                     referrerPolicy="no-referrer"
                     className="w-full h-full object-cover"
                   />
+                  <button
+                    type="button"
+                    onClick={() => setSlideDraft({ ...slideDraft, imageUrl: '' })}
+                    className="absolute bottom-2 left-2 px-2.5 py-1 rounded-lg bg-rose-600/90 text-white text-[10px] font-bold cursor-pointer"
+                  >
+                    مسح الصورة
+                  </button>
                 </div>
               )}
 
@@ -249,7 +403,7 @@ export default function VisualSectionEditorModal({
 
                 <div className="p-3 rounded-xl bg-white border border-slate-200">
                   <label className="block text-[11px] font-extrabold text-slate-600 mb-1">
-                    الشارة العلوية (فوق العنوان)
+                    الشارة العلوية (اختياري)
                   </label>
                   <input
                     type="text"
@@ -261,7 +415,7 @@ export default function VisualSectionEditorModal({
 
                 <div className="p-3 rounded-xl bg-white border border-slate-200">
                   <label className="block text-[11px] font-extrabold text-slate-600 mb-1">
-                    نص الضمان / الميزة
+                    نص إضافي علوي (اختياري)
                   </label>
                   <input
                     type="text"
@@ -275,7 +429,7 @@ export default function VisualSectionEditorModal({
 
                 <div className="p-3 rounded-xl bg-white border border-slate-200 sm:col-span-2">
                   <label className="block text-[11px] font-extrabold text-slate-600 mb-1">
-                    الوصف أسفل العنوان
+                    الوصف أسفل العنوان (اختياري)
                   </label>
                   <textarea
                     rows={2}
@@ -285,16 +439,43 @@ export default function VisualSectionEditorModal({
                   />
                 </div>
 
-                <div className="p-3 rounded-xl bg-white border border-slate-200 sm:col-span-2">
-                  <label className="block text-[11px] font-extrabold text-slate-600 mb-1">
-                    رابط صورة الخلفية (URL)
-                  </label>
+                <div className="p-3 rounded-xl bg-white border border-slate-200 sm:col-span-2 space-y-2">
+                  <div className="flex items-center justify-between gap-2">
+                    <label className="text-[11px] font-extrabold text-slate-600">
+                      صورة الخلفية (ارفع من جهازك أو الصق رابطاً)
+                    </label>
+                    <label className="text-xs font-extrabold text-[#0071e3] hover:underline flex items-center gap-1 cursor-pointer">
+                      {uploadingImg ? (
+                        <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                      ) : (
+                        <Upload className="w-3.5 h-3.5" />
+                      )}
+                      <span>اختر صورة من المعرض</span>
+                      <input
+                        type="file"
+                        accept="image/*"
+                        onChange={(e) =>
+                          handleUploadImage(
+                            e,
+                            (dataUrl) => setSlideDraft({ ...slideDraft, imageUrl: dataUrl }),
+                            180000
+                          )
+                        }
+                        className="hidden"
+                        disabled={uploadingImg}
+                      />
+                    </label>
+                  </div>
                   <input
-                    type="url"
+                    type="text"
                     dir="ltr"
-                    value={slideDraft.imageUrl}
+                    value={slideDraft.imageUrl.startsWith('data:') ? '' : slideDraft.imageUrl}
                     onChange={(e) => setSlideDraft({ ...slideDraft, imageUrl: e.target.value })}
-                    placeholder="https://..."
+                    placeholder={
+                      slideDraft.imageUrl.startsWith('data:')
+                        ? 'تم رفع صورة الشريحة من الجهاز ✓'
+                        : 'https://...'
+                    }
                     className="w-full px-3 py-2 rounded-lg bg-slate-50 border border-slate-200 text-xs text-[#0b1220]"
                   />
                 </div>
@@ -408,14 +589,15 @@ export default function VisualSectionEditorModal({
             </div>
           )}
 
-          {/* CATEGORY TILE EDITOR */}
+          {/* BUILT-IN CATEGORY TILE EDITOR */}
           {target.type === 'category' && (() => {
             const { nameKey, imgKey } = CAT_CONFIG_KEYS[target.categoryId];
             const imgVal = String(cfg[imgKey] || '');
             const nameVal = String(cfg[nameKey] || '');
+            const isHidden = (cfg.hiddenCategories || []).includes(target.categoryId);
             return (
               <div className="space-y-4">
-                <div className="w-full h-44 rounded-2xl overflow-hidden bg-slate-100 border border-slate-200 flex items-center justify-center">
+                <div className="w-full h-44 rounded-2xl overflow-hidden bg-slate-100 border border-slate-200 flex items-center justify-center relative">
                   {imgVal ? (
                     <img
                       src={imgVal}
@@ -440,21 +622,176 @@ export default function VisualSectionEditorModal({
                   />
                 </div>
 
-                <div className="p-3 rounded-xl bg-white border border-slate-200">
-                  <label className="block text-[11px] font-extrabold text-slate-600 mb-1">
-                    رابط صورة القسم (URL)
-                  </label>
+                <div className="p-3 rounded-xl bg-white border border-slate-200 space-y-2">
+                  <div className="flex items-center justify-between gap-2">
+                    <label className="text-[11px] font-extrabold text-slate-600">
+                      صورة القسم (ارفع من جهازك أو الصق رابطاً)
+                    </label>
+                    <label className="text-xs font-extrabold text-[#0071e3] hover:underline flex items-center gap-1 cursor-pointer">
+                      {uploadingImg ? (
+                        <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                      ) : (
+                        <Upload className="w-3.5 h-3.5" />
+                      )}
+                      <span>اختر من المعرض</span>
+                      <input
+                        type="file"
+                        accept="image/*"
+                        onChange={(e) =>
+                          handleUploadImage(
+                            e,
+                            (dataUrl) => setCfg({ ...cfg, [imgKey]: dataUrl }),
+                            95000
+                          )
+                        }
+                        className="hidden"
+                        disabled={uploadingImg}
+                      />
+                    </label>
+                  </div>
                   <input
-                    type="url"
+                    type="text"
                     dir="ltr"
-                    value={imgVal}
+                    value={imgVal.startsWith('data:') ? '' : imgVal}
                     onChange={(e) => setCfg({ ...cfg, [imgKey]: e.target.value })}
+                    placeholder={imgVal.startsWith('data:') ? 'تم رفع الصورة من جهازك ✓' : 'https://...'}
                     className="w-full px-3 py-2 rounded-lg bg-slate-50 border border-slate-200 text-xs text-[#0b1220]"
                   />
                 </div>
+
+                <button
+                  type="button"
+                  onClick={() => toggleBuiltInCategoryHidden(target.categoryId)}
+                  className={`w-full py-2.5 px-4 rounded-xl border text-xs font-extrabold flex items-center justify-center gap-2 cursor-pointer ${
+                    isHidden
+                      ? 'bg-amber-100 border-amber-300 text-amber-900'
+                      : 'bg-white border-slate-200 text-slate-700'
+                  }`}
+                >
+                  {isHidden ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                  <span>{isHidden ? 'هذا القسم مخفي عن الزوار (اضغط لإظهاره)' : 'القسم ظاهر للزوار (اضغط لإخفائه)'}</span>
+                </button>
               </div>
             );
           })()}
+
+          {/* ADD / EDIT CUSTOM CATEGORY */}
+          {(target.type === 'addCategory' || target.type === 'editCustomCategory') && (
+            <div className="space-y-4">
+              <div className="w-full h-44 rounded-2xl overflow-hidden bg-slate-100 border-2 border-dashed border-slate-300 flex items-center justify-center relative">
+                {customCatDraft.image ? (
+                  <>
+                    <img
+                      src={customCatDraft.image}
+                      alt={customCatDraft.nameAr || 'صورة القسم'}
+                      referrerPolicy="no-referrer"
+                      className="w-full h-full object-cover"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setCustomCatDraft({ ...customCatDraft, image: '' })}
+                      className="absolute bottom-2 left-2 px-2.5 py-1 rounded-lg bg-rose-600/90 text-white text-[10px] font-bold cursor-pointer"
+                    >
+                      مسح الصورة
+                    </button>
+                  </>
+                ) : (
+                  <label className="w-full h-full flex flex-col items-center justify-center text-slate-500 hover:text-[#0071e3] cursor-pointer p-4 text-center">
+                    {uploadingImg ? (
+                      <Loader2 className="w-8 h-8 animate-spin text-[#0071e3] mb-1.5" />
+                    ) : (
+                      <Upload className="w-8 h-8 mb-1.5 opacity-75" />
+                    )}
+                    <span className="text-xs font-extrabold">اضغط لاختيار صورة القسم من المعرض</span>
+                    <input
+                      type="file"
+                      accept="image/*"
+                      onChange={(e) =>
+                        handleUploadImage(
+                          e,
+                          (dataUrl) => setCustomCatDraft({ ...customCatDraft, image: dataUrl }),
+                          85000
+                        )
+                      }
+                      className="hidden"
+                      disabled={uploadingImg}
+                    />
+                  </label>
+                )}
+              </div>
+
+              <div className="p-3 rounded-xl bg-white border border-slate-200">
+                <label className="block text-[11px] font-extrabold text-slate-600 mb-1">
+                  اسم القسم الجديد (بالعربية) *
+                </label>
+                <input
+                  type="text"
+                  value={customCatDraft.nameAr}
+                  onChange={(e) =>
+                    setCustomCatDraft({ ...customCatDraft, nameAr: e.target.value })
+                  }
+                  placeholder="مثال: الساعات الذكية، أجهزة لوحية، شاشات حماية..."
+                  className="w-full px-3 py-2 rounded-lg bg-slate-50 border border-slate-200 text-sm font-extrabold text-[#0b1220]"
+                />
+              </div>
+
+              <div className="p-3 rounded-xl bg-white border border-slate-200 space-y-2">
+                <div className="flex items-center justify-between gap-2">
+                  <label className="text-[11px] font-extrabold text-slate-600">
+                    صورة القسم (من المعرض أو رابط URL اختياري)
+                  </label>
+                  <label className="text-xs font-extrabold text-[#0071e3] hover:underline flex items-center gap-1 cursor-pointer">
+                    <Upload className="w-3.5 h-3.5" />
+                    <span>رفع من الجهاز</span>
+                    <input
+                      type="file"
+                      accept="image/*"
+                      onChange={(e) =>
+                        handleUploadImage(
+                          e,
+                          (dataUrl) => setCustomCatDraft({ ...customCatDraft, image: dataUrl }),
+                          85000
+                        )
+                      }
+                      className="hidden"
+                      disabled={uploadingImg}
+                    />
+                  </label>
+                </div>
+                <input
+                  type="text"
+                  dir="ltr"
+                  value={customCatDraft.image.startsWith('data:') ? '' : customCatDraft.image}
+                  onChange={(e) =>
+                    setCustomCatDraft({ ...customCatDraft, image: e.target.value })
+                  }
+                  placeholder={
+                    customCatDraft.image.startsWith('data:')
+                      ? 'تم رفع الصورة من جهازك ✓'
+                      : 'https://... (اختياري)'
+                  }
+                  className="w-full px-3 py-2 rounded-lg bg-slate-50 border border-slate-200 text-xs text-[#0b1220]"
+                />
+              </div>
+
+              <button
+                type="button"
+                onClick={() =>
+                  setCustomCatDraft({ ...customCatDraft, hidden: !customCatDraft.hidden })
+                }
+                className={`w-full py-2.5 px-4 rounded-xl border text-xs font-extrabold flex items-center justify-center gap-2 cursor-pointer ${
+                  customCatDraft.hidden
+                    ? 'bg-amber-100 border-amber-300 text-amber-900'
+                    : 'bg-white border-slate-200 text-slate-700'
+                }`}
+              >
+                {customCatDraft.hidden ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                <span>
+                  {customCatDraft.hidden ? 'مخفي عن الزوار حالياً' : 'ظاهر للزوار'}
+                </span>
+              </button>
+            </div>
+          )}
 
           {/* CATEGORIES SECTION HEADER EDITOR */}
           {target.type === 'categoriesHeader' && (
@@ -565,7 +902,6 @@ export default function VisualSectionEditorModal({
                 />
               </div>
 
-              {/* Contact Numbers */}
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                 <div className="p-3 rounded-xl bg-white border border-slate-200">
                   <label className="block text-[11px] font-extrabold text-emerald-700 mb-1">
@@ -605,7 +941,6 @@ export default function VisualSectionEditorModal({
                 </div>
               </div>
 
-              {/* Announcement Bar */}
               <div className="p-3.5 rounded-xl bg-sky-50/70 border border-sky-200 space-y-2.5">
                 <label className="flex items-center justify-between cursor-pointer text-xs font-extrabold text-[#0b1220]">
                   <span>تفعيل شريط العروض العلوي</span>
@@ -648,6 +983,16 @@ export default function VisualSectionEditorModal({
               <Trash2 className="w-4 h-4" />
               <span>حذف هذه الشريحة</span>
             </button>
+          ) : target.type === 'editCustomCategory' ? (
+            <button
+              type="button"
+              onClick={handleDeleteCustomCategory}
+              disabled={saving}
+              className="px-4 py-2.5 rounded-xl bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 text-xs font-extrabold flex items-center gap-1.5 cursor-pointer"
+            >
+              <Trash2 className="w-4 h-4" />
+              <span>حذف القسم</span>
+            </button>
           ) : (
             <div />
           )}
@@ -663,11 +1008,11 @@ export default function VisualSectionEditorModal({
             <button
               type="button"
               onClick={handleSave}
-              disabled={saving}
+              disabled={saving || uploadingImg}
               className="px-6 py-2.5 rounded-2xl liquid-btn-primary text-xs font-extrabold flex items-center gap-2 cursor-pointer disabled:opacity-60"
             >
               {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
-              <span>حفظ التغييرات</span>
+              <span>{target.type === 'addCategory' ? 'إضافة القسم' : 'حفظ التغييرات'}</span>
             </button>
           </div>
         </div>

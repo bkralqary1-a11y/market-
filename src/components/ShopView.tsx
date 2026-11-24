@@ -4,6 +4,11 @@ import { Product, Language, Currency, CategoryId } from '../types';
 import ProductCard from './ProductCard';
 import AddProductTile from './AddProductTile';
 import { formatPrice } from '../data/mockData';
+import {
+  SiteConfig,
+  DEFAULT_SITE_CONFIG,
+  getStoreCategories,
+} from '../services/firestoreService';
 
 interface ShopViewProps {
   products: Product[];
@@ -18,6 +23,7 @@ interface ShopViewProps {
   onToggleCompare: (productId: string) => void;
   initialCategory: CategoryId;
   onCategoryChange?: (cat: CategoryId) => void;
+  siteConfig?: SiteConfig;
   isAdminMode?: boolean;
   onAdminEditProduct?: (product: Product) => void;
   onAdminAddProduct?: (defaultCategory: CategoryId) => void;
@@ -36,6 +42,7 @@ export default function ShopView({
   onToggleCompare,
   initialCategory = 'all',
   onCategoryChange,
+  siteConfig = DEFAULT_SITE_CONFIG,
   isAdminMode = false,
   onAdminEditProduct,
   onAdminAddProduct,
@@ -56,16 +63,15 @@ export default function ShopView({
     }
   }, [initialCategory]);
 
+  const dynamicCategories = getStoreCategories(siteConfig, isAdminMode);
   const categories: { id: CategoryId; nameEn: string; nameAr: string }[] = [
     { id: 'all', nameEn: 'All Categories', nameAr: 'كافة الأقسام' },
-    { id: 'phones', nameEn: 'Smartphones', nameAr: 'الهواتف الذكية' },
-    { id: 'audio', nameEn: 'Headphones & Audio', nameAr: 'السماعات' },
-    { id: 'cases', nameEn: 'Cases & Covers', nameAr: 'الكفرات' },
-    { id: 'chargers', nameEn: 'Chargers & Power', nameAr: 'الشواحن' },
-    { id: 'cables', nameEn: 'Cables & Adapters', nameAr: 'الكيابل' },
+    ...dynamicCategories.map((c) => ({ id: c.id, nameEn: c.nameEn, nameAr: c.nameAr })),
   ];
 
-  const allBrands = ['Apple', 'Samsung', 'Anker', 'Sony', 'Belkin', 'Baseus', 'Spigen'];
+  const allBrands = Array.from(
+    new Set(products.map((p) => p.brand?.trim()).filter(Boolean) as string[])
+  );
 
   const toggleBrand = (brand: string) => {
     setSelectedBrands((prev) =>

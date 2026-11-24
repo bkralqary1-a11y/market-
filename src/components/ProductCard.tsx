@@ -1,5 +1,16 @@
 import { useState, useRef, type MouseEvent } from 'react';
-import { Heart, ShoppingBag, Eye, Star, SlidersHorizontal, Check, MessageCircle, Smartphone, Pencil, EyeOff } from 'lucide-react';
+import {
+  Heart,
+  ShoppingBag,
+  Eye,
+  Star,
+  SlidersHorizontal,
+  Check,
+  MessageCircle,
+  Smartphone,
+  Pencil,
+  EyeOff,
+} from 'lucide-react';
 import { Product, Language, Currency } from '../types';
 import { formatPrice } from '../data/mockData';
 import { triggerFlyToCart } from './FlyingCartAnimation';
@@ -38,20 +49,25 @@ export default function ProductCard({
   onAdminEdit,
 }: ProductCardProps) {
   const isAr = language === 'ar';
-  const [selectedColor] = useState(product.colors[0] || '#0f172a');
+  const [selectedColor] = useState(product.colors?.[0] || '');
   const [addedAnim, setAddedAnim] = useState(false);
   const [imgFailed, setImgFailed] = useState(false);
   const imgRef = useRef<HTMLImageElement | null>(null);
+
+  const hasBrand = Boolean(product.brand?.trim());
+  const hasRating = Number(product.rating) > 0;
+  const hasColors = Array.isArray(product.colors) && product.colors.length > 0;
+  const defaultVariant = product.variants?.options?.[0] || '';
 
   const handleQuickAdd = (e: MouseEvent) => {
     e.stopPropagation();
     soundFX.playAddToCart();
     triggerFlyToCart({
       imageUrl: product.image,
-      productName: isAr ? product.nameAr : product.name,
+      productName: isAr ? product.nameAr : product.name || product.nameAr,
       sourceElement: imgRef.current || (e.currentTarget as HTMLElement),
     });
-    onAddToCart(product, product.variants.options[0] || 'الأساسي', selectedColor);
+    onAddToCart(product, defaultVariant, selectedColor);
     setAddedAnim(true);
     setTimeout(() => setAddedAnim(false), 900);
   };
@@ -61,15 +77,13 @@ export default function ProductCard({
     soundFX.playAddToCart();
     triggerFlyToCart({
       imageUrl: product.image,
-      productName: isAr ? product.nameAr : product.name,
+      productName: isAr ? product.nameAr : product.name || product.nameAr,
       sourceElement: imgRef.current || (e.currentTarget as HTMLElement),
     });
-    const defaultVariant = product.variants.options[0] || 'الأساسي';
-    const defaultColor = selectedColor || product.colors[0] || '#0f172a';
     if (onQuickOrder) {
-      onQuickOrder(product, defaultVariant, defaultColor);
+      onQuickOrder(product, defaultVariant, selectedColor);
     } else {
-      onAddToCart(product, defaultVariant, defaultColor);
+      onAddToCart(product, defaultVariant, selectedColor);
     }
   };
 
@@ -126,9 +140,8 @@ export default function ProductCard({
           </button>
         )}
 
-        {/* 1. Product Image Stage (Translucent Frosted Glass Well) */}
+        {/* 1. Product Image Stage */}
         <div className="relative aspect-square rounded-[18px] liquid-glass-subtle overflow-hidden mb-3">
-          {/* Discount % & Hidden Indicator */}
           {!isAdminMode && product.discountPercentage && product.discountPercentage > 0 ? (
             <span className="absolute top-2.5 right-2.5 rtl:right-2.5 rtl:left-auto ltr:left-2.5 ltr:right-auto z-10 px-2 py-0.5 rounded-lg bg-rose-600 text-white text-[11px] font-black tabular-nums shadow">
               -{product.discountPercentage}%
@@ -184,16 +197,20 @@ export default function ProductCard({
           </div>
 
           {/* Product Photo with Resilient Fallback */}
-          {imgFailed ? (
+          {imgFailed || !product.image?.trim() ? (
             <div className="w-full h-full flex flex-col items-center justify-center gap-2 bg-gradient-to-br from-sky-50/90 to-blue-100/70 text-[#0071e3]/70 p-4 text-center">
               <Smartphone className="w-10 h-10" />
-              <span className="text-[11px] font-bold text-slate-600 line-clamp-1">{product.brand}</span>
+              {hasBrand && (
+                <span className="text-[11px] font-bold text-slate-600 line-clamp-1">
+                  {product.brand}
+                </span>
+              )}
             </div>
           ) : (
             <img
               ref={imgRef}
               src={product.image}
-              alt={isAr ? product.nameAr : product.name}
+              alt={isAr ? product.nameAr : product.name || product.nameAr}
               referrerPolicy="no-referrer"
               loading="lazy"
               onError={() => setImgFailed(true)}
@@ -202,46 +219,54 @@ export default function ProductCard({
           )}
         </div>
 
-        {/* 2. Clean Unboxed Product Metadata & Info */}
+        {/* 2. Clean Product Metadata & Info — Strictly conditional */}
         <div className="flex-grow flex flex-col justify-between gap-3 px-0.5">
           <div className="space-y-1.5">
-            {/* Unboxed Brand · Category & Rating */}
-            <div className="flex items-center justify-between gap-2 text-[11px] text-slate-500">
-              <div className="flex items-center gap-1.5 truncate">
-                <span className="font-bold text-[#0071e3] uppercase tracking-wide">{product.brand}</span>
-                <span aria-hidden="true">·</span>
-                <span className="truncate">{isAr ? product.categoryNameAr : product.categoryNameEn}</span>
+            {(hasBrand || product.categoryNameAr || hasRating) && (
+              <div className="flex items-center justify-between gap-2 text-[11px] text-slate-500">
+                <div className="flex items-center gap-1.5 truncate">
+                  {hasBrand && (
+                    <span className="font-bold text-[#0071e3] uppercase tracking-wide">
+                      {product.brand}
+                    </span>
+                  )}
+                  {hasBrand && (product.categoryNameAr || product.categoryNameEn) && (
+                    <span aria-hidden="true">·</span>
+                  )}
+                  {(product.categoryNameAr || product.categoryNameEn) && (
+                    <span className="truncate">
+                      {isAr
+                        ? product.categoryNameAr
+                        : product.categoryNameEn || product.categoryNameAr}
+                    </span>
+                  )}
+                </div>
+                {hasRating && (
+                  <div className="flex items-center gap-0.5 text-amber-600 font-bold tabular-nums shrink-0">
+                    <Star className="w-3 h-3 fill-amber-400 text-amber-400" />
+                    <span>{product.rating}</span>
+                  </div>
+                )}
               </div>
-              <div className="flex items-center gap-0.5 text-amber-600 font-bold tabular-nums shrink-0">
-                <Star className="w-3 h-3 fill-amber-400 text-amber-400" />
-                <span>{product.rating}</span>
-              </div>
-            </div>
+            )}
 
             {/* Product Name */}
             <h3 className="font-bold text-[#0b1220] text-xs sm:text-sm line-clamp-2 leading-snug group-hover:text-[#0071e3] transition-colors min-h-[2.2rem]">
-              {isAr ? product.nameAr : product.name}
+              {isAr ? product.nameAr : product.name || product.nameAr}
             </h3>
 
-            {/* Clean Quiet Warranty & Colors Line */}
-            <div className="flex items-center justify-between gap-2">
-              <p className="text-[11px] text-slate-600 truncate">
-                {isAr
-                  ? `ضمان ${product.warrantyYears} سنوات · أصلي معتمد`
-                  : `${product.warrantyYears}Y Warranty · Certified Original`}
-              </p>
-              {product.colors && product.colors.length > 0 && (
-                <div className="flex items-center gap-1 shrink-0">
-                  {product.colors.slice(0, 4).map((col, i) => (
-                    <span
-                      key={i}
-                      className="w-3 h-3 rounded-full border border-slate-900/20 shadow-xs"
-                      style={{ backgroundColor: col }}
-                    />
-                  ))}
-                </div>
-              )}
-            </div>
+            {/* Colors Dots ONLY if colors were entered */}
+            {hasColors && (
+              <div className="flex items-center gap-1">
+                {product.colors.slice(0, 5).map((col, i) => (
+                  <span
+                    key={i}
+                    className="w-3 h-3 rounded-full border border-slate-900/20 shadow-xs"
+                    style={{ backgroundColor: col }}
+                  />
+                ))}
+              </div>
+            )}
           </div>
 
           {/* Price & Dual Liquid Glass Actions */}
@@ -250,11 +275,11 @@ export default function ProductCard({
               <span className="text-sm sm:text-base font-extrabold text-[#0b1220] tabular-nums">
                 {formatPrice(product.price, currency, isAr)}
               </span>
-              {product.originalPrice && (
+              {product.originalPrice && product.originalPrice > product.price ? (
                 <span className="text-[11px] text-slate-400 line-through tabular-nums">
                   {formatPrice(product.originalPrice, currency, isAr)}
                 </span>
-              )}
+              ) : null}
             </div>
 
             <div className="grid grid-cols-2 gap-1.5">

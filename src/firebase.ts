@@ -10,15 +10,32 @@ import {
   browserPopupRedirectResolver,
   type Auth,
 } from 'firebase/auth';
-import { getFirestore, doc, getDocFromServer } from 'firebase/firestore';
+import {
+  initializeFirestore,
+  getFirestore,
+  doc,
+  getDocFromServer,
+  type Firestore,
+} from 'firebase/firestore';
 import firebaseConfig from '../firebase-applet-config.json';
 
 export const ADMIN_EMAIL = 'bkralqary1@gmail.com';
 
 const app = getApps().length > 0 ? getApp() : initializeApp(firebaseConfig);
 
-// Connect specifically to the provisioned named Firestore database
-export const db = getFirestore(app, firebaseConfig.firestoreDatabaseId);
+// Connect specifically to the provisioned named Firestore database with auto-detect long polling
+// so mobile networks / strict proxies do not stall on WebChannel streams
+let dbInstance: Firestore;
+try {
+  dbInstance = initializeFirestore(
+    app,
+    { experimentalAutoDetectLongPolling: true },
+    firebaseConfig.firestoreDatabaseId
+  );
+} catch {
+  dbInstance = getFirestore(app, firebaseConfig.firestoreDatabaseId);
+}
+export const db = dbInstance;
 
 // Initialize Auth with resilient persistence fallback for mobile browsers & embedded iframes
 let authInstance: Auth;
