@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import { onAuthStateChanged, getRedirectResult, signOut, type User } from 'firebase/auth';
 import { PageView, Language, Currency, CategoryId, Product, CartItem, HeroSlideItem } from './types';
 import {
@@ -53,6 +53,67 @@ import VisualSectionEditorModal, {
   type EditableSectionTarget,
 } from './components/VisualSectionEditorModal';
 import { soundFX } from './utils/audioEffects';
+
+interface NavHistoryState {
+  appNav: true;
+  view: PageView;
+  category: CategoryId;
+  productId: string | null;
+  overlay?: boolean;
+}
+
+const VALID_VIEWS: PageView[] = [
+  'home',
+  'shop',
+  'product',
+  'cart',
+  'checkout',
+  'wholesale',
+  'account',
+  'compare',
+];
+
+function parseLocationHash(): { view: PageView; category: CategoryId; productId: string | null } {
+  if (typeof window === 'undefined') {
+    return { view: 'home', category: 'all', productId: null };
+  }
+  const raw = window.location.hash.replace(/^#\/?/, '').trim();
+  if (!raw) return { view: 'home', category: 'all', productId: null };
+
+  const parts = raw.split('/').map((p) => {
+    try {
+      return decodeURIComponent(p);
+    } catch {
+      return p;
+    }
+  });
+  const first = parts[0] as PageView;
+  if (first === 'shop') {
+    return { view: 'shop', category: parts[1] || 'all', productId: null };
+  }
+  if (first === 'product' && parts[1]) {
+    return { view: 'product', category: 'all', productId: parts[1] };
+  }
+  if (VALID_VIEWS.includes(first) && first !== 'product') {
+    return { view: first, category: 'all', productId: null };
+  }
+  return { view: 'home', category: 'all', productId: null };
+}
+
+function buildLocationHash(
+  view: PageView,
+  category: CategoryId,
+  productId: string | null
+): string {
+  if (view === 'home') return '#/';
+  if (view === 'shop') {
+    return category && category !== 'all' ? `#/shop/${encodeURIComponent(category)}` : '#/shop';
+  }
+  if (view === 'product' && productId) {
+    return `#/product/${encodeURIComponent(productId)}`;
+  }
+  return `#/${view}`;
+}
 
 export default function App() {
   // Live Firestore Data (strictly reflects cloud catalog once synced — never resurrects deleted products)
@@ -145,15 +206,56 @@ export default function App() {
     };
   }, [isAdminVerified]);
 
-  // Navigation state
-  const [currentView, setCurrentView] = useState<PageView>('home');
+  // Navigation state (initialized from URL hash if deep-linked)
+  const initialRoute = useRef(parseLocationHash());
+  const [currentView, setCurrentView] = useState<PageView>(initialRoute.current.view);
   const [language, setLanguage] = useState<Language>('ar');
   const [currency, setCurrency] = useState<Currency>('YER');
   const [selectedProduct, setSelectedProduct] = useState<Product | null>(null);
-  const [selectedCategory, setSelectedCategory] = useState<CategoryId>('all');
+  const [selectedCategory, setSelectedCategory] = useState<CategoryId>(
+    initialRoute.current.category
+  );
+  const pendingProductIdRef = useRef<string | null>(initialRoute.current.productId);
 
-  // Keep selectedProduct fresh if updated or deleted in Firestore
+  // Refs for Browser History API synchronization (phone & desktop Back/Forward support)
+  const productsRef = useRef<Product[]>(products);
+  productsRef.current = products;
+  const currentViewRef = useRef<PageView>(currentView);
+  currentViewRef.current = currentView;
+  const selectedCategoryRef = useRef<CategoryId>(selectedCategory);
+  selectedCategoryRef.current = selectedCategory;
+  const selectedProductRef = useRef<Product | null>(selectedProduct);
+  selectedProductRef.current = selectedProduct;
+
+  const historyDepthRef = useRef<number>(0);
+  const overlayPushedRef = useRef<boolean>(false);
+  const ignoreNextPopRef = useRef<boolean>(false);
+
+  // Keep selectedProduct fresh (and resolve deep-linked #/product/:id once cloud catalog loads)
   useEffect(() => {
+    if (pendingProductIdRef.current && products.length > 0) {
+      const target = products.find((p) => p.id === pendingProductIdRef.current);
+      if (target) {
+        setSelectedProduct(target);
+        setCurrentView('product');
+        pendingProductIdRef.current = null;
+        return;
+      } else if (productsSynced) {
+        pendingProductIdRef.current = null;
+        setCurrentView('home');
+        try {
+          window.history.replaceState(
+            { appNav: true, view: 'home', category: 'all', productId: null } satisfies NavHistoryState,
+            '',
+            '#/'
+          );
+        } catch {
+          // ignore
+        }
+        return;
+      }
+    }
+
     if (!selectedProduct) return;
     const match = products.find((p) => p.id === selectedProduct.id);
     if (match) {
@@ -162,6 +264,15 @@ export default function App() {
       setSelectedProduct(null);
       if (currentView === 'product') {
         setCurrentView('home');
+        try {
+          window.history.replaceState(
+            { appNav: true, view: 'home', category: 'all', productId: null } satisfies NavHistoryState,
+            '',
+            '#/'
+          );
+        } catch {
+          // ignore
+        }
       }
     }
   }, [products, selectedProduct, productsSynced, currentView]);
@@ -214,9 +325,211 @@ export default function App() {
   // Home filter tab
   const [homeFilter, setHomeFilter] = useState<'trending' | 'popular' | 'all'>('trending');
 
+  // Track whether any modal/drawer/editor overlay is open so hardware Back closes it cleanly
+  const hasOpenOverlay = Boolean(
+    cartDrawerOpen ||
+      invoiceModalOpen ||
+      compareModalOpen ||
+      searchOpen ||
+      authOpen ||
+      quickViewProduct ||
+      adminAuthModalOpen ||
+      editingProduct !== undefined ||
+      editingSection
+  );
+  const hasOpenOverlayRef = useRef<boolean>(hasOpenOverlay);
+  hasOpenOverlayRef.current = hasOpenOverlay;
+
+  const closeAllOverlays = useCallback(() => {
+    setCartDrawerOpen(false);
+    setInvoiceModalOpen(false);
+    setCompareModalOpen(false);
+    setSearchOpen(false);
+    setAuthOpen(false);
+    setQuickViewProduct(null);
+    setAdminAuthModalOpen(false);
+    setEditingProduct(undefined);
+    setEditingSection(null);
+  }, []);
+
+  // Central SPA navigation synced with Browser History API (Back / Forward on mobile & desktop)
+  const navigateTo = useCallback(
+    (
+      nextView: PageView,
+      opts?: {
+        category?: CategoryId;
+        product?: Product | null;
+        replace?: boolean;
+      }
+    ) => {
+      const nextCategory =
+        opts?.category !== undefined
+          ? opts.category
+          : nextView === 'home'
+            ? 'all'
+            : selectedCategoryRef.current;
+      const nextProduct =
+        opts?.product !== undefined
+          ? opts.product
+          : nextView === 'product'
+            ? selectedProductRef.current
+            : null;
+      const nextProductId = nextView === 'product' ? nextProduct?.id || null : null;
+
+      const isSameRoute =
+        currentViewRef.current === nextView &&
+        selectedCategoryRef.current === nextCategory &&
+        (nextView !== 'product' || selectedProductRef.current?.id === nextProductId);
+
+      setSelectedCategory(nextCategory);
+      if (opts?.product !== undefined || nextView !== 'product') {
+        setSelectedProduct(nextProduct);
+      }
+      pendingProductIdRef.current = null;
+      setCurrentView(nextView);
+
+      const stateObj: NavHistoryState = {
+        appNav: true,
+        view: nextView,
+        category: nextCategory,
+        productId: nextProductId,
+      };
+      const hash = buildLocationHash(nextView, nextCategory, nextProductId);
+
+      try {
+        if (overlayPushedRef.current) {
+          // Navigating directly from inside an open modal: convert the overlay entry into the new route
+          overlayPushedRef.current = false;
+          window.history.replaceState(stateObj, '', hash);
+          historyDepthRef.current += 1;
+        } else if (opts?.replace || isSameRoute) {
+          window.history.replaceState(stateObj, '', hash);
+        } else {
+          window.history.pushState(stateObj, '', hash);
+          historyDepthRef.current += 1;
+        }
+      } catch {
+        // Ignore History API errors in restricted sandbox environments
+      }
+    },
+    []
+  );
+
+  // In-app Back button handler: uses browser history when available so Back stack stays clean
+  const handleGoBack = useCallback(
+    (fallbackView: PageView = 'home') => {
+      if (historyDepthRef.current > 0) {
+        window.history.back();
+      } else {
+        navigateTo(fallbackView, { replace: true });
+      }
+    },
+    [navigateTo]
+  );
+
+  // Tag initial history entry on mount & listen for phone/desktop Back/Forward (popstate)
+  useEffect(() => {
+    const init = initialRoute.current;
+    const initialState: NavHistoryState = {
+      appNav: true,
+      view: init.view,
+      category: init.category,
+      productId: init.productId,
+    };
+    try {
+      window.history.replaceState(
+        initialState,
+        '',
+        buildLocationHash(init.view, init.category, init.productId)
+      );
+    } catch {
+      // ignore
+    }
+
+    const handlePopState = (event: PopStateEvent) => {
+      if (ignoreNextPopRef.current) {
+        ignoreNextPopRef.current = false;
+        return;
+      }
+
+      // If any modal/drawer/editor is currently open, Back simply closes it without leaving the page
+      if (hasOpenOverlayRef.current) {
+        overlayPushedRef.current = false;
+        closeAllOverlays();
+        return;
+      }
+
+      historyDepthRef.current = Math.max(0, historyDepthRef.current - 1);
+
+      const rawState = event.state as Partial<NavHistoryState> | null;
+      const target =
+        rawState && rawState.appNav && rawState.view
+          ? {
+              view: rawState.view,
+              category: rawState.category || 'all',
+              productId: rawState.productId || null,
+            }
+          : parseLocationHash();
+
+      if (target.view === 'product' && target.productId) {
+        const found = productsRef.current.find((p) => p.id === target.productId);
+        if (found) {
+          setSelectedProduct(found);
+          setSelectedCategory(target.category);
+          setCurrentView('product');
+        } else {
+          setSelectedProduct(null);
+          setSelectedCategory(target.category);
+          setCurrentView('shop');
+        }
+      } else {
+        setSelectedCategory(target.category);
+        setCurrentView(target.view);
+      }
+    };
+
+    window.addEventListener('popstate', handlePopState);
+    return () => window.removeEventListener('popstate', handlePopState);
+  }, [closeAllOverlays]);
+
+  // Push a lightweight history entry whenever an overlay opens, and pop it if closed manually via X
+  useEffect(() => {
+    if (hasOpenOverlay && !overlayPushedRef.current) {
+      const overlayState: NavHistoryState = {
+        appNav: true,
+        overlay: true,
+        view: currentViewRef.current,
+        category: selectedCategoryRef.current,
+        productId: selectedProductRef.current?.id || null,
+      };
+      try {
+        window.history.pushState(
+          overlayState,
+          '',
+          buildLocationHash(
+            currentViewRef.current,
+            selectedCategoryRef.current,
+            selectedProductRef.current?.id || null
+          )
+        );
+        overlayPushedRef.current = true;
+      } catch {
+        // ignore
+      }
+    } else if (!hasOpenOverlay && overlayPushedRef.current) {
+      overlayPushedRef.current = false;
+      ignoreNextPopRef.current = true;
+      try {
+        window.history.back();
+      } catch {
+        ignoreNextPopRef.current = false;
+      }
+    }
+  }, [hasOpenOverlay]);
+
   useEffect(() => {
     window.scrollTo({ top: 0, behavior: 'smooth' });
-  }, [currentView]);
+  }, [currentView, selectedProduct?.id]);
 
   const isAr = language === 'ar';
 
@@ -242,8 +555,7 @@ export default function App() {
     setWishlist((prev) => prev.filter((id) => id !== productId));
     setComparedProductIds((prev) => prev.filter((id) => id !== productId));
     if (selectedProduct?.id === productId) {
-      setSelectedProduct(null);
-      setCurrentView('home');
+      navigateTo('home', { product: null, replace: true });
     }
     showAdminToast('تم حذف المنتج نهائياً من السحابة');
   };
@@ -416,14 +728,12 @@ export default function App() {
 
   const handleSelectProduct = (product: Product) => {
     soundFX.playClick();
-    setSelectedProduct(product);
-    setCurrentView('product');
+    navigateTo('product', { product });
   };
 
   const handleSelectCategory = (catId: CategoryId) => {
     soundFX.playWhoosh();
-    setSelectedCategory(catId);
-    setCurrentView('shop');
+    navigateTo('shop', { category: catId });
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
@@ -462,8 +772,7 @@ export default function App() {
       <Header
         currentView={currentView}
         setCurrentView={(view) => {
-          if (view === 'shop') setSelectedCategory('all');
-          setCurrentView(view);
+          navigateTo(view, { category: view === 'shop' ? 'all' : selectedCategory });
         }}
         selectedCategory={selectedCategory}
         onSelectCategory={handleSelectCategory}
@@ -530,8 +839,7 @@ export default function App() {
               language={language}
               currency={currency}
               onExplore={(cat) => {
-                setSelectedCategory(cat || 'all');
-                setCurrentView('shop');
+                navigateTo('shop', { category: cat || 'all' });
               }}
               onSelectProduct={handleSelectProduct}
               slides={heroSlides}
@@ -732,8 +1040,7 @@ export default function App() {
                         type="button"
                         onClick={() => {
                           soundFX.playClick();
-                          setSelectedCategory('all');
-                          setCurrentView('shop');
+                          navigateTo('shop', { category: 'all' });
                         }}
                         className="inline-flex items-center gap-2.5 liquid-glass-strong hover:bg-white text-[#0b1220] hover:text-[#0071e3] text-sm font-extrabold px-8 py-3.5 rounded-2xl transition-all cursor-pointer"
                       >
@@ -764,7 +1071,7 @@ export default function App() {
             comparedIds={comparedProductIds}
             onToggleCompare={handleToggleCompare}
             initialCategory={selectedCategory}
-            onCategoryChange={(cat) => setSelectedCategory(cat)}
+            onCategoryChange={(cat) => navigateTo('shop', { category: cat })}
             siteConfig={siteConfig}
             isAdminMode={isAdminMode}
             onAdminEditProduct={(p) => setEditingProduct(p)}
@@ -782,7 +1089,7 @@ export default function App() {
             allProducts={displayableProducts}
             language={language}
             currency={currency}
-            onBack={() => setCurrentView('shop')}
+            onBack={() => handleGoBack('shop')}
             onAddToCart={(p, vr, col, q) => handleAddToCart(p, vr, col, q)}
             onQuickOrder={(p, vr, col, q) => {
               handleAddToCart(p, vr, col, q);
@@ -806,16 +1113,14 @@ export default function App() {
             onRemoveItem={handleRemoveFromCart}
             onToggleWarranty={handleToggleWarranty}
             onContinueShopping={() => {
-              setSelectedCategory('all');
-              setCurrentView('shop');
+              navigateTo('shop', { category: 'all' });
               window.scrollTo({ top: 0, behavior: 'smooth' });
             }}
             onSelectCategory={(cat) => {
-              setSelectedCategory(cat);
-              setCurrentView('shop');
+              navigateTo('shop', { category: cat });
               window.scrollTo({ top: 0, behavior: 'smooth' });
             }}
-            onProceedToCheckout={() => setCurrentView('checkout')}
+            onProceedToCheckout={() => navigateTo('checkout')}
           />
         )}
 
@@ -825,7 +1130,7 @@ export default function App() {
             cart={cart}
             language={language}
             currency={currency}
-            onBackToCart={() => setCurrentView('cart')}
+            onBackToCart={() => handleGoBack('cart')}
             onOrderSuccess={() => {
               setCart([]);
             }}
@@ -837,7 +1142,7 @@ export default function App() {
           <WholesaleView
             language={language}
             currency={currency}
-            onBackToStore={() => setCurrentView('home')}
+            onBackToStore={() => handleGoBack('home')}
           />
         )}
 
@@ -846,7 +1151,7 @@ export default function App() {
           <AccountView
             language={language}
             currency={currency}
-            onBackToStore={() => setCurrentView('home')}
+            onBackToStore={() => handleGoBack('home')}
             onSelectProduct={handleSelectProduct}
           />
         )}
@@ -857,7 +1162,7 @@ export default function App() {
             <div className="container mx-auto max-w-6xl">
               <CompareModal
                 isOpen={true}
-                onClose={() => setCurrentView('shop')}
+                onClose={() => handleGoBack('shop')}
                 products={comparedProducts}
                 language={language}
                 currency={currency}
@@ -888,14 +1193,12 @@ export default function App() {
         onRemoveItem={handleRemoveFromCart}
         onBrowseProducts={() => {
           setInvoiceModalOpen(false);
-          setSelectedCategory('all');
-          setCurrentView('shop');
+          navigateTo('shop', { category: 'all' });
           window.scrollTo({ top: 0, behavior: 'smooth' });
         }}
         onSelectCategory={(cat) => {
           setInvoiceModalOpen(false);
-          setSelectedCategory(cat);
-          setCurrentView('shop');
+          navigateTo('shop', { category: cat });
           window.scrollTo({ top: 0, behavior: 'smooth' });
         }}
       />
@@ -919,18 +1222,16 @@ export default function App() {
         }}
         onViewFullCart={() => {
           setCartDrawerOpen(false);
-          setCurrentView('cart');
+          navigateTo('cart');
         }}
         onBrowseProducts={() => {
           setCartDrawerOpen(false);
-          setSelectedCategory('all');
-          setCurrentView('shop');
+          navigateTo('shop', { category: 'all' });
           window.scrollTo({ top: 0, behavior: 'smooth' });
         }}
         onSelectCategory={(cat) => {
           setCartDrawerOpen(false);
-          setSelectedCategory(cat);
-          setCurrentView('shop');
+          navigateTo('shop', { category: cat });
           window.scrollTo({ top: 0, behavior: 'smooth' });
         }}
       />
@@ -963,7 +1264,7 @@ export default function App() {
         isOpen={authOpen}
         onClose={() => setAuthOpen(false)}
         language={language}
-        onSuccessLogin={() => setCurrentView('account')}
+        onSuccessLogin={() => navigateTo('account')}
       />
 
       <QuickViewModal
@@ -1044,8 +1345,7 @@ export default function App() {
           language={language}
           onSelectCategory={handleSelectCategory}
           onNavigate={(view) => {
-            if (view === 'shop') setSelectedCategory('all');
-            setCurrentView(view);
+            navigateTo(view, { category: view === 'shop' ? 'all' : selectedCategory });
           }}
           siteConfig={siteConfig}
           isAdminMode={isAdminMode}

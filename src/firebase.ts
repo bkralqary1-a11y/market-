@@ -18,8 +18,13 @@ import {
   type Firestore,
 } from 'firebase/firestore';
 import firebaseConfig from '../firebase-applet-config.json';
+import { sha256Hex } from './utils/urlSecurity';
 
-export const ADMIN_EMAIL = 'bkralqary1@gmail.com';
+// Salted SHA-256 digest of the verified owner identity (never stored in plaintext in client bundle;
+// authoritative access control is enforced server-side by Firestore Security Rules)
+const OWNER_IDENTITY_SALT = 'saddam-store-owner-v1:';
+const OWNER_IDENTITY_DIGEST =
+  '0db35d5bc9de597cd4d09bb0afe97d7914c7ab8268b37e9482ff234bac9ae5ab';
 
 const app = getApps().length > 0 ? getApp() : initializeApp(firebaseConfig);
 
@@ -76,15 +81,11 @@ export interface FirestoreErrorInfo {
   path: string | null;
   authInfo: {
     userId: string | undefined;
-    email: string | null | undefined;
     emailVerified: boolean | undefined;
     isAnonymous: boolean | undefined;
     tenantId: string | null | undefined;
     providerInfo: {
       providerId: string;
-      displayName: string | null;
-      email: string | null;
-      photoUrl: string | null;
     }[];
   };
 }
@@ -98,16 +99,12 @@ export function handleFirestoreError(
     error: error instanceof Error ? error.message : String(error),
     authInfo: {
       userId: auth.currentUser?.uid,
-      email: auth.currentUser?.email,
       emailVerified: auth.currentUser?.emailVerified,
       isAnonymous: auth.currentUser?.isAnonymous,
       tenantId: auth.currentUser?.tenantId,
       providerInfo:
         auth.currentUser?.providerData.map((provider) => ({
           providerId: provider.providerId,
-          displayName: provider.displayName,
-          email: provider.email,
-          photoUrl: provider.photoURL,
         })) || [],
     },
     operationType,
@@ -117,15 +114,16 @@ export function handleFirestoreError(
   throw new Error(JSON.stringify(errInfo));
 }
 
+export function isOwnerEmailCandidate(email: string | null | undefined): boolean {
+  if (!email) return false;
+  return sha256Hex(OWNER_IDENTITY_SALT + email.trim().toLowerCase()) === OWNER_IDENTITY_DIGEST;
+}
+
 export function isVerifiedAdminUser(
   user: { email?: string | null; emailVerified?: boolean } | null
 ): boolean {
   if (!user) return false;
-  return Boolean(
-    user.emailVerified &&
-      user.email &&
-      user.email.toLowerCase() === ADMIN_EMAIL.toLowerCase()
-  );
+  return Boolean(user.emailVerified && isOwnerEmailCandidate(user.email));
 }
 
 // Required startup connection test to verify Firestore reachability

@@ -17,6 +17,7 @@ import {
   DEFAULT_CATEGORY_IMAGES,
   INITIAL_PRODUCTS_LIST,
 } from '../utils/storeStorage';
+import { sanitizeSafeHttpUrl, sanitizeSafeMediaUrl } from '../utils/urlSecurity';
 
 export interface CustomCategoryConfig {
   id: string;
@@ -236,10 +237,10 @@ export function sanitizeProductForFirestore(
   };
 
   const cleanImages = (Array.isArray(product.images) ? product.images : [])
-    .map((url) => clip(url, 250000))
+    .map((url) => sanitizeSafeMediaUrl(clip(url, 250000)))
     .filter((url) => url.length > 0)
     .slice(0, 8);
-  const primaryImage = clip(product.image || cleanImages[0] || '', 250000);
+  const primaryImage = sanitizeSafeMediaUrl(clip(product.image || cleanImages[0] || '', 250000));
   if (primaryImage && !cleanImages.includes(primaryImage)) {
     cleanImages.unshift(primaryImage);
   }
@@ -317,8 +318,9 @@ export function sanitizeProductForFirestore(
   if (cleanColorNamesAr.length > 0) payload.colorNamesAr = cleanColorNamesAr;
   if (product.tag && clip(product.tag, 60)) payload.tag = clip(product.tag, 60);
   if (product.tagAr && clip(product.tagAr, 60)) payload.tagAr = clip(product.tagAr, 60);
-  if (product.videoUrl && clip(product.videoUrl, 1500)) {
-    payload.videoUrl = clip(product.videoUrl, 1500);
+  const safeVideoUrl = sanitizeSafeHttpUrl(clip(product.videoUrl || '', 1500));
+  if (safeVideoUrl) {
+    payload.videoUrl = safeVideoUrl;
   }
 
   return payload;
@@ -336,7 +338,7 @@ export function sanitizeHeroSlideForFirestore(
     titleAr: clip(slide.titleAr || 'عرض خاص', 200, 'عرض خاص'),
     subtitleAr: clip(slide.subtitleAr || '', 500),
     mediaType: slide.mediaType === 'video' ? 'video' : 'image',
-    imageUrl: clip(slide.imageUrl || '', 250000),
+    imageUrl: sanitizeSafeMediaUrl(clip(slide.imageUrl || '', 250000)),
     order: Math.min(100, Math.max(0, Math.round(order))),
     enabled: slide.enabled !== false,
     createdAt: existingCreatedAt || serverTimestamp(),
@@ -346,7 +348,8 @@ export function sanitizeHeroSlideForFirestore(
   if (slide.badgeEn) payload.badgeEn = clip(slide.badgeEn, 160);
   if (slide.titleEn) payload.titleEn = clip(slide.titleEn, 200);
   if (slide.subtitleEn) payload.subtitleEn = clip(slide.subtitleEn, 500);
-  if (slide.videoUrl) payload.videoUrl = clip(slide.videoUrl, 1500);
+  const safeSlideVideoUrl = sanitizeSafeHttpUrl(clip(slide.videoUrl || '', 1500));
+  if (safeSlideVideoUrl) payload.videoUrl = safeSlideVideoUrl;
   if (slide.buttonTextAr) payload.buttonTextAr = clip(slide.buttonTextAr, 80);
   if (slide.buttonTextEn) payload.buttonTextEn = clip(slide.buttonTextEn, 80);
   if (slide.featureBadge1Ar) payload.featureBadge1Ar = clip(slide.featureBadge1Ar, 100);
@@ -373,7 +376,7 @@ export function sanitizeSiteConfigForFirestore(config: SiteConfig): Record<strin
       id: normalizeSafeId(c.id || '', 'cat'),
       nameAr: clip(c.nameAr, 80),
       nameEn: clip(c.nameEn || c.nameAr, 80),
-      image: clip(c.image || '', 120000),
+      image: sanitizeSafeMediaUrl(clip(c.image || '', 120000)),
       hidden: Boolean(c.hidden),
     }));
 
@@ -397,11 +400,11 @@ export function sanitizeSiteConfigForFirestore(config: SiteConfig): Record<strin
     bento2BadgeAr: clip(config.bento2BadgeAr, 120),
     bento2TitleAr: clip(config.bento2TitleAr, 160),
     bento2DescAr: clip(config.bento2DescAr, 300),
-    catPhonesImg: clip(config.catPhonesImg, 150000),
-    catAudioImg: clip(config.catAudioImg, 150000),
-    catCasesImg: clip(config.catCasesImg, 150000),
-    catChargersImg: clip(config.catChargersImg, 150000),
-    catCablesImg: clip(config.catCablesImg, 150000),
+    catPhonesImg: sanitizeSafeMediaUrl(clip(config.catPhonesImg, 150000)),
+    catAudioImg: sanitizeSafeMediaUrl(clip(config.catAudioImg, 150000)),
+    catCasesImg: sanitizeSafeMediaUrl(clip(config.catCasesImg, 150000)),
+    catChargersImg: sanitizeSafeMediaUrl(clip(config.catChargersImg, 150000)),
+    catCablesImg: sanitizeSafeMediaUrl(clip(config.catCablesImg, 150000)),
     catPhonesNameAr: clip(config.catPhonesNameAr || DEFAULT_SITE_CONFIG.catPhonesNameAr, 80),
     catAudioNameAr: clip(config.catAudioNameAr || DEFAULT_SITE_CONFIG.catAudioNameAr, 80),
     catCasesNameAr: clip(config.catCasesNameAr || DEFAULT_SITE_CONFIG.catCasesNameAr, 80),
@@ -456,10 +459,18 @@ export function subscribeToProducts(
         if (data.createdAt instanceof Timestamp) {
           productCreatedAtCache.set(docSnap.id, data.createdAt);
         }
+        const safeImg = sanitizeSafeMediaUrl(data.image);
+        const safeImages = (
+          Array.isArray(data.images) ? data.images : safeImg ? [safeImg] : []
+        )
+          .map((u: unknown) => sanitizeSafeMediaUrl(u))
+          .filter(Boolean);
         return {
           ...(data as Product),
           id: docSnap.id,
-          images: Array.isArray(data.images) ? data.images : data.image ? [data.image] : [],
+          image: safeImg || safeImages[0] || '',
+          images: safeImages,
+          videoUrl: sanitizeSafeHttpUrl(data.videoUrl) || undefined,
           colors: Array.isArray(data.colors) ? data.colors : [],
           colorNamesAr: Array.isArray(data.colorNamesAr) ? data.colorNamesAr : [],
           variants: data.variants || { titleEn: '', titleAr: '', options: [] },
@@ -500,6 +511,8 @@ export function subscribeToHeroSlides(
           return {
             ...(data as HeroSlideItem & { order?: number }),
             id: docSnap.id,
+            imageUrl: sanitizeSafeMediaUrl(data.imageUrl),
+            videoUrl: sanitizeSafeHttpUrl(data.videoUrl) || undefined,
           };
         })
         .sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
@@ -526,7 +539,23 @@ export function subscribeToSiteConfig(
         onData(DEFAULT_SITE_CONFIG, false);
         return;
       }
-      onData({ ...DEFAULT_SITE_CONFIG, ...(snap.data() as Partial<SiteConfig>) }, true);
+      const raw = snap.data() as Partial<SiteConfig>;
+      const merged: SiteConfig = {
+        ...DEFAULT_SITE_CONFIG,
+        ...raw,
+        catPhonesImg: sanitizeSafeMediaUrl(raw.catPhonesImg ?? DEFAULT_SITE_CONFIG.catPhonesImg),
+        catAudioImg: sanitizeSafeMediaUrl(raw.catAudioImg ?? DEFAULT_SITE_CONFIG.catAudioImg),
+        catCasesImg: sanitizeSafeMediaUrl(raw.catCasesImg ?? DEFAULT_SITE_CONFIG.catCasesImg),
+        catChargersImg: sanitizeSafeMediaUrl(raw.catChargersImg ?? DEFAULT_SITE_CONFIG.catChargersImg),
+        catCablesImg: sanitizeSafeMediaUrl(raw.catCablesImg ?? DEFAULT_SITE_CONFIG.catCablesImg),
+        customCategories: Array.isArray(raw.customCategories)
+          ? raw.customCategories.map((c) => ({
+              ...c,
+              image: sanitizeSafeMediaUrl(c?.image),
+            }))
+          : [],
+      };
+      onData(merged, true);
     },
     (error) => {
       try {

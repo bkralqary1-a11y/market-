@@ -22,7 +22,6 @@ interface AdminFloatingBarProps {
 }
 
 export default function AdminFloatingBar({
-  adminEmail,
   needsInitialSeed,
   seeding,
   toastMessage,
@@ -52,7 +51,9 @@ export default function AdminFloatingBar({
               <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
               <span>وضع التعديل المباشر للمتجر</span>
             </div>
-            <div className="text-[10px] text-sky-200/80 font-mono truncate">{adminEmail}</div>
+            <div className="text-[10px] text-sky-200/80 font-bold truncate">
+              جلسة مالك موثّقة ومشفّرة
+            </div>
           </div>
         </div>
 

@@ -20,6 +20,7 @@ import { formatPrice } from '../data/mockData';
 import { triggerFlyToCart } from './FlyingCartAnimation';
 import ProductCard from './ProductCard';
 import { getYouTubeId, getYouTubeEmbedUrl } from '../utils/videoUtils';
+import { sanitizeSafeHttpUrl } from '../utils/urlSecurity';
 
 interface ProductDetailViewProps {
   product: Product;
@@ -256,7 +257,7 @@ export default function ProductDetailView({
                               className="w-full h-full border-0"
                             />
                             <a
-                              href={product.videoUrl || `https://youtube.com/shorts/${ytId}`}
+                              href={sanitizeSafeHttpUrl(product.videoUrl) || `https://youtube.com/shorts/${ytId}`}
                               target="_blank"
                               rel="noopener noreferrer"
                               className="absolute top-3 right-3 rtl:right-auto rtl:left-3 z-20 px-3 py-1.5 rounded-xl liquid-glass-dark text-white text-[11px] font-bold flex items-center gap-1.5"
@@ -267,9 +268,10 @@ export default function ProductDetailView({
                           </div>
                         );
                       }
-                      return product.videoUrl?.trim() ? (
+                      const safeDirectVideoUrl = sanitizeSafeHttpUrl(product.videoUrl);
+                      return safeDirectVideoUrl ? (
                         <video
-                          src={product.videoUrl}
+                          src={safeDirectVideoUrl}
                           poster={activeImage?.trim() || undefined}
                           autoPlay
                           controls

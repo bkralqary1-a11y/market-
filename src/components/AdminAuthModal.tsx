@@ -23,7 +23,7 @@ import {
   auth,
   googleProvider,
   popupRedirectResolver,
-  ADMIN_EMAIL,
+  isOwnerEmailCandidate,
   isVerifiedAdminUser,
 } from '../firebase';
 
@@ -60,6 +60,15 @@ export default function AdminAuthModal({
     }
   })();
 
+  const handleClose = () => {
+    setEmail('');
+    setPassword('');
+    setErrorMsg(null);
+    setErrorCode(null);
+    setInfoMsg(null);
+    onClose();
+  };
+
   const handleGoogleSignIn = async () => {
     setErrorMsg(null);
     setErrorCode(null);
@@ -67,16 +76,14 @@ export default function AdminAuthModal({
     try {
       const result = await signInWithPopup(auth, googleProvider, popupRedirectResolver);
       if (isVerifiedAdminUser(result.user)) {
+        setEmail('');
+        setPassword('');
         onAuthenticated();
       } else {
-        setErrorMsg(
-          `الحساب (${result.user.email || 'غير معروف'}) غير مصرح له بإدارة المتجر. يرجى الدخول بحساب المالك المعتمد.`
-        );
+        setErrorMsg('هذا الحساب غير مصرح له بإدارة المتجر. يرجى الدخول بحساب المالك المعتمد.');
       }
     } catch (err: unknown) {
       const code = (err as { code?: string })?.code || '';
-      const rawMessage = err instanceof Error ? err.message : '';
-      console.error('Google Sign-In failed:', code, rawMessage);
       setErrorCode(code || null);
 
       if (code === 'auth/popup-closed-by-user') {
@@ -88,13 +95,9 @@ export default function AdminAuthModal({
           'المتصفح منع النافذة المنبثقة. اضغط على "الدخول عبر إعادة التوجيه" أو افتح المتجر في تبويب مستقل أدناه.'
         );
       } else if (code === 'auth/unauthorized-domain') {
-        setErrorMsg(
-          `النطاق الحالي (${window.location.hostname}) غير مضاف في النطاقات المصرح بها (Authorized Domains) في Firebase Authentication.`
-        );
+        setErrorMsg('النطاق الحالي غير مضاف في النطاقات المصرح بها لتسجيل الدخول.');
       } else if (code === 'auth/operation-not-allowed') {
-        setErrorMsg(
-          'مزود تسجيل الدخول عبر Google غير مفعّل في Firebase Console > Authentication > Sign-in method.'
-        );
+        setErrorMsg('مزود تسجيل الدخول عبر Google غير مفعّل في إعدادات المصادقة.');
       } else if (
         code === 'auth/internal-error' ||
         code === 'auth/web-storage-unsupported' ||
@@ -104,11 +107,9 @@ export default function AdminAuthModal({
           'المتصفح أو نافذة المعاينة المدمجة تمنع نوافذ Google المنبثقة. افتح المتجر في صفحة مستقلة أدناه أو استخدم زر إعادة التوجيه.'
         );
       } else if (code === 'auth/network-request-failed') {
-        setErrorMsg('تعذر الاتصال بخوادم Google. تأكد من اتصال الإنترنت وحاول مجدداً.');
+        setErrorMsg('تعذر الاتصال بالخادم الآمن. تأكد من اتصال الإنترنت وحاول مجدداً.');
       } else {
-        setErrorMsg(
-          `تعذر إتمام تسجيل الدخول بحساب Google. ${code ? `(${code})` : ''} جرب فتح المتجر في صفحة مستقلة أدناه.`
-        );
+        setErrorMsg('تعذر إتمام تسجيل الدخول بحساب Google. جرب فتح المتجر في صفحة مستقلة أدناه.');
       }
     } finally {
       setLoading(false);
@@ -128,11 +129,8 @@ export default function AdminAuthModal({
       await signInWithRedirect(auth, googleProvider, popupRedirectResolver);
     } catch (err: unknown) {
       const code = (err as { code?: string })?.code || '';
-      console.error('Google Redirect Sign-In failed:', code, err);
       setErrorCode(code || null);
-      setErrorMsg(
-        `تعذر التحويل لتسجيل الدخول ${code ? `(${code})` : ''}. يرجى فتح المتجر في تبويب متصفح مستقل.`
-      );
+      setErrorMsg('تعذر التحويل لتسجيل الدخول. يرجى فتح المتجر في تبويب متصفح مستقل.');
       setLoading(false);
     }
   };
@@ -143,44 +141,45 @@ export default function AdminAuthModal({
     setErrorCode(null);
     setInfoMsg(null);
     setNeedsVerificationUser(null);
-    if (!email.trim() || !password) {
+    const trimmedEmail = email.trim();
+    if (!trimmedEmail || !password) {
       setErrorMsg('يرجى إدخال البريد الإلكتروني وكلمة المرور.');
       return;
     }
     setLoading(true);
     try {
-      const result = await signInWithEmailAndPassword(auth, email.trim(), password);
+      const result = await signInWithEmailAndPassword(auth, trimmedEmail, password);
       if (isVerifiedAdminUser(result.user)) {
+        setEmail('');
         setPassword('');
         onAuthenticated();
-      } else if (
-        result.user.email?.toLowerCase() === ADMIN_EMAIL.toLowerCase() &&
-        !result.user.emailVerified
-      ) {
+      } else if (isOwnerEmailCandidate(result.user.email) && !result.user.emailVerified) {
         setNeedsVerificationUser(result.user);
+        setPassword('');
         setErrorMsg(
-          'تم الدخول لكن البريد غير موثّق بعد. اضغط على زر "إرسال رابط التوثيق إلى بريدي" أدناه ثم افتح الرابط من Gmail.'
+          'تم الدخول لكن البريد غير موثّق بعد. اضغط على زر "إرسال رابط التوثيق" أدناه ثم افتح الرابط من بريدك.'
         );
       } else {
-        setErrorMsg('هذا البريد الإلكتروني غير مصرح له بإدارة المتجر.');
+        setPassword('');
+        setErrorMsg('بيانات الدخول غير مصرح لها بإدارة المتجر.');
       }
     } catch (err: unknown) {
       const code = (err as { code?: string })?.code || '';
       setErrorCode(code || null);
+      setPassword('');
       if (code === 'auth/operation-not-allowed') {
-        setErrorMsg(
-          'تسجيل الدخول بالبريد وكلمة المرور غير مفعّل بعد في Firebase Console. فعّله من Authentication > Sign-in method.'
-        );
+        setErrorMsg('تسجيل الدخول بالبريد وكلمة المرور غير مفعّل حالياً.');
       } else if (
         code === 'auth/invalid-credential' ||
         code === 'auth/wrong-password' ||
-        code === 'auth/user-not-found'
+        code === 'auth/user-not-found' ||
+        code === 'auth/invalid-email'
       ) {
         setErrorMsg('بيانات الدخول غير صحيحة.');
       } else if (code === 'auth/too-many-requests') {
         setErrorMsg('تم إيقاف المحاولات مؤقتاً لكثرة الطلبات. يرجى الانتظار قليلاً.');
       } else {
-        setErrorMsg(`تعذر تسجيل الدخول ${code ? `(${code})` : ''}. تأكد من الاتصال وحاول مجدداً.`);
+        setErrorMsg('تعذر تسجيل الدخول. تأكد من الاتصال وحاول مجدداً.');
       }
     } finally {
       setLoading(false);
@@ -191,17 +190,27 @@ export default function AdminAuthModal({
     setErrorMsg(null);
     setErrorCode(null);
     setInfoMsg(null);
-    const targetEmail = email.trim() || ADMIN_EMAIL;
+    const targetEmail = email.trim();
+    if (!targetEmail) {
+      setErrorMsg('يرجى كتابة البريد الإلكتروني أولاً لإرسال رابط تعيين كلمة المرور.');
+      return;
+    }
     setLoading(true);
     try {
       await sendPasswordResetEmail(auth, targetEmail);
-      setInfoMsg(`تم إرسال رابط تعيين/تغيير كلمة المرور إلى ${targetEmail}. راجع بريدك (بما في ذلك الرسائل غير المرغوب فيها).`);
+      setInfoMsg(
+        'إذا كان البريد الإلكتروني مسجلاً ومعتمداً، فقد تم إرسال رابط تعيين/تغيير كلمة المرور إليه.'
+      );
     } catch (err: unknown) {
       const code = (err as { code?: string })?.code || '';
       setErrorCode(code || null);
-      setErrorMsg(
-        `تعذر إرسال رابط تغيير كلمة المرور ${code ? `(${code})` : ''}. تأكد من تفعيل Email/Password وإضافة النطاق في Firebase Console.`
-      );
+      if (code === 'auth/invalid-email') {
+        setErrorMsg('صيغة البريد الإلكتروني غير صحيحة.');
+      } else if (code === 'auth/too-many-requests') {
+        setErrorMsg('تم تجاوز الحد المسموح للمحاولات. يرجى المحاولة لاحقاً.');
+      } else {
+        setErrorMsg('تعذر إرسال رابط تغيير كلمة المرور حالياً. تأكد من الاتصال وحاول مجدداً.');
+      }
     } finally {
       setLoading(false);
     }
@@ -214,11 +223,9 @@ export default function AdminAuthModal({
     setLoading(true);
     try {
       await sendEmailVerification(needsVerificationUser);
-      setInfoMsg('تم إرسال رابط التوثيق إلى بريدك في Gmail. افتح الرابط ثم أعد تسجيل الدخول.');
-    } catch (err: unknown) {
-      const code = (err as { code?: string })?.code || '';
-      setErrorCode(code || null);
-      setErrorMsg(`تعذر إرسال رابط التوثيق ${code ? `(${code})` : ''}.`);
+      setInfoMsg('تم إرسال رابط التوثيق إلى بريدك الإلكتروني. افتح الرابط ثم أعد تسجيل الدخول.');
+    } catch {
+      setErrorMsg('تعذر إرسال رابط التوثيق حالياً. حاول مرة أخرى بعد قليل.');
     } finally {
       setLoading(false);
     }
@@ -228,6 +235,8 @@ export default function AdminAuthModal({
     setLoading(true);
     try {
       await signOut(auth);
+      setEmail('');
+      setPassword('');
       setErrorMsg(null);
       setErrorCode(null);
     } finally {
@@ -239,7 +248,7 @@ export default function AdminAuthModal({
     <div
       dir="rtl"
       className="fixed inset-0 z-[1000] flex items-center justify-center p-4 bg-[#070f21]/65 backdrop-blur-xl animate-in fade-in duration-200 overflow-y-auto"
-      onClick={onClose}
+      onClick={handleClose}
     >
       <div
         className="liquid-glass-strong w-full max-w-md rounded-[32px] p-6 sm:p-8 relative shadow-2xl border border-white/60 my-auto"
@@ -247,7 +256,7 @@ export default function AdminAuthModal({
       >
         <button
           type="button"
-          onClick={onClose}
+          onClick={handleClose}
           className="absolute top-5 left-5 w-9 h-9 rounded-full liquid-glass-subtle flex items-center justify-center text-slate-600 hover:text-slate-950 cursor-pointer"
           aria-label="إغلاق"
         >
@@ -263,7 +272,7 @@ export default function AdminAuthModal({
             التحقق من هوية مالك المتجر
           </h2>
           <p className="text-xs text-slate-600 leading-relaxed">
-            محمي بالكامل عبر Firebase Authentication وقواعد Firestore الأمنية
+            بوابة دخول مشفّرة ومحمية بالكامل لإدارة المتجر
           </p>
         </div>
 
@@ -275,8 +284,7 @@ export default function AdminAuthModal({
               <div className="text-xs leading-relaxed">
                 <p className="font-extrabold">وصول مرفوض</p>
                 <p className="mt-0.5">
-                  الحساب الحالي (<span className="font-mono">{currentUser.email}</span>) غير مصرح له
-                  بالتعديل.
+                  الحساب المسجل حالياً غير مصرح له بالتعديل.
                 </p>
               </div>
             </div>
@@ -372,7 +380,7 @@ export default function AdminAuthModal({
               </button>
             )}
 
-            {/* Open in Standalone Browser Tab when inside AI Studio preview iframe */}
+            {/* Open in Standalone Browser Tab when inside embedded iframe */}
             {(isInsideIframe || errorMsg) && (
               <a
                 href={typeof window !== 'undefined' ? window.location.href : '#'}
@@ -386,21 +394,24 @@ export default function AdminAuthModal({
             )}
 
             <p className="text-[11px] text-center text-slate-500 leading-relaxed pt-1">
-              يُسمح بالتعديل فقط لحساب المالك الموثق ({ADMIN_EMAIL})
+              يُسمح بالوصول والتعديل لحساب مالك المتجر الموثّق فقط
             </p>
           </div>
         ) : (
-          <form onSubmit={handleEmailSignIn} className="space-y-3.5">
+          <form onSubmit={handleEmailSignIn} autoComplete="off" className="space-y-3.5">
             <div className="space-y-1">
               <label className="block text-xs font-bold text-slate-700">البريد الإلكتروني</label>
               <div className="relative">
                 <Mail className="w-4 h-4 text-slate-400 absolute right-3.5 top-1/2 -translate-y-1/2" />
                 <input
                   type="email"
+                  name="owner-identity-field"
                   dir="ltr"
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
-                  placeholder="bkralqary1@gmail.com"
+                  autoComplete="off"
+                  spellCheck={false}
+                  aria-label="البريد الإلكتروني"
                   className="w-full pr-10 pl-3.5 py-2.5 rounded-xl bg-white/85 border border-slate-300/80 text-sm text-[#0b1220] focus:outline-none focus:ring-2 focus:ring-[#0071e3]"
                   required
                 />
@@ -413,10 +424,12 @@ export default function AdminAuthModal({
                 <Lock className="w-4 h-4 text-slate-400 absolute right-3.5 top-1/2 -translate-y-1/2" />
                 <input
                   type="password"
+                  name="owner-secret-field"
                   dir="ltr"
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
-                  placeholder="••••••••"
+                  autoComplete="new-password"
+                  aria-label="كلمة المرور"
                   className="w-full pr-10 pl-3.5 py-2.5 rounded-xl bg-white/85 border border-slate-300/80 text-sm text-[#0b1220] focus:outline-none focus:ring-2 focus:ring-[#0071e3]"
                   required
                 />
@@ -438,7 +451,7 @@ export default function AdminAuthModal({
               disabled={loading}
               className="w-full py-2 text-xs font-bold text-[#0071e3] hover:underline cursor-pointer disabled:opacity-60"
             >
-              إرسال رابط تعيين / تغيير كلمة المرور إلى بريدي
+              إرسال رابط تعيين / تغيير كلمة المرور
             </button>
 
             {needsVerificationUser && (
@@ -448,7 +461,7 @@ export default function AdminAuthModal({
                 disabled={loading}
                 className="w-full py-2.5 rounded-xl bg-amber-500 hover:bg-amber-600 text-slate-950 text-xs font-extrabold cursor-pointer disabled:opacity-60"
               >
-                إرسال رابط التوثيق إلى بريدي الآن
+                إرسال رابط التوثيق الآن
               </button>
             )}
           </form>
@@ -465,7 +478,7 @@ export default function AdminAuthModal({
             <p>{errorMsg}</p>
             {errorCode && (
               <p dir="ltr" className="text-[10px] font-mono text-rose-500">
-                Code: {errorCode}
+                {errorCode}
               </p>
             )}
           </div>

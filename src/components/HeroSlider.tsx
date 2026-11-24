@@ -18,6 +18,7 @@ import { DEFAULT_HERO_SLIDES } from '../utils/storeStorage';
 import { getYouTubeId, getYouTubeEmbedUrl } from '../utils/videoUtils';
 import { SiteConfig, DEFAULT_SITE_CONFIG } from '../services/firestoreService';
 import { type EditableSectionTarget } from './VisualSectionEditorModal';
+import { sanitizeSafeHttpUrl, sanitizeSafeMediaUrl } from '../utils/urlSecurity';
 
 interface HeroSliderProps {
   language: Language;
@@ -136,9 +137,11 @@ export default function HeroSlider({
               {/* Background Media Layer */}
               {slides.map((item, idx) => {
                 const isCurrent = idx === currentSlide;
+                const safeVideoUrl = sanitizeSafeHttpUrl(item.videoUrl);
+                const safeImageUrl = sanitizeSafeMediaUrl(item.imageUrl);
                 const ytId =
-                  item.mediaType === 'video' && item.videoUrl ? getYouTubeId(item.videoUrl) : null;
-                const isDirectVideo = item.mediaType === 'video' && item.videoUrl && !ytId;
+                  item.mediaType === 'video' && safeVideoUrl ? getYouTubeId(safeVideoUrl) : null;
+                const isDirectVideo = item.mediaType === 'video' && Boolean(safeVideoUrl) && !ytId;
                 const failed = imgFailed[item.id || String(idx)];
 
                 return (
@@ -163,14 +166,14 @@ export default function HeroSlider({
                       </div>
                     ) : item.mediaType === 'video' && isDirectVideo ? (
                       <video
-                        src={item.videoUrl}
+                        src={safeVideoUrl}
                         autoPlay={isCurrent}
                         loop
                         muted
                         playsInline
                         className="w-full h-full object-cover object-center"
                       />
-                    ) : failed || !item.imageUrl?.trim() ? (
+                    ) : failed || !safeImageUrl ? (
                       <div
                         className="w-full h-full flex items-center justify-center"
                         style={{
@@ -182,7 +185,7 @@ export default function HeroSlider({
                       </div>
                     ) : (
                       <img
-                        src={item.imageUrl}
+                        src={safeImageUrl}
                         alt={isAr ? item.titleAr : item.titleEn || item.titleAr}
                         className="w-full h-full object-cover object-center"
                         referrerPolicy="no-referrer"
