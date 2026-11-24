@@ -3,6 +3,8 @@ import {
   signInWithPopup,
   signInWithRedirect,
   signInWithEmailAndPassword,
+  sendPasswordResetEmail,
+  sendEmailVerification,
   signOut,
   type User,
 } from 'firebase/auth';
@@ -44,6 +46,8 @@ export default function AdminAuthModal({
   const [loading, setLoading] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [errorCode, setErrorCode] = useState<string | null>(null);
+  const [infoMsg, setInfoMsg] = useState<string | null>(null);
+  const [needsVerificationUser, setNeedsVerificationUser] = useState<User | null>(null);
 
   if (!isOpen) return null;
 
@@ -137,6 +141,8 @@ export default function AdminAuthModal({
     e.preventDefault();
     setErrorMsg(null);
     setErrorCode(null);
+    setInfoMsg(null);
+    setNeedsVerificationUser(null);
     if (!email.trim() || !password) {
       setErrorMsg('يرجى إدخال البريد الإلكتروني وكلمة المرور.');
       return;
@@ -147,8 +153,14 @@ export default function AdminAuthModal({
       if (isVerifiedAdminUser(result.user)) {
         setPassword('');
         onAuthenticated();
-      } else if (!result.user.emailVerified) {
-        setErrorMsg('يجب توثيق البريد الإلكتروني أولاً قبل تفعيل صلاحيات الإدارة.');
+      } else if (
+        result.user.email?.toLowerCase() === ADMIN_EMAIL.toLowerCase() &&
+        !result.user.emailVerified
+      ) {
+        setNeedsVerificationUser(result.user);
+        setErrorMsg(
+          'تم الدخول لكن البريد غير موثّق بعد. اضغط على زر "إرسال رابط التوثيق إلى بريدي" أدناه ثم افتح الرابط من Gmail.'
+        );
       } else {
         setErrorMsg('هذا البريد الإلكتروني غير مصرح له بإدارة المتجر.');
       }
@@ -157,7 +169,7 @@ export default function AdminAuthModal({
       setErrorCode(code || null);
       if (code === 'auth/operation-not-allowed') {
         setErrorMsg(
-          'تسجيل الدخول بالبريد وكلمة المرور غير مفعّل بعد في Firebase Console. يمكنك استخدام زر Google الآن فوراً.'
+          'تسجيل الدخول بالبريد وكلمة المرور غير مفعّل بعد في Firebase Console. فعّله من Authentication > Sign-in method.'
         );
       } else if (
         code === 'auth/invalid-credential' ||
@@ -170,6 +182,43 @@ export default function AdminAuthModal({
       } else {
         setErrorMsg(`تعذر تسجيل الدخول ${code ? `(${code})` : ''}. تأكد من الاتصال وحاول مجدداً.`);
       }
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleSendPasswordReset = async () => {
+    setErrorMsg(null);
+    setErrorCode(null);
+    setInfoMsg(null);
+    const targetEmail = email.trim() || ADMIN_EMAIL;
+    setLoading(true);
+    try {
+      await sendPasswordResetEmail(auth, targetEmail);
+      setInfoMsg(`تم إرسال رابط تعيين/تغيير كلمة المرور إلى ${targetEmail}. راجع بريدك (بما في ذلك الرسائل غير المرغوب فيها).`);
+    } catch (err: unknown) {
+      const code = (err as { code?: string })?.code || '';
+      setErrorCode(code || null);
+      setErrorMsg(
+        `تعذر إرسال رابط تغيير كلمة المرور ${code ? `(${code})` : ''}. تأكد من تفعيل Email/Password وإضافة النطاق في Firebase Console.`
+      );
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleSendVerification = async () => {
+    if (!needsVerificationUser) return;
+    setErrorMsg(null);
+    setInfoMsg(null);
+    setLoading(true);
+    try {
+      await sendEmailVerification(needsVerificationUser);
+      setInfoMsg('تم إرسال رابط التوثيق إلى بريدك في Gmail. افتح الرابط ثم أعد تسجيل الدخول.');
+    } catch (err: unknown) {
+      const code = (err as { code?: string })?.code || '';
+      setErrorCode(code || null);
+      setErrorMsg(`تعذر إرسال رابط التوثيق ${code ? `(${code})` : ''}.`);
     } finally {
       setLoading(false);
     }
@@ -382,7 +431,33 @@ export default function AdminAuthModal({
               {loading && <Loader2 className="w-4 h-4 animate-spin" />}
               <span>تفعيل وضع التحرير</span>
             </button>
+
+            <button
+              type="button"
+              onClick={handleSendPasswordReset}
+              disabled={loading}
+              className="w-full py-2 text-xs font-bold text-[#0071e3] hover:underline cursor-pointer disabled:opacity-60"
+            >
+              إرسال رابط تعيين / تغيير كلمة المرور إلى بريدي
+            </button>
+
+            {needsVerificationUser && (
+              <button
+                type="button"
+                onClick={handleSendVerification}
+                disabled={loading}
+                className="w-full py-2.5 rounded-xl bg-amber-500 hover:bg-amber-600 text-slate-950 text-xs font-extrabold cursor-pointer disabled:opacity-60"
+              >
+                إرسال رابط التوثيق إلى بريدي الآن
+              </button>
+            )}
           </form>
+        )}
+
+        {infoMsg && (
+          <div className="mt-4 p-3.5 rounded-2xl bg-emerald-50 border border-emerald-200 text-emerald-800 text-xs font-semibold leading-relaxed">
+            {infoMsg}
+          </div>
         )}
 
         {errorMsg && (
