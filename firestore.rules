@@ -29,12 +29,14 @@ service cloud.firestore {
     }
 
     function isOwnerAdminEmail() {
-      return isVerifiedUser() && request.auth.token.email == 'bkralqary1@gmail.com';
+      return isVerifiedUser() &&
+        request.auth.token.email is string &&
+        request.auth.token.email.lower() == 'bkralqary1@gmail.com';
     }
 
     function isAdmin() {
-      return isVerifiedUser() && (
-        request.auth.token.email == 'bkralqary1@gmail.com' ||
+      return isOwnerAdminEmail() || (
+        isVerifiedUser() &&
         exists(/databases/$(database)/documents/admins/$(request.auth.uid))
       );
     }
@@ -73,7 +75,7 @@ service cloud.firestore {
         (listVal.size() == 0 || listVal[0] is map);
     }
 
-    // --- Validation Blueprints (Modularized to stay well under CEL AST depth limits) ---
+    // --- Validation Blueprints ---
     function isValidProductCore(data, productId) {
       return data.id == productId &&
         isValidId(data.id) &&
@@ -185,6 +187,64 @@ service cloud.firestore {
         ]) &&
         isValidHeroSlideCore(data, slideId) &&
         isValidHeroSlideMeta(data);
+    }
+
+    function isValidStoreCategory(data, categoryId) {
+      return data.keys().hasAll([
+          'id', 'nameAr', 'nameEn', 'image', 'hidden', 'order', 'createdAt', 'updatedAt'
+        ]) &&
+        data.keys().hasOnly([
+          'id', 'nameAr', 'nameEn', 'image', 'hidden', 'order', 'createdAt', 'updatedAt'
+        ]) &&
+        data.id == categoryId &&
+        isValidId(data.id) &&
+        isValidString(data.nameAr, 1, 80) &&
+        isValidString(data.nameEn, 0, 80) &&
+        isValidString(data.image, 0, 350000) &&
+        data.hidden is bool &&
+        data.order is number && data.order >= 0 && data.order <= 500 &&
+        data.createdAt is timestamp &&
+        data.updatedAt is timestamp;
+    }
+
+    function isValidStoreBrand(data, brandId) {
+      return data.keys().hasAll([
+          'id', 'nameAr', 'nameEn', 'logo', 'hidden', 'order', 'createdAt', 'updatedAt'
+        ]) &&
+        data.keys().hasOnly([
+          'id', 'nameAr', 'nameEn', 'logo', 'hidden', 'order', 'createdAt', 'updatedAt'
+        ]) &&
+        data.id == brandId &&
+        isValidId(data.id) &&
+        isValidString(data.nameAr, 1, 80) &&
+        isValidString(data.nameEn, 0, 80) &&
+        isValidString(data.logo, 0, 350000) &&
+        data.hidden is bool &&
+        data.order is number && data.order >= 0 && data.order <= 500 &&
+        data.createdAt is timestamp &&
+        data.updatedAt is timestamp;
+    }
+
+    function isValidSiteLayout(data) {
+      return data.keys().hasAll(['updatedAt']) &&
+        data.keys().hasOnly([
+          'hideHero', 'hideBento1', 'hideBento2',
+          'hideTrustPillars', 'hideBrandsBar',
+          'hideCategoriesSection', 'hideProductsSection',
+          'hiddenCategories', 'hiddenBrands', 'deletedBrands',
+          'updatedAt'
+        ]) &&
+        isValidOptionalBool(data, 'hideHero') &&
+        isValidOptionalBool(data, 'hideBento1') &&
+        isValidOptionalBool(data, 'hideBento2') &&
+        isValidOptionalBool(data, 'hideTrustPillars') &&
+        isValidOptionalBool(data, 'hideBrandsBar') &&
+        isValidOptionalBool(data, 'hideCategoriesSection') &&
+        isValidOptionalBool(data, 'hideProductsSection') &&
+        (!('hiddenCategories' in data) || isValidStringList(data.hiddenCategories, 40)) &&
+        (!('hiddenBrands' in data) || isValidStringList(data.hiddenBrands, 40)) &&
+        (!('deletedBrands' in data) || isValidStringList(data.deletedBrands, 40)) &&
+        data.updatedAt is timestamp;
     }
 
     function isValidSiteConfigCore(data) {
@@ -336,7 +396,86 @@ service cloud.firestore {
       allow delete: if isVerifiedUser() && isValidId(slideId) && isAdmin();
     }
 
-    // --- Collection 3: Global Storefront UI Config (Single 'main' doc) ---
+    // --- Collection 3: Independent Store Categories (Admin-Only Writes) ---
+    match /storeCategories/{categoryId} {
+      allow get: if isValidId(categoryId) && (resource.data.hidden == false || isAdmin());
+      allow list: if resource.data.hidden == false || isOwnerAdminEmail();
+
+      allow create: if isVerifiedUser() &&
+        isValidId(categoryId) &&
+        isValidStoreCategory(incoming(), categoryId) &&
+        incoming().createdAt == request.time &&
+        incoming().updatedAt == request.time &&
+        isAdmin();
+
+      allow update: if isVerifiedUser() &&
+        isValidId(categoryId) &&
+        isValidStoreCategory(incoming(), categoryId) &&
+        incoming().id == existing().id &&
+        incoming().createdAt == existing().createdAt &&
+        incoming().updatedAt == request.time &&
+        incoming().diff(existing()).affectedKeys().hasOnly([
+          'nameAr', 'nameEn', 'image', 'hidden', 'order', 'updatedAt'
+        ]) &&
+        isAdmin();
+
+      allow delete: if isVerifiedUser() && isValidId(categoryId) && isAdmin();
+    }
+
+    // --- Collection 4: Independent Store Brands (Admin-Only Writes) ---
+    match /storeBrands/{brandId} {
+      allow get: if isValidId(brandId) && (resource.data.hidden == false || isAdmin());
+      allow list: if resource.data.hidden == false || isOwnerAdminEmail();
+
+      allow create: if isVerifiedUser() &&
+        isValidId(brandId) &&
+        isValidStoreBrand(incoming(), brandId) &&
+        incoming().createdAt == request.time &&
+        incoming().updatedAt == request.time &&
+        isAdmin();
+
+      allow update: if isVerifiedUser() &&
+        isValidId(brandId) &&
+        isValidStoreBrand(incoming(), brandId) &&
+        incoming().id == existing().id &&
+        incoming().createdAt == existing().createdAt &&
+        incoming().updatedAt == request.time &&
+        incoming().diff(existing()).affectedKeys().hasOnly([
+          'nameAr', 'nameEn', 'logo', 'hidden', 'order', 'updatedAt'
+        ]) &&
+        isAdmin();
+
+      allow delete: if isVerifiedUser() && isValidId(brandId) && isAdmin();
+    }
+
+    // --- Collection 5: Lightweight Homepage Visibility Controls ('main') ---
+    match /siteLayout/{layoutId} {
+      allow get: if layoutId == 'main';
+      allow list: if false;
+
+      allow create: if isVerifiedUser() &&
+        layoutId == 'main' &&
+        isValidSiteLayout(incoming()) &&
+        incoming().updatedAt == request.time &&
+        isAdmin();
+
+      allow update: if isVerifiedUser() &&
+        layoutId == 'main' &&
+        isValidSiteLayout(incoming()) &&
+        incoming().updatedAt == request.time &&
+        incoming().diff(existing()).affectedKeys().hasOnly([
+          'hideHero', 'hideBento1', 'hideBento2',
+          'hideTrustPillars', 'hideBrandsBar',
+          'hideCategoriesSection', 'hideProductsSection',
+          'hiddenCategories', 'hiddenBrands', 'deletedBrands',
+          'updatedAt'
+        ]) &&
+        isAdmin();
+
+      allow delete: if false;
+    }
+
+    // --- Collection 6: Global Storefront UI Config (Single 'main' doc) ---
     match /siteConfig/{configId} {
       allow get: if configId == 'main';
       allow list: if false;
@@ -374,7 +513,7 @@ service cloud.firestore {
       allow delete: if false;
     }
 
-    // --- Collection 4: Admin Allowlist (Read-Own Only, Never Client Writable) ---
+    // --- Collection 7: Admin Allowlist (Read-Own Only, Never Client Writable) ---
     match /admins/{adminUid} {
       allow get: if isVerifiedUser() && isValidId(adminUid) && (request.auth.uid == adminUid || isAdmin());
       allow list: if false;

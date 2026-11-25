@@ -9,6 +9,15 @@ export interface StoreCategoryItem {
   isCustom?: boolean;
 }
 
+export interface StoreBrandItem {
+  id: string;
+  nameAr: string;
+  nameEn: string;
+  logo: string;
+  hidden?: boolean;
+  isCustom?: boolean;
+}
+
 export interface Product {
   id: string;
   name: string;

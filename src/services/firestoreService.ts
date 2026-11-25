@@ -11,7 +11,7 @@ import {
   Timestamp,
 } from 'firebase/firestore';
 import { db, OperationType, handleFirestoreError } from '../firebase';
-import { Product, HeroSlideItem, StoreCategoryItem } from '../types';
+import { Product, HeroSlideItem, StoreCategoryItem, StoreBrandItem } from '../types';
 import {
   DEFAULT_HERO_SLIDES,
   DEFAULT_CATEGORY_IMAGES,
@@ -26,6 +26,32 @@ export interface CustomCategoryConfig {
   image: string;
   hidden: boolean;
 }
+
+export interface SiteLayoutConfig {
+  hideHero: boolean;
+  hideBento1: boolean;
+  hideBento2: boolean;
+  hideTrustPillars: boolean;
+  hideBrandsBar: boolean;
+  hideCategoriesSection: boolean;
+  hideProductsSection: boolean;
+  hiddenCategories: string[];
+  hiddenBrands: string[];
+  deletedBrands: string[];
+}
+
+export const DEFAULT_SITE_LAYOUT: SiteLayoutConfig = {
+  hideHero: false,
+  hideBento1: false,
+  hideBento2: false,
+  hideTrustPillars: false,
+  hideBrandsBar: false,
+  hideCategoriesSection: false,
+  hideProductsSection: false,
+  hiddenCategories: [],
+  hiddenBrands: [],
+  deletedBrands: [],
+};
 
 export interface SiteConfig {
   storeNameAr: string;
@@ -127,9 +153,40 @@ export const CATEGORY_META: Record<string, { nameAr: string; nameEn: string }> =
 
 export const BUILTIN_CATEGORY_IDS = ['phones', 'audio', 'cases', 'chargers', 'cables'] as const;
 
+export const DEFAULT_BUILTIN_BRANDS: StoreBrandItem[] = [
+  { id: 'brand-apple', nameAr: 'Apple', nameEn: 'Apple', logo: '', hidden: false, isCustom: false },
+  { id: 'brand-samsung', nameAr: 'SAMSUNG', nameEn: 'SAMSUNG', logo: '', hidden: false, isCustom: false },
+  { id: 'brand-anker', nameAr: 'ANKER', nameEn: 'ANKER', logo: '', hidden: false, isCustom: false },
+  { id: 'brand-sony', nameAr: 'SONY', nameEn: 'SONY', logo: '', hidden: false, isCustom: false },
+  { id: 'brand-belkin', nameAr: 'Belkin', nameEn: 'Belkin', logo: '', hidden: false, isCustom: false },
+  { id: 'brand-spigen', nameAr: 'Spigen', nameEn: 'Spigen', logo: '', hidden: false, isCustom: false },
+  { id: 'brand-baseus', nameAr: 'BASEUS', nameEn: 'BASEUS', logo: '', hidden: false, isCustom: false },
+];
+
+export const BUILTIN_BRAND_IDS = new Set(DEFAULT_BUILTIN_BRANDS.map((b) => b.id));
+
+export function mergeSiteConfigWithLayout(
+  config: SiteConfig,
+  layout: SiteLayoutConfig | null
+): SiteConfig {
+  if (!layout) return config;
+  return {
+    ...config,
+    hideHero: layout.hideHero,
+    hideBento1: layout.hideBento1,
+    hideBento2: layout.hideBento2,
+    hideTrustPillars: layout.hideTrustPillars,
+    hideBrandsBar: layout.hideBrandsBar,
+    hideCategoriesSection: layout.hideCategoriesSection,
+    hideProductsSection: layout.hideProductsSection,
+    hiddenCategories: layout.hiddenCategories,
+  };
+}
+
 export function getStoreCategories(
   siteConfig: SiteConfig,
-  includeHidden = false
+  includeHidden = false,
+  cloudCategories: StoreCategoryItem[] = []
 ): StoreCategoryItem[] {
   const hiddenSet = new Set(siteConfig.hiddenCategories || []);
 
@@ -176,19 +233,101 @@ export function getStoreCategories(
     },
   ];
 
-  const customs: StoreCategoryItem[] = (siteConfig.customCategories || [])
+  // Merge legacy siteConfig.customCategories + independent /storeCategories docs (cloud wins)
+  const customMap = new Map<string, StoreCategoryItem>();
+  (siteConfig.customCategories || [])
     .filter((c) => c && c.id && c.nameAr)
-    .map((c) => ({
-      id: c.id,
-      nameAr: c.nameAr,
-      nameEn: c.nameEn || c.nameAr,
-      image: c.image || '',
-      hidden: Boolean(c.hidden),
+    .forEach((c) => {
+      customMap.set(c.id, {
+        id: c.id,
+        nameAr: c.nameAr,
+        nameEn: c.nameEn || c.nameAr,
+        image: c.image || '',
+        hidden: Boolean(c.hidden),
+        isCustom: true,
+      });
+    });
+
+  (cloudCategories || [])
+    .filter((c) => c && c.id && c.nameAr)
+    .forEach((c) => {
+      customMap.set(c.id, {
+        id: c.id,
+        nameAr: c.nameAr,
+        nameEn: c.nameEn || c.nameAr,
+        image: c.image || '',
+        hidden: Boolean(c.hidden),
+        isCustom: true,
+      });
+    });
+
+  const all = [...builtIns, ...Array.from(customMap.values())];
+  return includeHidden ? all : all.filter((c) => !c.hidden);
+}
+
+export function getStoreBrands(
+  cloudBrands: StoreBrandItem[] = [],
+  layout: SiteLayoutConfig = DEFAULT_SITE_LAYOUT,
+  includeHidden = false
+): StoreBrandItem[] {
+  const hiddenSet = new Set(layout.hiddenBrands || []);
+  const deletedSet = new Set(layout.deletedBrands || []);
+  const cloudMap = new Map<string, StoreBrandItem>();
+  cloudBrands.forEach((b) => {
+    if (b && b.id && b.nameAr) {
+      cloudMap.set(b.id, b);
+    }
+  });
+
+  const builtIns: StoreBrandItem[] = DEFAULT_BUILTIN_BRANDS.filter(
+    (b) => !deletedSet.has(b.id)
+  ).map((b) => {
+    const override = cloudMap.get(b.id);
+    if (override) {
+      return {
+        ...override,
+        hidden: Boolean(override.hidden || hiddenSet.has(b.id)),
+        isCustom: false,
+      };
+    }
+    return {
+      ...b,
+      hidden: hiddenSet.has(b.id),
+      isCustom: false,
+    };
+  });
+
+  const customs: StoreBrandItem[] = cloudBrands
+    .filter((b) => b && b.id && b.nameAr && !BUILTIN_BRAND_IDS.has(b.id))
+    .map((b) => ({
+      id: b.id,
+      nameAr: b.nameAr,
+      nameEn: b.nameEn || b.nameAr,
+      logo: b.logo || '',
+      hidden: Boolean(b.hidden),
       isCustom: true,
     }));
 
   const all = [...builtIns, ...customs];
-  return includeHidden ? all : all.filter((c) => !c.hidden);
+  return includeHidden ? all : all.filter((b) => !b.hidden);
+}
+
+export function formatCloudError(error: unknown, fallback = 'تعذر الحفظ في السحابة.'): string {
+  const raw = error instanceof Error ? error.message : String(error || '');
+  const lower = raw.toLowerCase();
+  if (lower.includes('permission-denied') || lower.includes('missing or insufficient permissions')) {
+    return 'تم رفض الصلاحية من السحابة — يرجى تسجيل الخروج من وضع الإدارة ثم إعادة الدخول بحساب المالك الموثّق (permission-denied).';
+  }
+  if (lower.includes('unauthenticated')) {
+    return 'انتهت جلسة الدخول — يرجى إعادة تسجيل الدخول بحساب المالك (unauthenticated).';
+  }
+  if (lower.includes('unavailable') || lower.includes('network') || lower.includes('offline')) {
+    return 'تعذر الوصول للخادم السحابي — تحقق من اتصال الإنترنت وحاول مجدداً (unavailable).';
+  }
+  if (lower.includes('invalid-argument') || lower.includes('exceeds the maximum')) {
+    return 'حجم البيانات أو الصورة أكبر من الحد المسموح — جرّب صورة أصغر حجماً (invalid-argument).';
+  }
+  return fallback;
 }
 
 const clip = (val: unknown, maxLen: number, fallback = ''): string => {
@@ -207,6 +346,8 @@ export function normalizeSafeId(rawId: string, prefix: string): string {
 // Keep track of Firestore createdAt timestamps so updates strictly satisfy immutable createdAt rule
 const productCreatedAtCache = new Map<string, Timestamp>();
 const slideCreatedAtCache = new Map<string, Timestamp>();
+const categoryCreatedAtCache = new Map<string, Timestamp>();
+const brandCreatedAtCache = new Map<string, Timestamp>();
 
 function sanitizeSpecs(
   specs: Product['specs'] | undefined
@@ -241,8 +382,6 @@ export function sanitizeProductForFirestore(
   const primaryImage = sanitizeSafeMediaUrl(
     clip(product.image || (Array.isArray(product.images) ? product.images[0] : '') || '', 450000)
   );
-  // Store ONLY additional gallery images in `images[]` so the HD primary image is never duplicated
-  // inside the same 1MB Firestore document (reconstructed seamlessly on read).
   const extraImages = (Array.isArray(product.images) ? product.images : [])
     .map((url) => sanitizeSafeMediaUrl(clip(url, 450000)))
     .filter((url, idx, arr) => url.length > 0 && url !== primaryImage && arr.indexOf(url) === idx)
@@ -274,7 +413,6 @@ export function sanitizeProductForFirestore(
       ? Math.min(100, Math.max(0, Math.round(Number(product.discountPercentage))))
       : undefined;
 
-  // Respect empty/zero optional values — NEVER inject fake defaults!
   const rating = Math.min(5, Math.max(0, Number(product.rating) || 0));
   const reviewsCount = Math.max(0, Math.round(Number(product.reviewsCount) || 0));
   const warrantyYears = Math.min(10, Math.max(0, Number(product.warrantyYears) || 0));
@@ -364,6 +502,64 @@ export function sanitizeHeroSlideForFirestore(
   return payload;
 }
 
+export function sanitizeStoreCategoryForFirestore(
+  cat: StoreCategoryItem,
+  order: number,
+  existingCreatedAt?: Timestamp | null
+): Record<string, unknown> {
+  const safeId = normalizeSafeId(cat.id || '', 'cat');
+  return {
+    id: safeId,
+    nameAr: clip(cat.nameAr, 80, 'قسم جديد'),
+    nameEn: clip(cat.nameEn || cat.nameAr, 80),
+    image: sanitizeSafeMediaUrl(clip(cat.image || '', 350000)),
+    hidden: Boolean(cat.hidden),
+    order: Math.min(500, Math.max(0, Math.round(order))),
+    createdAt: existingCreatedAt || serverTimestamp(),
+    updatedAt: serverTimestamp(),
+  };
+}
+
+export function sanitizeStoreBrandForFirestore(
+  brand: StoreBrandItem,
+  order: number,
+  existingCreatedAt?: Timestamp | null
+): Record<string, unknown> {
+  const safeId = normalizeSafeId(brand.id || '', 'brand');
+  return {
+    id: safeId,
+    nameAr: clip(brand.nameAr, 80, 'علامة تجارية'),
+    nameEn: clip(brand.nameEn || brand.nameAr, 80),
+    logo: sanitizeSafeMediaUrl(clip(brand.logo || '', 350000)),
+    hidden: Boolean(brand.hidden),
+    order: Math.min(500, Math.max(0, Math.round(order))),
+    createdAt: existingCreatedAt || serverTimestamp(),
+    updatedAt: serverTimestamp(),
+  };
+}
+
+export function sanitizeSiteLayoutForFirestore(layout: SiteLayoutConfig): Record<string, unknown> {
+  const cleanList = (arr: unknown): string[] =>
+    (Array.isArray(arr) ? arr : [])
+      .map((s) => clip(s, 80))
+      .filter((s, idx, a) => s.length > 0 && a.indexOf(s) === idx)
+      .slice(0, 40);
+
+  return {
+    hideHero: Boolean(layout.hideHero),
+    hideBento1: Boolean(layout.hideBento1),
+    hideBento2: Boolean(layout.hideBento2),
+    hideTrustPillars: Boolean(layout.hideTrustPillars),
+    hideBrandsBar: Boolean(layout.hideBrandsBar),
+    hideCategoriesSection: Boolean(layout.hideCategoriesSection),
+    hideProductsSection: Boolean(layout.hideProductsSection),
+    hiddenCategories: cleanList(layout.hiddenCategories),
+    hiddenBrands: cleanList(layout.hiddenBrands),
+    deletedBrands: cleanList(layout.deletedBrands),
+    updatedAt: serverTimestamp(),
+  };
+}
+
 export function sanitizeSiteConfigForFirestore(config: SiteConfig): Record<string, unknown> {
   const cleanHiddenCats = (Array.isArray(config.hiddenCategories) ? config.hiddenCategories : [])
     .map((id) => clip(id, 80))
@@ -403,11 +599,11 @@ export function sanitizeSiteConfigForFirestore(config: SiteConfig): Record<strin
     bento2BadgeAr: clip(config.bento2BadgeAr, 120),
     bento2TitleAr: clip(config.bento2TitleAr, 160),
     bento2DescAr: clip(config.bento2DescAr, 300),
-    catPhonesImg: sanitizeSafeMediaUrl(clip(config.catPhonesImg, 150000)),
-    catAudioImg: sanitizeSafeMediaUrl(clip(config.catAudioImg, 150000)),
-    catCasesImg: sanitizeSafeMediaUrl(clip(config.catCasesImg, 150000)),
-    catChargersImg: sanitizeSafeMediaUrl(clip(config.catChargersImg, 150000)),
-    catCablesImg: sanitizeSafeMediaUrl(clip(config.catCablesImg, 150000)),
+    catPhonesImg: sanitizeSafeMediaUrl(clip(config.catPhonesImg, 250000)),
+    catAudioImg: sanitizeSafeMediaUrl(clip(config.catAudioImg, 250000)),
+    catCasesImg: sanitizeSafeMediaUrl(clip(config.catCasesImg, 250000)),
+    catChargersImg: sanitizeSafeMediaUrl(clip(config.catChargersImg, 250000)),
+    catCablesImg: sanitizeSafeMediaUrl(clip(config.catCablesImg, 250000)),
     catPhonesNameAr: clip(config.catPhonesNameAr || DEFAULT_SITE_CONFIG.catPhonesNameAr, 80),
     catAudioNameAr: clip(config.catAudioNameAr || DEFAULT_SITE_CONFIG.catAudioNameAr, 80),
     catCasesNameAr: clip(config.catCasesNameAr || DEFAULT_SITE_CONFIG.catCasesNameAr, 80),
@@ -466,7 +662,6 @@ export function subscribeToProducts(
         const rawExtraImages = (Array.isArray(data.images) ? data.images : [])
           .map((u: unknown) => sanitizeSafeMediaUrl(u))
           .filter(Boolean);
-        // Merge primary image + extra gallery images cleanly with deduplication
         const mergedImages = [safeImg, ...rawExtraImages].filter(
           (u, idx, arr) => u.length > 0 && arr.indexOf(u) === idx
         );
@@ -526,6 +721,125 @@ export function subscribeToHeroSlides(
     (error) => {
       try {
         handleFirestoreError(error, OperationType.LIST, 'heroSlides');
+      } catch {
+        // Logged in structured format
+      }
+    }
+  );
+}
+
+export function subscribeToStoreCategories(
+  onData: (categories: (StoreCategoryItem & { order?: number })[]) => void,
+  includeHidden = false
+) {
+  const colRef = collection(db, 'storeCategories');
+  const q = includeHidden ? colRef : query(colRef, where('hidden', '==', false));
+  return onSnapshot(
+    q,
+    (snapshot) => {
+      if (snapshot.empty) {
+        onData([]);
+        return;
+      }
+      const list = snapshot.docs
+        .map((docSnap) => {
+          const data = docSnap.data();
+          if (data.createdAt instanceof Timestamp) {
+            categoryCreatedAtCache.set(docSnap.id, data.createdAt);
+          }
+          return {
+            id: docSnap.id,
+            nameAr: String(data.nameAr || ''),
+            nameEn: String(data.nameEn || data.nameAr || ''),
+            image: sanitizeSafeMediaUrl(data.image),
+            hidden: Boolean(data.hidden),
+            isCustom: true,
+            order: typeof data.order === 'number' ? data.order : 0,
+          };
+        })
+        .sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
+      onData(list);
+    },
+    (error) => {
+      try {
+        handleFirestoreError(error, OperationType.LIST, 'storeCategories');
+      } catch {
+        // Logged in structured format
+      }
+    }
+  );
+}
+
+export function subscribeToStoreBrands(
+  onData: (brands: (StoreBrandItem & { order?: number })[]) => void,
+  includeHidden = false
+) {
+  const colRef = collection(db, 'storeBrands');
+  const q = includeHidden ? colRef : query(colRef, where('hidden', '==', false));
+  return onSnapshot(
+    q,
+    (snapshot) => {
+      if (snapshot.empty) {
+        onData([]);
+        return;
+      }
+      const list = snapshot.docs
+        .map((docSnap) => {
+          const data = docSnap.data();
+          if (data.createdAt instanceof Timestamp) {
+            brandCreatedAtCache.set(docSnap.id, data.createdAt);
+          }
+          return {
+            id: docSnap.id,
+            nameAr: String(data.nameAr || ''),
+            nameEn: String(data.nameEn || data.nameAr || ''),
+            logo: sanitizeSafeMediaUrl(data.logo),
+            hidden: Boolean(data.hidden),
+            isCustom: !BUILTIN_BRAND_IDS.has(docSnap.id),
+            order: typeof data.order === 'number' ? data.order : 0,
+          };
+        })
+        .sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
+      onData(list);
+    },
+    (error) => {
+      try {
+        handleFirestoreError(error, OperationType.LIST, 'storeBrands');
+      } catch {
+        // Logged in structured format
+      }
+    }
+  );
+}
+
+export function subscribeToSiteLayout(
+  onData: (layout: SiteLayoutConfig | null) => void
+) {
+  const docRef = doc(db, 'siteLayout', 'main');
+  return onSnapshot(
+    docRef,
+    (snap) => {
+      if (!snap.exists()) {
+        onData(null);
+        return;
+      }
+      const raw = snap.data() as Partial<SiteLayoutConfig>;
+      onData({
+        hideHero: Boolean(raw.hideHero),
+        hideBento1: Boolean(raw.hideBento1),
+        hideBento2: Boolean(raw.hideBento2),
+        hideTrustPillars: Boolean(raw.hideTrustPillars),
+        hideBrandsBar: Boolean(raw.hideBrandsBar),
+        hideCategoriesSection: Boolean(raw.hideCategoriesSection),
+        hideProductsSection: Boolean(raw.hideProductsSection),
+        hiddenCategories: Array.isArray(raw.hiddenCategories) ? raw.hiddenCategories : [],
+        hiddenBrands: Array.isArray(raw.hiddenBrands) ? raw.hiddenBrands : [],
+        deletedBrands: Array.isArray(raw.deletedBrands) ? raw.deletedBrands : [],
+      });
+    },
+    (error) => {
+      try {
+        handleFirestoreError(error, OperationType.GET, 'siteLayout/main');
       } catch {
         // Logged in structured format
       }
@@ -638,6 +952,90 @@ export async function deleteHeroSlideFromCloud(slideId: string): Promise<void> {
     slideCreatedAtCache.delete(slideId);
   } catch (error) {
     handleFirestoreError(error, OperationType.DELETE, `heroSlides/${slideId}`);
+  }
+}
+
+export async function saveStoreCategoryToCloud(
+  cat: StoreCategoryItem,
+  order: number
+): Promise<string> {
+  const safeId = normalizeSafeId(cat.id || `cat-${Date.now().toString(36)}`, 'cat');
+  const docRef = doc(db, 'storeCategories', safeId);
+  try {
+    let existingCreatedAt = categoryCreatedAtCache.get(safeId) || null;
+    if (!existingCreatedAt) {
+      const existingSnap = await getDoc(docRef);
+      if (existingSnap.exists() && existingSnap.data().createdAt instanceof Timestamp) {
+        existingCreatedAt = existingSnap.data().createdAt as Timestamp;
+        categoryCreatedAtCache.set(safeId, existingCreatedAt);
+      }
+    }
+    const payload = sanitizeStoreCategoryForFirestore(
+      { ...cat, id: safeId },
+      order,
+      existingCreatedAt
+    );
+    await setDoc(docRef, payload);
+    return safeId;
+  } catch (error) {
+    handleFirestoreError(error, OperationType.WRITE, `storeCategories/${safeId}`);
+  }
+}
+
+export async function deleteStoreCategoryFromCloud(categoryId: string): Promise<void> {
+  const docRef = doc(db, 'storeCategories', categoryId);
+  try {
+    await deleteDoc(docRef);
+    categoryCreatedAtCache.delete(categoryId);
+  } catch (error) {
+    handleFirestoreError(error, OperationType.DELETE, `storeCategories/${categoryId}`);
+  }
+}
+
+export async function saveStoreBrandToCloud(
+  brand: StoreBrandItem,
+  order: number
+): Promise<string> {
+  const safeId = normalizeSafeId(brand.id || `brand-${Date.now().toString(36)}`, 'brand');
+  const docRef = doc(db, 'storeBrands', safeId);
+  try {
+    let existingCreatedAt = brandCreatedAtCache.get(safeId) || null;
+    if (!existingCreatedAt) {
+      const existingSnap = await getDoc(docRef);
+      if (existingSnap.exists() && existingSnap.data().createdAt instanceof Timestamp) {
+        existingCreatedAt = existingSnap.data().createdAt as Timestamp;
+        brandCreatedAtCache.set(safeId, existingCreatedAt);
+      }
+    }
+    const payload = sanitizeStoreBrandForFirestore(
+      { ...brand, id: safeId },
+      order,
+      existingCreatedAt
+    );
+    await setDoc(docRef, payload);
+    return safeId;
+  } catch (error) {
+    handleFirestoreError(error, OperationType.WRITE, `storeBrands/${safeId}`);
+  }
+}
+
+export async function deleteStoreBrandFromCloud(brandId: string): Promise<void> {
+  const docRef = doc(db, 'storeBrands', brandId);
+  try {
+    await deleteDoc(docRef);
+    brandCreatedAtCache.delete(brandId);
+  } catch (error) {
+    handleFirestoreError(error, OperationType.DELETE, `storeBrands/${brandId}`);
+  }
+}
+
+export async function saveSiteLayoutToCloud(layout: SiteLayoutConfig): Promise<void> {
+  const docRef = doc(db, 'siteLayout', 'main');
+  try {
+    const payload = sanitizeSiteLayoutForFirestore(layout);
+    await setDoc(docRef, payload);
+  } catch (error) {
+    handleFirestoreError(error, OperationType.WRITE, 'siteLayout/main');
   }
 }
 

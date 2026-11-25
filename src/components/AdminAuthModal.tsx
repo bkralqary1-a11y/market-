@@ -149,6 +149,12 @@ export default function AdminAuthModal({
     setLoading(true);
     try {
       const result = await signInWithEmailAndPassword(auth, trimmedEmail, password);
+      try {
+        await result.user.reload();
+        await result.user.getIdToken(true);
+      } catch {
+        // ignore transient refresh failure
+      }
       if (isVerifiedAdminUser(result.user)) {
         setEmail('');
         setPassword('');

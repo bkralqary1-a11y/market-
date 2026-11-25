@@ -247,11 +247,11 @@ export default function ProductDetailView({
             <button
               type="button"
               onClick={handleShareProduct}
-              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-white/75 hover:bg-white border border-white/90 text-slate-700 hover:text-[#0071e3] text-[11px] font-extrabold transition-all cursor-pointer"
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-white/85 hover:bg-white border border-white/90 text-slate-700 hover:text-[#0071e3] text-[11px] font-extrabold transition-all cursor-pointer"
               title={isAr ? 'مشاركة رابط المنتج' : 'Share product link'}
             >
               <Share2 className="w-3.5 h-3.5" />
-              <span className="hidden sm:inline">{isAr ? 'مشاركة' : 'Share'}</span>
+              <span>{isAr ? 'مشاركة' : 'Share'}</span>
             </button>
           </div>
         </div>
@@ -611,6 +611,42 @@ export default function ProductDetailView({
                   )}
                 </div>
 
+                {/* Clear Copy Link & Share Bar (Always Visible on Mobile & Desktop) */}
+                <div className="grid grid-cols-2 gap-2.5 pt-1">
+                  <button
+                    type="button"
+                    onClick={handleCopyLink}
+                    className={`w-full py-2.5 px-3 rounded-2xl border text-xs font-extrabold flex items-center justify-center gap-2 transition-all cursor-pointer ${
+                      linkCopied
+                        ? 'bg-emerald-50 border-emerald-300 text-emerald-700'
+                        : 'bg-white/80 border-white/90 text-slate-800 hover:text-[#0071e3] hover:bg-white'
+                    }`}
+                  >
+                    {linkCopied ? (
+                      <Check className="w-4 h-4 text-emerald-600 shrink-0" />
+                    ) : (
+                      <Link2 className="w-4 h-4 text-[#0071e3] shrink-0" />
+                    )}
+                    <span>
+                      {linkCopied
+                        ? isAr
+                          ? 'تم نسخ الرابط ✓'
+                          : 'Link Copied ✓'
+                        : isAr
+                          ? 'نسخ رابط المنتج'
+                          : 'Copy Link'}
+                    </span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handleShareProduct}
+                    className="w-full py-2.5 px-3 rounded-2xl bg-white/80 hover:bg-white border border-white/90 text-slate-800 hover:text-[#0071e3] text-xs font-extrabold flex items-center justify-center gap-2 transition-all cursor-pointer"
+                  >
+                    <Share2 className="w-4 h-4 text-[#0071e3] shrink-0" />
+                    <span>{isAr ? 'مشاركة المنتج' : 'Share Product'}</span>
+                  </button>
+                </div>
+
                 {addedAlert && (
                   <div className="bg-emerald-50/90 border border-emerald-200 text-emerald-800 p-3 rounded-2xl text-xs font-bold flex items-center gap-2">
                     <Check className="w-4 h-4 text-emerald-600" />
@@ -795,8 +831,8 @@ export default function ProductDetailView({
         )}
       </div>
 
-      {/* Compact Liquid Glass Mobile Bottom Bar */}
-      <div className="lg:hidden fixed bottom-0 inset-x-0 z-40 liquid-glass-strong p-2.5 border-t border-white/80 flex items-center gap-2">
+      {/* Compact Liquid Glass Mobile Bottom Bar (with 1-tap Copy/Share!) */}
+      <div className="lg:hidden fixed bottom-0 inset-x-0 z-40 liquid-glass-strong p-2.5 border-t border-white/80 flex items-center gap-1.5">
         <div className="flex-1 min-w-0">
           <div className="text-[10px] text-slate-600 truncate font-semibold">
             {isAr ? product.nameAr : product.name || product.nameAr}
@@ -806,9 +842,31 @@ export default function ProductDetailView({
           </div>
         </div>
         <button
+          type="button"
+          onClick={handleCopyLink}
+          className={`p-2.5 rounded-xl border flex items-center justify-center shrink-0 cursor-pointer transition-colors ${
+            linkCopied
+              ? 'bg-emerald-50 border-emerald-300 text-emerald-700'
+              : 'bg-white/85 border-white text-slate-700'
+          }`}
+          title={isAr ? 'نسخ رابط المنتج' : 'Copy link'}
+          aria-label={isAr ? 'نسخ رابط المنتج' : 'Copy link'}
+        >
+          {linkCopied ? <Check className="w-4 h-4" /> : <Link2 className="w-4 h-4" />}
+        </button>
+        <button
+          type="button"
+          onClick={handleShareProduct}
+          className="p-2.5 rounded-xl bg-white/85 border border-white text-slate-700 flex items-center justify-center shrink-0 cursor-pointer"
+          title={isAr ? 'مشاركة المنتج' : 'Share'}
+          aria-label={isAr ? 'مشاركة المنتج' : 'Share'}
+        >
+          <Share2 className="w-4 h-4" />
+        </button>
+        <button
           onClick={handleAdd}
           id="mobile-sticky-add-to-cart-btn"
-          className="liquid-btn-primary font-extrabold py-2.5 px-3.5 rounded-xl flex items-center gap-1.5 text-xs shrink-0 cursor-pointer"
+          className="liquid-btn-primary font-extrabold py-2.5 px-3 rounded-xl flex items-center gap-1 text-xs shrink-0 cursor-pointer"
         >
           <ShoppingBag className="w-3.5 h-3.5" />
           <span>{isAr ? 'للسلة' : 'Add'}</span>
@@ -816,10 +874,10 @@ export default function ProductDetailView({
         <button
           onClick={handleQuickOrder}
           id="mobile-sticky-quick-order-btn"
-          className="liquid-btn-emerald font-extrabold py-2.5 px-3.5 rounded-xl flex items-center gap-1.5 text-xs shrink-0 cursor-pointer"
+          className="liquid-btn-emerald font-extrabold py-2.5 px-3 rounded-xl flex items-center gap-1 text-xs shrink-0 cursor-pointer"
         >
           <Zap className="w-3.5 h-3.5" />
-          <span>{isAr ? 'طلب سريع' : 'Quick Order'}</span>
+          <span>{isAr ? 'طلب' : 'Order'}</span>
         </button>
       </div>
     </div>

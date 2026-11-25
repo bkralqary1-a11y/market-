@@ -13,7 +13,7 @@ import {
   EyeOff,
   LayoutGrid,
 } from 'lucide-react';
-import { CategoryId, Language, Product } from '../types';
+import { CategoryId, Language, Product, StoreCategoryItem } from '../types';
 import { soundFX } from '../utils/audioEffects';
 import {
   SiteConfig,
@@ -27,6 +27,7 @@ interface CategoriesSectionProps {
   onSelectCategory: (catId: CategoryId) => void;
   selectedCategory?: CategoryId;
   siteConfig?: SiteConfig;
+  categories?: StoreCategoryItem[];
   products?: Product[];
   isAdminMode?: boolean;
   onAdminEditSection?: (target: EditableSectionTarget) => void;
@@ -39,6 +40,7 @@ export default function CategoriesSection({
   onSelectCategory,
   selectedCategory,
   siteConfig = DEFAULT_SITE_CONFIG,
+  categories: providedCategories,
   products = [],
   isAdminMode = false,
   onAdminEditSection,
@@ -79,7 +81,7 @@ export default function CategoriesSection({
     );
   }
 
-  const categories = getStoreCategories(siteConfig, isAdminMode);
+  const categories = providedCategories ?? getStoreCategories(siteConfig, isAdminMode);
 
   const categoryIcons: Record<string, ReactNode> = {
     phones: <Smartphone className="w-5 h-5" />,
@@ -169,6 +171,7 @@ export default function CategoriesSection({
                           onAdminEditSection({
                             type: 'editCustomCategory',
                             categoryId: cat.id,
+                            category: cat,
                           });
                         } else {
                           onAdminEditSection({

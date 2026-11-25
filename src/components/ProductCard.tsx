@@ -13,12 +13,17 @@ import {
   Copy,
   Images,
   Link2,
+  Share2,
 } from 'lucide-react';
 import { Product, Language, Currency } from '../types';
 import { formatPrice } from '../data/mockData';
 import { triggerFlyToCart } from './FlyingCartAnimation';
 import { soundFX } from '../utils/audioEffects';
-import { getProductShareUrl, copyTextToClipboard } from '../utils/productLinks';
+import {
+  getProductShareUrl,
+  copyTextToClipboard,
+  shareOrCopyProductLink,
+} from '../utils/productLinks';
 
 interface ProductCardProps {
   key?: string;
@@ -127,6 +132,20 @@ export default function ProductCard({
     }
   };
 
+  const handleShareProductLink = async (e: MouseEvent) => {
+    e.stopPropagation();
+    soundFX.playClick();
+    const res = await shareOrCopyProductLink({
+      id: product.id,
+      nameAr: product.nameAr,
+      name: product.name,
+    });
+    if (res === 'copied') {
+      setCopiedLink(true);
+      setTimeout(() => setCopiedLink(false), 2000);
+    }
+  };
+
   return (
     <article
       className={`relative h-full w-full min-w-0 ${addedAnim ? 'animate-pulse-forward z-20' : ''}`}
@@ -146,20 +165,20 @@ export default function ProductCard({
           product.hidden ? 'opacity-65' : ''
         }`}
       >
-        {/* Admin Mode Floating Edit & Clone Triggers */}
+        {/* Admin Mode Clean Full-Width Controls Bar (Zero overlap on mobile!) */}
         {isAdminMode && onAdminEdit && (
-          <div className="absolute top-3.5 right-3.5 rtl:right-3.5 rtl:left-auto ltr:left-3.5 ltr:right-auto z-20 flex items-center gap-1.5">
+          <div className="flex items-center gap-1 mb-2 z-20">
             <button
               type="button"
               onClick={(e) => {
                 e.stopPropagation();
                 onAdminEdit(product);
               }}
-              className="px-2.5 py-1.5 rounded-xl bg-[#0071e3] hover:bg-[#005bbf] text-white text-[11px] font-extrabold shadow-lg flex items-center gap-1 cursor-pointer"
+              className="flex-1 py-1.5 px-1.5 rounded-xl bg-[#0071e3] hover:bg-[#005bbf] text-white text-[10px] sm:text-[11px] font-extrabold shadow-xs flex items-center justify-center gap-1 cursor-pointer min-w-0"
               title="تعديل هذا المنتج"
             >
-              <Pencil className="w-3.5 h-3.5" />
-              <span>تعديل</span>
+              <Pencil className="w-3 h-3 shrink-0" />
+              <span className="truncate">تعديل</span>
             </button>
             {onAdminClone && (
               <button
@@ -168,23 +187,23 @@ export default function ProductCard({
                   e.stopPropagation();
                   onAdminClone(product);
                 }}
-                className="px-2 py-1.5 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white text-[11px] font-extrabold shadow-lg flex items-center gap-1 cursor-pointer"
+                className="flex-1 py-1.5 px-1.5 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white text-[10px] sm:text-[11px] font-extrabold shadow-xs flex items-center justify-center gap-1 cursor-pointer min-w-0"
                 title="استنساخ المنتج بدون الصور"
               >
-                <Copy className="w-3.5 h-3.5" />
-                <span className="hidden sm:inline">استنساخ</span>
+                <Copy className="w-3 h-3 shrink-0" />
+                <span className="truncate">نسخ</span>
               </button>
             )}
             <button
               type="button"
               onClick={handleCopyProductLink}
-              className={`px-2 py-1.5 rounded-xl text-white text-[11px] font-extrabold shadow-lg flex items-center gap-1 cursor-pointer transition-colors ${
-                copiedLink ? 'bg-emerald-600' : 'bg-slate-900/85 hover:bg-slate-900'
+              className={`flex-1 py-1.5 px-1.5 rounded-xl text-white text-[10px] sm:text-[11px] font-extrabold shadow-xs flex items-center justify-center gap-1 cursor-pointer transition-colors min-w-0 ${
+                copiedLink ? 'bg-emerald-600' : 'bg-slate-900 hover:bg-slate-800'
               }`}
               title="نسخ رابط هذا المنتج المباشر"
             >
-              {copiedLink ? <Check className="w-3.5 h-3.5" /> : <Link2 className="w-3.5 h-3.5" />}
-              <span className="hidden sm:inline">{copiedLink ? 'تم النسخ' : 'رابط'}</span>
+              {copiedLink ? <Check className="w-3 h-3 shrink-0" /> : <Link2 className="w-3 h-3 shrink-0" />}
+              <span className="truncate">{copiedLink ? 'تم ✓' : 'رابط'}</span>
             </button>
           </div>
         )}
@@ -386,6 +405,34 @@ export default function ProductCard({
               >
                 <MessageCircle className="w-3.5 h-3.5 shrink-0" />
                 <span className="truncate">{isAr ? 'طلب سريع' : 'Order'}</span>
+              </button>
+            </div>
+
+            {/* Always-Visible Mobile & Desktop Copy Link + Share Row */}
+            <div className="grid grid-cols-2 gap-1.5 pt-1">
+              <button
+                type="button"
+                onClick={handleCopyProductLink}
+                className={`py-1.5 px-2 rounded-xl text-[10px] sm:text-[11px] font-extrabold flex items-center justify-center gap-1 transition-all cursor-pointer border min-w-0 ${
+                  copiedLink
+                    ? 'bg-emerald-50 border-emerald-300 text-emerald-700'
+                    : 'bg-white/75 hover:bg-white border-white/90 text-slate-700 hover:text-[#0071e3]'
+                }`}
+                title={isAr ? 'نسخ رابط المنتج' : 'Copy Link'}
+              >
+                {copiedLink ? <Check className="w-3 h-3 shrink-0" /> : <Link2 className="w-3 h-3 shrink-0" />}
+                <span className="truncate">
+                  {copiedLink ? (isAr ? 'تم النسخ ✓' : 'Copied') : isAr ? 'نسخ الرابط' : 'Copy Link'}
+                </span>
+              </button>
+              <button
+                type="button"
+                onClick={handleShareProductLink}
+                className="py-1.5 px-2 rounded-xl bg-white/75 hover:bg-white border border-white/90 text-slate-700 hover:text-[#0071e3] text-[10px] sm:text-[11px] font-extrabold flex items-center justify-center gap-1 transition-all cursor-pointer min-w-0"
+                title={isAr ? 'مشاركة المنتج' : 'Share'}
+              >
+                <Share2 className="w-3 h-3 shrink-0" />
+                <span className="truncate">{isAr ? 'مشاركة' : 'Share'}</span>
               </button>
             </div>
           </div>

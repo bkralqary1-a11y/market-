@@ -20,8 +20,8 @@ import {
   Link2,
   Check,
 } from 'lucide-react';
-import { Product, CategoryId, StoreCategoryItem } from '../types';
-import { normalizeSafeId } from '../services/firestoreService';
+import { Product, CategoryId, StoreCategoryItem, StoreBrandItem } from '../types';
+import { normalizeSafeId, formatCloudError } from '../services/firestoreService';
 import { compressImageFileToDataUrl, recompressDataUrlToBudget } from '../utils/imageUpload';
 import { getProductShareUrl, copyTextToClipboard } from '../utils/productLinks';
 
@@ -57,6 +57,7 @@ interface VisualProductEditorModalProps {
   isClone?: boolean; // true => Opened as a clone (saves as a brand-new product without images)
   defaultCategory?: CategoryId;
   categories: StoreCategoryItem[];
+  brands: StoreBrandItem[];
   onClose: () => void;
   onSave: (product: Product) => Promise<void>;
   onDelete?: (productId: string) => Promise<void>;
@@ -126,6 +127,7 @@ export default function VisualProductEditorModal({
   isClone = false,
   defaultCategory = 'phones',
   categories,
+  brands,
   onClose,
   onSave,
   onDelete,
@@ -600,9 +602,7 @@ export default function VisualProductEditorModal({
       onClose();
     } catch (err: unknown) {
       setStatusError(
-        err instanceof Error
-          ? 'تعذر الحفظ في السحابة. تأكد من صلاحية حساب الإدارة واتصالك بالإنترنت.'
-          : 'حدث خطأ أثناء الحفظ.'
+        formatCloudError(err, 'تعذر الحفظ في السحابة. تأكد من صلاحية حساب الإدارة واتصالك بالإنترنت.')
       );
     } finally {
       setSaving(false);
@@ -1091,12 +1091,12 @@ export default function VisualProductEditorModal({
 
               <div className="p-3 rounded-xl bg-white border border-slate-200/90">
                 <label className="block text-[11px] font-extrabold text-slate-600 mb-1">
-                  القسم
+                  القسم (من القوائم الموجودة والمضافة)
                 </label>
                 <select
                   value={form.category}
                   onChange={(e) => handleCategoryChange(e.target.value)}
-                  className="w-full px-3 py-2 rounded-lg bg-slate-50 border border-slate-200 text-sm font-bold text-[#0b1220] focus:outline-none focus:ring-2 focus:ring-[#0071e3]"
+                  className="w-full px-3 py-2 rounded-lg bg-slate-50 border border-slate-200 text-sm font-bold text-[#0b1220] focus:outline-none focus:ring-2 focus:ring-[#0071e3] cursor-pointer"
                 >
                   {categories.map((cat) => (
                     <option key={cat.id} value={cat.id}>
@@ -1108,15 +1108,24 @@ export default function VisualProductEditorModal({
 
               <div className="p-3 rounded-xl bg-white border border-slate-200/90">
                 <label className="block text-[11px] font-extrabold text-slate-600 mb-1">
-                  الشركة / الماركة (اختياري)
+                  العلامة التجارية (من العلامات الموجودة والمضافة)
                 </label>
-                <input
-                  type="text"
+                <select
                   value={form.brand}
                   onChange={(e) => setForm((p) => ({ ...p, brand: e.target.value }))}
-                  placeholder="اتركه فارغاً إن لم ترغب بإظهاره"
-                  className="w-full px-3 py-2 rounded-lg bg-slate-50 border border-slate-200 text-xs font-bold text-[#0b1220] focus:outline-none focus:ring-2 focus:ring-[#0071e3]"
-                />
+                  className="w-full px-3 py-2 rounded-lg bg-slate-50 border border-slate-200 text-sm font-bold text-[#0b1220] focus:outline-none focus:ring-2 focus:ring-[#0071e3] cursor-pointer"
+                >
+                  <option value="">— بدون علامة تجارية —</option>
+                  {brands.map((b) => (
+                    <option key={b.id} value={b.nameAr}>
+                      {b.nameAr}
+                    </option>
+                  ))}
+                  {form.brand.trim() &&
+                    !brands.some(
+                      (b) => b.nameAr.trim().toLowerCase() === form.brand.trim().toLowerCase()
+                    ) && <option value={form.brand}>{form.brand}</option>}
+                </select>
               </div>
 
               <div className="p-3 rounded-xl bg-white border border-slate-200/90">

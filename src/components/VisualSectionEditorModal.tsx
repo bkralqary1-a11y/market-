@@ -11,11 +11,12 @@ import {
   Eye,
   EyeOff,
 } from 'lucide-react';
-import { HeroSlideItem } from '../types';
+import { HeroSlideItem, StoreCategoryItem, StoreBrandItem } from '../types';
 import {
   SiteConfig,
   CustomCategoryConfig,
   normalizeSafeId,
+  formatCloudError,
 } from '../services/firestoreService';
 import { compressImageFileToDataUrl } from '../utils/imageUpload';
 
@@ -25,7 +26,9 @@ export type EditableSectionTarget =
   | { type: 'bento2' }
   | { type: 'category'; categoryId: 'phones' | 'audio' | 'cases' | 'chargers' | 'cables' }
   | { type: 'addCategory' }
-  | { type: 'editCustomCategory'; categoryId: string }
+  | { type: 'editCustomCategory'; categoryId: string; category?: StoreCategoryItem }
+  | { type: 'addBrand' }
+  | { type: 'editBrand'; brand: StoreBrandItem }
   | { type: 'categoriesHeader' }
   | { type: 'productsHeader' }
   | { type: 'storeSettings' };
@@ -38,6 +41,10 @@ interface VisualSectionEditorModalProps {
   onSaveSiteConfig: (next: SiteConfig) => Promise<void>;
   onSaveHeroSlide: (slide: HeroSlideItem, order: number) => Promise<void>;
   onDeleteHeroSlide: (slideId: string) => Promise<void>;
+  onSaveCategory: (cat: StoreCategoryItem) => Promise<void>;
+  onDeleteCategory: (categoryId: string) => Promise<void>;
+  onSaveBrand: (brand: StoreBrandItem) => Promise<void>;
+  onDeleteBrand: (brand: StoreBrandItem) => Promise<void>;
 }
 
 const CAT_CONFIG_KEYS: Record<
@@ -59,6 +66,10 @@ export default function VisualSectionEditorModal({
   onSaveSiteConfig,
   onSaveHeroSlide,
   onDeleteHeroSlide,
+  onSaveCategory,
+  onDeleteCategory,
+  onSaveBrand,
+  onDeleteBrand,
 }: VisualSectionEditorModalProps) {
   const [cfg, setCfg] = useState<SiteConfig>(siteConfig);
   const [activeSlideIdx, setActiveSlideIdx] = useState(0);
@@ -70,6 +81,14 @@ export default function VisualSectionEditorModal({
     nameEn: '',
     image: '',
     hidden: false,
+  });
+  const [brandDraft, setBrandDraft] = useState<StoreBrandItem>({
+    id: '',
+    nameAr: '',
+    nameEn: '',
+    logo: '',
+    hidden: false,
+    isCustom: true,
   });
   const [uploadingImg, setUploadingImg] = useState(false);
   const [uploadProgress, setUploadProgress] = useState(0);
@@ -118,10 +137,18 @@ export default function VisualSectionEditorModal({
         hidden: false,
       });
     } else if (target.type === 'editCustomCategory') {
-      const found = (latestCfg.customCategories || []).find((c) => c.id === target.categoryId);
+      const found =
+        target.category ||
+        (latestCfg.customCategories || []).find((c) => c.id === target.categoryId);
       setCustomCatDraft(
         found
-          ? { ...found }
+          ? {
+              id: found.id,
+              nameAr: found.nameAr,
+              nameEn: found.nameEn || found.nameAr,
+              image: found.image || '',
+              hidden: Boolean(found.hidden),
+            }
           : {
               id: target.categoryId,
               nameAr: '',
@@ -130,6 +157,24 @@ export default function VisualSectionEditorModal({
               hidden: false,
             }
       );
+    } else if (target.type === 'addBrand') {
+      setBrandDraft({
+        id: `brand-${Date.now().toString(36)}`,
+        nameAr: '',
+        nameEn: '',
+        logo: '',
+        hidden: false,
+        isCustom: true,
+      });
+    } else if (target.type === 'editBrand') {
+      setBrandDraft({
+        id: target.brand.id,
+        nameAr: target.brand.nameAr,
+        nameEn: target.brand.nameEn || target.brand.nameAr,
+        logo: target.brand.logo || '',
+        hidden: Boolean(target.brand.hidden),
+        isCustom: target.brand.isCustom,
+      });
     }
   }, [target]);
 
@@ -196,59 +241,48 @@ export default function VisualSectionEditorModal({
         }
         const order = isNewSlide ? heroSlides.length : activeSlideIdx;
         await onSaveHeroSlide(slideDraft, order);
-      } else if (target.type === 'addCategory') {
-        if (!customCatDraft.nameAr.trim()) {
-          setErrorMsg('يرجى كتابة اسم القسم الجديد.');
-          setSaving(false);
-          return;
-        }
-        const latestBase = siteConfigRef.current;
-        const latestExisting = latestBase.customCategories || [];
-        if (latestExisting.length >= 15) {
-          setErrorMsg('وصلت للحد الأقصى للأقسام الإضافية (15 قسماً).');
-          setSaving(false);
-          return;
-        }
-        const nextCat: CustomCategoryConfig = {
-          id: normalizeSafeId(customCatDraft.id || `cat-${Date.now().toString(36)}`, 'cat'),
-          nameAr: customCatDraft.nameAr.trim(),
-          nameEn: customCatDraft.nameEn.trim() || customCatDraft.nameAr.trim(),
-          image: customCatDraft.image.trim(),
-          hidden: Boolean(customCatDraft.hidden),
-        };
-        await onSaveSiteConfig({
-          ...latestBase,
-          customCategories: [...latestExisting, nextCat],
-        });
-      } else if (target.type === 'editCustomCategory') {
+      } else if (target.type === 'addCategory' || target.type === 'editCustomCategory') {
         if (!customCatDraft.nameAr.trim()) {
           setErrorMsg('يرجى كتابة اسم القسم.');
           setSaving(false);
           return;
         }
-        const latestBase = siteConfigRef.current;
-        const existing = latestBase.customCategories || [];
-        const updated = existing.map((c) =>
-          c.id === target.categoryId
-            ? {
-                ...c,
-                nameAr: customCatDraft.nameAr.trim(),
-                nameEn: customCatDraft.nameEn.trim() || customCatDraft.nameAr.trim(),
-                image: customCatDraft.image.trim(),
-                hidden: Boolean(customCatDraft.hidden),
-              }
-            : c
-        );
-        await onSaveSiteConfig({
-          ...latestBase,
-          customCategories: updated,
-        });
+        const safeCat: StoreCategoryItem = {
+          id:
+            target.type === 'editCustomCategory'
+              ? target.categoryId
+              : normalizeSafeId(customCatDraft.id || `cat-${Date.now().toString(36)}`, 'cat'),
+          nameAr: customCatDraft.nameAr.trim(),
+          nameEn: customCatDraft.nameEn.trim() || customCatDraft.nameAr.trim(),
+          image: customCatDraft.image.trim(),
+          hidden: Boolean(customCatDraft.hidden),
+          isCustom: true,
+        };
+        await onSaveCategory(safeCat);
+      } else if (target.type === 'addBrand' || target.type === 'editBrand') {
+        if (!brandDraft.nameAr.trim()) {
+          setErrorMsg('يرجى كتابة اسم العلامة التجارية.');
+          setSaving(false);
+          return;
+        }
+        const safeBrand: StoreBrandItem = {
+          id:
+            target.type === 'editBrand'
+              ? target.brand.id
+              : normalizeSafeId(brandDraft.id || `brand-${Date.now().toString(36)}`, 'brand'),
+          nameAr: brandDraft.nameAr.trim(),
+          nameEn: brandDraft.nameEn.trim() || brandDraft.nameAr.trim(),
+          logo: brandDraft.logo.trim(),
+          hidden: Boolean(brandDraft.hidden),
+          isCustom: target.type === 'editBrand' ? target.brand.isCustom : true,
+        };
+        await onSaveBrand(safeBrand);
       } else {
         await onSaveSiteConfig(cfg);
       }
       onClose();
-    } catch {
-      setErrorMsg('تعذر حفظ التعديلات في السحابة. تأكد من اتصالك وصلاحية الدخول.');
+    } catch (err) {
+      setErrorMsg(formatCloudError(err, 'تعذر حفظ التعديلات في السحابة. تأكد من اتصالك وصلاحية الدخول.'));
     } finally {
       setSaving(false);
     }
@@ -260,8 +294,8 @@ export default function VisualSectionEditorModal({
     try {
       await onDeleteHeroSlide(slideDraft.id);
       onClose();
-    } catch {
-      setErrorMsg('تعذر حذف الشريحة.');
+    } catch (err) {
+      setErrorMsg(formatCloudError(err, 'تعذر حذف الشريحة.'));
     } finally {
       setSaving(false);
     }
@@ -271,14 +305,23 @@ export default function VisualSectionEditorModal({
     if (target.type !== 'editCustomCategory') return;
     setSaving(true);
     try {
-      const latestBase = siteConfigRef.current;
-      const remaining = (latestBase.customCategories || []).filter(
-        (c) => c.id !== target.categoryId
-      );
-      await onSaveSiteConfig({ ...latestBase, customCategories: remaining });
+      await onDeleteCategory(target.categoryId);
       onClose();
-    } catch {
-      setErrorMsg('تعذر حذف القسم.');
+    } catch (err) {
+      setErrorMsg(formatCloudError(err, 'تعذر حذف القسم.'));
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleDeleteCurrentBrand = async () => {
+    if (target.type !== 'editBrand') return;
+    setSaving(true);
+    try {
+      await onDeleteBrand(target.brand);
+      onClose();
+    } catch (err) {
+      setErrorMsg(formatCloudError(err, 'تعذر حذف العلامة التجارية.'));
     } finally {
       setSaving(false);
     }
@@ -308,6 +351,10 @@ export default function VisualSectionEditorModal({
         return 'إضافة قسم جديد للمتجر';
       case 'editCustomCategory':
         return 'تعديل القسم الإضافي';
+      case 'addBrand':
+        return 'إضافة علامة تجارية جديدة';
+      case 'editBrand':
+        return `تعديل العلامة التجارية: ${target.brand.nameAr}`;
       case 'categoriesHeader':
         return 'تعديل عنوان قسم الأقسام';
       case 'productsHeader':
@@ -331,7 +378,7 @@ export default function VisualSectionEditorModal({
         <div className="px-6 py-4 border-b border-slate-900/10 flex items-center justify-between bg-white/55">
           <div className="flex items-center gap-2.5">
             <div className="w-9 h-9 rounded-2xl liquid-btn-primary flex items-center justify-center">
-              {target.type === 'addCategory' ? (
+              {target.type === 'addCategory' || target.type === 'addBrand' ? (
                 <Plus className="w-4 h-4 text-white" />
               ) : (
                 <Pencil className="w-4 h-4 text-white" />
@@ -831,6 +878,122 @@ export default function VisualSectionEditorModal({
             </div>
           )}
 
+          {/* ADD / EDIT BRAND (Identical workflow to Categories!) */}
+          {(target.type === 'addBrand' || target.type === 'editBrand') && (
+            <div className="space-y-4">
+              <div className="w-full h-36 rounded-2xl overflow-hidden bg-slate-100 border-2 border-dashed border-slate-300 flex items-center justify-center relative">
+                {brandDraft.logo ? (
+                  <>
+                    <img
+                      src={brandDraft.logo}
+                      alt={brandDraft.nameAr || 'شعار العلامة التجارية'}
+                      referrerPolicy="no-referrer"
+                      className="w-full h-full object-contain p-3 bg-white"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setBrandDraft({ ...brandDraft, logo: '' })}
+                      className="absolute bottom-2 left-2 px-2.5 py-1 rounded-lg bg-rose-600/90 text-white text-[10px] font-bold cursor-pointer"
+                    >
+                      مسح الشعار
+                    </button>
+                  </>
+                ) : (
+                  <label className="w-full h-full flex flex-col items-center justify-center text-slate-500 hover:text-[#0071e3] cursor-pointer p-4 text-center">
+                    {uploadingImg ? (
+                      <Loader2 className="w-8 h-8 animate-spin text-[#0071e3] mb-1.5" />
+                    ) : (
+                      <Upload className="w-8 h-8 mb-1.5 opacity-75" />
+                    )}
+                    <span className="text-xs font-extrabold">
+                      اضغط لرفع شعار العلامة التجارية من المعرض (اختياري)
+                    </span>
+                    <input
+                      type="file"
+                      accept="image/*"
+                      onChange={(e) =>
+                        handleUploadImage(
+                          e,
+                          (dataUrl) => setBrandDraft({ ...brandDraft, logo: dataUrl }),
+                          120000,
+                          800
+                        )
+                      }
+                      className="hidden"
+                      disabled={uploadingImg}
+                    />
+                  </label>
+                )}
+              </div>
+
+              <div className="p-3 rounded-xl bg-white border border-slate-200">
+                <label className="block text-[11px] font-extrabold text-slate-600 mb-1">
+                  اسم العلامة التجارية *
+                </label>
+                <input
+                  type="text"
+                  value={brandDraft.nameAr}
+                  onChange={(e) => setBrandDraft({ ...brandDraft, nameAr: e.target.value })}
+                  placeholder="مثال: SAMSUNG، Apple، Xiaomi، Honor، Huawei، Oppo..."
+                  className="w-full px-3 py-2 rounded-lg bg-slate-50 border border-slate-200 text-sm font-extrabold text-[#0b1220]"
+                />
+              </div>
+
+              <div className="p-3 rounded-xl bg-white border border-slate-200 space-y-2">
+                <div className="flex items-center justify-between gap-2">
+                  <label className="text-[11px] font-extrabold text-slate-600">
+                    صورة / شعار العلامة (من المعرض أو رابط URL اختياري)
+                  </label>
+                  <label className="text-xs font-extrabold text-[#0071e3] hover:underline flex items-center gap-1 cursor-pointer">
+                    <Upload className="w-3.5 h-3.5" />
+                    <span>رفع من الجهاز</span>
+                    <input
+                      type="file"
+                      accept="image/*"
+                      onChange={(e) =>
+                        handleUploadImage(
+                          e,
+                          (dataUrl) => setBrandDraft({ ...brandDraft, logo: dataUrl }),
+                          120000,
+                          800
+                        )
+                      }
+                      className="hidden"
+                      disabled={uploadingImg}
+                    />
+                  </label>
+                </div>
+                <input
+                  type="text"
+                  dir="ltr"
+                  value={brandDraft.logo.startsWith('data:') ? '' : brandDraft.logo}
+                  onChange={(e) => setBrandDraft({ ...brandDraft, logo: e.target.value })}
+                  placeholder={
+                    brandDraft.logo.startsWith('data:')
+                      ? 'تم رفع الشعار من جهازك ✓'
+                      : 'https://... (اختياري)'
+                  }
+                  className="w-full px-3 py-2 rounded-lg bg-slate-50 border border-slate-200 text-xs text-[#0b1220]"
+                />
+              </div>
+
+              <button
+                type="button"
+                onClick={() => setBrandDraft({ ...brandDraft, hidden: !brandDraft.hidden })}
+                className={`w-full py-2.5 px-4 rounded-xl border text-xs font-extrabold flex items-center justify-center gap-2 cursor-pointer ${
+                  brandDraft.hidden
+                    ? 'bg-amber-100 border-amber-300 text-amber-900'
+                    : 'bg-white border-slate-200 text-slate-700'
+                }`}
+              >
+                {brandDraft.hidden ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                <span>
+                  {brandDraft.hidden ? 'مخفية عن الزوار حالياً' : 'ظاهرة للزوار'}
+                </span>
+              </button>
+            </div>
+          )}
+
           {/* CATEGORIES SECTION HEADER EDITOR */}
           {target.type === 'categoriesHeader' && (
             <div className="space-y-3">
@@ -1031,6 +1194,16 @@ export default function VisualSectionEditorModal({
               <Trash2 className="w-4 h-4" />
               <span>حذف القسم</span>
             </button>
+          ) : target.type === 'editBrand' ? (
+            <button
+              type="button"
+              onClick={handleDeleteCurrentBrand}
+              disabled={saving}
+              className="px-4 py-2.5 rounded-xl bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 text-xs font-extrabold flex items-center gap-1.5 cursor-pointer"
+            >
+              <Trash2 className="w-4 h-4" />
+              <span>حذف / إلغاء العلامة</span>
+            </button>
           ) : (
             <div />
           )}
@@ -1050,7 +1223,13 @@ export default function VisualSectionEditorModal({
               className="px-6 py-2.5 rounded-2xl liquid-btn-primary text-xs font-extrabold flex items-center gap-2 cursor-pointer disabled:opacity-60"
             >
               {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
-              <span>{target.type === 'addCategory' ? 'إضافة القسم' : 'حفظ التغييرات'}</span>
+              <span>
+                {target.type === 'addCategory'
+                  ? 'إضافة القسم'
+                  : target.type === 'addBrand'
+                  ? 'إضافة العلامة'
+                  : 'حفظ التغييرات'}
+              </span>
             </button>
           </div>
         </div>

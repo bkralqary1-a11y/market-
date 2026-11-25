@@ -1,6 +1,6 @@
 import { useState, useMemo, useEffect } from 'react';
-import { Filter, SlidersHorizontal, X, SearchX } from 'lucide-react';
-import { Product, Language, Currency, CategoryId } from '../types';
+import { Filter, SlidersHorizontal, X, SearchX, Tag } from 'lucide-react';
+import { Product, Language, Currency, CategoryId, StoreCategoryItem, StoreBrandItem } from '../types';
 import ProductCard from './ProductCard';
 import AddProductTile from './AddProductTile';
 import { formatPrice } from '../data/mockData';
@@ -8,6 +8,7 @@ import {
   SiteConfig,
   DEFAULT_SITE_CONFIG,
   getStoreCategories,
+  DEFAULT_BUILTIN_BRANDS,
 } from '../services/firestoreService';
 
 interface ShopViewProps {
@@ -23,11 +24,19 @@ interface ShopViewProps {
   onToggleCompare: (productId: string) => void;
   initialCategory: CategoryId;
   onCategoryChange?: (cat: CategoryId) => void;
+  initialBrand?: string;
+  onBrandChange?: (brand: string) => void;
+  categories?: StoreCategoryItem[];
+  brands?: StoreBrandItem[];
   siteConfig?: SiteConfig;
   isAdminMode?: boolean;
   onAdminEditProduct?: (product: Product) => void;
   onAdminCloneProduct?: (product: Product) => void;
   onAdminAddProduct?: (defaultCategory: CategoryId) => void;
+}
+
+function normalizeBrandKey(value?: string): string {
+  return (value || '').trim().toLowerCase();
 }
 
 export default function ShopView({
@@ -43,6 +52,10 @@ export default function ShopView({
   onToggleCompare,
   initialCategory = 'all',
   onCategoryChange,
+  initialBrand = '',
+  onBrandChange,
+  categories: propCategories,
+  brands: propBrands,
   siteConfig = DEFAULT_SITE_CONFIG,
   isAdminMode = false,
   onAdminEditProduct,
@@ -52,7 +65,9 @@ export default function ShopView({
   const isAr = language === 'ar';
 
   const [selectedCategory, setSelectedCategory] = useState<CategoryId>(initialCategory);
-  const [selectedBrands, setSelectedBrands] = useState<string[]>([]);
+  const [selectedBrands, setSelectedBrands] = useState<string[]>(
+    initialBrand ? [initialBrand] : []
+  );
   const [maxPrice, setMaxPrice] = useState<number>(1500000);
   const [inStockOnly, setInStockOnly] = useState(false);
   const [fastShippingOnly, setFastShippingOnly] = useState(false);
@@ -65,27 +80,106 @@ export default function ShopView({
     }
   }, [initialCategory]);
 
-  const dynamicCategories = getStoreCategories(siteConfig, isAdminMode);
+  useEffect(() => {
+    if (initialBrand && initialBrand.trim()) {
+      setSelectedBrands([initialBrand.trim()]);
+    } else {
+      setSelectedBrands([]);
+    }
+  }, [initialBrand]);
+
+  const dynamicCategories = propCategories ?? getStoreCategories(siteConfig, isAdminMode);
   const categories: { id: CategoryId; nameEn: string; nameAr: string }[] = [
     { id: 'all', nameEn: 'All Categories', nameAr: 'كافة الأقسام' },
     ...dynamicCategories.map((c) => ({ id: c.id, nameEn: c.nameEn, nameAr: c.nameAr })),
   ];
 
-  const allBrands = Array.from(
-    new Set(products.map((p) => p.brand?.trim()).filter(Boolean) as string[])
-  );
+  // Combine store-managed brands + any legacy brands found on existing products (deduplicated case-insensitively)
+  const storeBrands = propBrands ?? DEFAULT_BUILTIN_BRANDS;
+  const brandOptions = useMemo(() => {
+    const list: { key: string; label: string; logo?: string; matchKeys: string[] }[] = [];
+    const seen = new Set<string>();
 
-  const toggleBrand = (brand: string) => {
-    setSelectedBrands((prev) =>
-      prev.includes(brand) ? prev.filter((b) => b !== brand) : [...prev, brand]
-    );
+    storeBrands.forEach((b) => {
+      const label = (isAr ? b.nameAr : b.nameEn) || b.nameAr || b.nameEn;
+      const key = normalizeBrandKey(label);
+      if (!key || seen.has(key)) return;
+      seen.add(key);
+      const matchKeys = Array.from(
+        new Set([normalizeBrandKey(b.nameAr), normalizeBrandKey(b.nameEn), normalizeBrandKey(b.id)].filter(Boolean))
+      );
+      list.push({ key, label, logo: b.logo, matchKeys });
+    });
+
+    products.forEach((p) => {
+      const raw = (p.brand || '').trim();
+      const key = normalizeBrandKey(raw);
+      if (!key) return;
+      const alreadyCovered = list.some((item) => item.matchKeys.includes(key));
+      if (!alreadyCovered) {
+        list.push({ key, label: raw, matchKeys: [key] });
+      }
+    });
+
+    return list;
+  }, [storeBrands, products, isAr]);
+
+  const matchesSelectedBrands = (productBrand?: string): boolean => {
+    if (selectedBrands.length === 0) return true;
+    const prodKey = normalizeBrandKey(productBrand);
+    if (!prodKey) return false;
+    return selectedBrands.some((sel) => {
+      const selKey = normalizeBrandKey(sel);
+      if (prodKey === selKey) return true;
+      const opt = brandOptions.find(
+        (b) => b.key === selKey || b.matchKeys.includes(selKey)
+      );
+      return opt ? opt.matchKeys.includes(prodKey) : false;
+    });
+  };
+
+  const isBrandSelected = (label: string, matchKeys: string[]): boolean => {
+    const targetKey = normalizeBrandKey(label);
+    return selectedBrands.some((sel) => {
+      const selKey = normalizeBrandKey(sel);
+      return selKey === targetKey || matchKeys.includes(selKey);
+    });
+  };
+
+  const toggleBrand = (brandLabel: string, matchKeys: string[]) => {
+    setSelectedBrands((prev) => {
+      const exists = prev.some((b) => {
+        const bk = normalizeBrandKey(b);
+        return bk === normalizeBrandKey(brandLabel) || matchKeys.includes(bk);
+      });
+      const next = exists
+        ? prev.filter((b) => {
+            const bk = normalizeBrandKey(b);
+            return bk !== normalizeBrandKey(brandLabel) && !matchKeys.includes(bk);
+          })
+        : [...prev, brandLabel];
+      if (onBrandChange) {
+        onBrandChange(next.length === 1 ? next[0] : '');
+      }
+      return next;
+    });
+  };
+
+  const selectSingleBrand = (brandLabel: string) => {
+    if (!brandLabel) {
+      setSelectedBrands([]);
+      onBrandChange?.('');
+    } else {
+      setSelectedBrands([brandLabel]);
+      onBrandChange?.(brandLabel);
+    }
   };
 
   const filteredProducts = useMemo(() => {
     return products
       .filter((p) => {
         if (selectedCategory !== 'all' && p.category !== selectedCategory) return false;
-        if (selectedBrands.length > 0 && !selectedBrands.includes(p.brand)) return false;
+        if (!matchesSelectedBrands(p.brand)) return false;
         if (p.price > maxPrice) return false;
         if (inStockOnly && !p.inStock) return false;
         if (fastShippingOnly && !p.fastShipping) return false;
@@ -97,7 +191,7 @@ export default function ShopView({
         if (sortBy === 'rating') return b.rating - a.rating;
         return (b.isPopular ? 1 : 0) - (a.isPopular ? 1 : 0);
       });
-  }, [products, selectedCategory, selectedBrands, maxPrice, inStockOnly, fastShippingOnly, sortBy]);
+  }, [products, selectedCategory, selectedBrands, brandOptions, maxPrice, inStockOnly, fastShippingOnly, sortBy]);
 
   const resetFilters = () => {
     setSelectedCategory('all');
@@ -105,6 +199,8 @@ export default function ShopView({
     setMaxPrice(1500000);
     setInStockOnly(false);
     setFastShippingOnly(false);
+    onCategoryChange?.('all');
+    onBrandChange?.('');
   };
 
   const filterPanelContent = (
@@ -129,25 +225,31 @@ export default function ShopView({
           {isAr ? 'العلامة التجارية' : 'Brands'}
         </h4>
         <div className="space-y-2.5 text-xs">
-          {allBrands.map((b) => (
-            <label
-              key={b}
-              className="flex items-center justify-between cursor-pointer text-slate-700 hover:text-[#0b1220]"
-            >
-              <div className="flex items-center gap-2.5">
-                <input
-                  type="checkbox"
-                  checked={selectedBrands.includes(b)}
-                  onChange={() => toggleBrand(b)}
-                  className="rounded border-slate-300 text-[#0071e3] accent-[#0071e3] w-4 h-4 cursor-pointer"
-                />
-                <span className="font-semibold">{b}</span>
-              </div>
-              <span className="text-[11px] font-mono tabular-nums text-slate-400">
-                {products.filter((p) => p.brand === b).length}
-              </span>
-            </label>
-          ))}
+          {brandOptions.map((b) => {
+            const checked = isBrandSelected(b.label, b.matchKeys);
+            const count = products.filter((p) =>
+              b.matchKeys.includes(normalizeBrandKey(p.brand))
+            ).length;
+            return (
+              <label
+                key={b.key}
+                className="flex items-center justify-between cursor-pointer text-slate-700 hover:text-[#0b1220]"
+              >
+                <div className="flex items-center gap-2.5">
+                  <input
+                    type="checkbox"
+                    checked={checked}
+                    onChange={() => toggleBrand(b.label, b.matchKeys)}
+                    className="rounded border-slate-300 text-[#0071e3] accent-[#0071e3] w-4 h-4 cursor-pointer"
+                  />
+                  <span className="font-semibold">{b.label}</span>
+                </div>
+                <span className="text-[11px] font-mono tabular-nums text-slate-400">
+                  {count}
+                </span>
+              </label>
+            );
+          })}
         </div>
       </div>
 
@@ -203,7 +305,13 @@ export default function ShopView({
         <div className="mb-6 flex flex-col sm:flex-row sm:items-end justify-between gap-2">
           <div>
             <h1 className="text-2xl sm:text-3xl font-black text-[#0b1220] tracking-tight">
-              {isAr ? 'كتالوج الأجهزة والملحقات المعتمدة' : 'Official Hardware & Accessories Catalog'}
+              {selectedBrands.length === 1
+                ? isAr
+                  ? `منتجات العلامة التجارية: ${selectedBrands[0]}`
+                  : `Brand: ${selectedBrands[0]}`
+                : isAr
+                  ? 'كتالوج الأجهزة والملحقات المعتمدة'
+                  : 'Official Hardware & Accessories Catalog'}
             </h1>
             <p className="text-xs text-slate-600 mt-1 font-medium tabular-nums">
               {isAr
@@ -211,29 +319,99 @@ export default function ShopView({
                 : `Showing ${filteredProducts.length} of ${products.length} certified products`}
             </p>
           </div>
+          {(selectedCategory !== 'all' || selectedBrands.length > 0) && (
+            <button
+              type="button"
+              onClick={resetFilters}
+              className="self-start sm:self-auto text-xs font-extrabold text-[#0071e3] hover:underline cursor-pointer"
+            >
+              {isAr ? 'عرض كافة الأقسام والعلامات ×' : 'Clear all filters ×'}
+            </button>
+          )}
         </div>
 
         {/* Liquid Glass Segmented Category Bar */}
-        <div className="liquid-glass-capsule p-1.5 rounded-[22px] inline-flex max-w-full items-center gap-1 overflow-x-auto no-scrollbar mb-7">
-          {categories.map((cat) => {
-            const active = selectedCategory === cat.id;
-            return (
+        <div className="flex flex-col gap-3 mb-7">
+          <div className="liquid-glass-capsule p-1.5 rounded-[22px] inline-flex max-w-full items-center gap-1 overflow-x-auto no-scrollbar self-start">
+            {categories.map((cat) => {
+              const active = selectedCategory === cat.id;
+              return (
+                <button
+                  type="button"
+                  key={cat.id}
+                  onClick={() => {
+                    setSelectedCategory(cat.id);
+                    if (onCategoryChange) onCategoryChange(cat.id);
+                  }}
+                  className={`text-xs font-extrabold px-4 py-2 rounded-2xl shrink-0 whitespace-nowrap transition-all cursor-pointer ${
+                    active
+                      ? 'liquid-btn-primary text-white'
+                      : 'text-slate-700 hover:text-[#0071e3] hover:bg-white/60'
+                  }`}
+                >
+                  {isAr ? cat.nameAr : cat.nameEn}
+                </button>
+              );
+            })}
+          </div>
+
+          {/* Interactive Brands Bar (Matches Categories Bar) */}
+          {brandOptions.length > 0 && (
+            <div className="liquid-glass-capsule p-1.5 rounded-[22px] inline-flex max-w-full items-center gap-1.5 overflow-x-auto no-scrollbar self-start">
               <button
-                key={cat.id}
-                onClick={() => {
-                  setSelectedCategory(cat.id);
-                  if (onCategoryChange) onCategoryChange(cat.id);
-                }}
-                className={`text-xs font-extrabold px-4 py-2 rounded-2xl shrink-0 whitespace-nowrap transition-all cursor-pointer ${
-                  active
-                    ? 'liquid-btn-primary text-white'
+                type="button"
+                onClick={() => selectSingleBrand('')}
+                className={`text-xs font-extrabold px-3.5 py-2 rounded-2xl shrink-0 whitespace-nowrap transition-all cursor-pointer flex items-center gap-1.5 ${
+                  selectedBrands.length === 0
+                    ? 'bg-[#0b1220] text-white shadow'
                     : 'text-slate-700 hover:text-[#0071e3] hover:bg-white/60'
                 }`}
               >
-                {isAr ? cat.nameAr : cat.nameEn}
+                <Tag className="w-3.5 h-3.5" />
+                <span>{isAr ? 'كل العلامات' : 'All Brands'}</span>
               </button>
-            );
-          })}
+              {brandOptions.map((b) => {
+                const active = isBrandSelected(b.label, b.matchKeys);
+                const count = products.filter((p) =>
+                  b.matchKeys.includes(normalizeBrandKey(p.brand))
+                ).length;
+                return (
+                  <button
+                    type="button"
+                    key={b.key}
+                    onClick={() =>
+                      active && selectedBrands.length === 1
+                        ? selectSingleBrand('')
+                        : selectSingleBrand(b.label)
+                    }
+                    className={`text-xs font-extrabold px-3.5 py-2 rounded-2xl shrink-0 whitespace-nowrap transition-all cursor-pointer flex items-center gap-1.5 ${
+                      active
+                        ? 'liquid-btn-primary text-white shadow'
+                        : 'text-slate-700 hover:text-[#0071e3] hover:bg-white/60'
+                    }`}
+                  >
+                    {b.logo && (
+                      <img
+                        src={b.logo}
+                        alt={b.label}
+                        className="w-4 h-4 rounded-md object-contain bg-white/80 p-0.5 shrink-0"
+                      />
+                    )}
+                    <span>{b.label}</span>
+                    {count > 0 && (
+                      <span
+                        className={`text-[10px] font-mono tabular-nums px-1.5 py-0.5 rounded-full ${
+                          active ? 'bg-white/25 text-white' : 'bg-slate-200/70 text-slate-600'
+                        }`}
+                      >
+                        {count}
+                      </span>
+                    )}
+                  </button>
+                );
+              })}
+            </div>
+          )}
         </div>
 
         {/* Main Grid */}

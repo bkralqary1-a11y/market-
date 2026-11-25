@@ -78,9 +78,60 @@
         "imageUrl", "order", "enabled", "createdAt", "updatedAt"
       ]
     },
+    "StoreCategory": {
+      "title": "Store Category Item",
+      "description": "A store category managed independently by the admin (supports HD cover images and visibility).",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "maxLength": 128 },
+        "nameAr": { "type": "string", "maxLength": 80 },
+        "nameEn": { "type": "string", "maxLength": 80 },
+        "image": { "type": "string", "maxLength": 350000 },
+        "hidden": { "type": "boolean" },
+        "order": { "type": "number" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["id", "nameAr", "nameEn", "image", "hidden", "order", "createdAt", "updatedAt"]
+    },
+    "StoreBrand": {
+      "title": "Store Brand Item",
+      "description": "A store brand managed by the admin with optional logo/image and visibility toggle.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "maxLength": 128 },
+        "nameAr": { "type": "string", "maxLength": 80 },
+        "nameEn": { "type": "string", "maxLength": 80 },
+        "logo": { "type": "string", "maxLength": 350000 },
+        "hidden": { "type": "boolean" },
+        "order": { "type": "number" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["id", "nameAr", "nameEn", "logo", "hidden", "order", "createdAt", "updatedAt"]
+    },
+    "SiteLayout": {
+      "title": "Homepage Layout & Visibility Controls",
+      "description": "Lightweight visibility controls for homepage blocks, built-in categories, and built-in brands.",
+      "type": "object",
+      "properties": {
+        "hideHero": { "type": "boolean" },
+        "hideBento1": { "type": "boolean" },
+        "hideBento2": { "type": "boolean" },
+        "hideTrustPillars": { "type": "boolean" },
+        "hideBrandsBar": { "type": "boolean" },
+        "hideCategoriesSection": { "type": "boolean" },
+        "hideProductsSection": { "type": "boolean" },
+        "hiddenCategories": { "type": "array", "items": { "type": "string" } },
+        "hiddenBrands": { "type": "array", "items": { "type": "string" } },
+        "deletedBrands": { "type": "array", "items": { "type": "string" } },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["updatedAt"]
+    },
     "SiteConfig": {
       "title": "Global Storefront UI Configuration",
-      "description": "Single configuration document controlling store titles, section labels, visibility toggles, banners, Bento tiles, category names/images, custom categories, and WhatsApp numbers.",
+      "description": "Single configuration document controlling store titles, section labels, banners, Bento tiles, built-in category labels/images, and WhatsApp numbers.",
       "type": "object",
       "properties": {
         "storeNameAr": { "type": "string", "maxLength": 120 },
@@ -102,11 +153,11 @@
         "bento2BadgeAr": { "type": "string", "maxLength": 120 },
         "bento2TitleAr": { "type": "string", "maxLength": 160 },
         "bento2DescAr": { "type": "string", "maxLength": 300 },
-        "catPhonesImg": { "type": "string", "maxLength": 250000 },
-        "catAudioImg": { "type": "string", "maxLength": 250000 },
-        "catCasesImg": { "type": "string", "maxLength": 250000 },
-        "catChargersImg": { "type": "string", "maxLength": 250000 },
-        "catCablesImg": { "type": "string", "maxLength": 250000 },
+        "catPhonesImg": { "type": "string", "maxLength": 300000 },
+        "catAudioImg": { "type": "string", "maxLength": 300000 },
+        "catCasesImg": { "type": "string", "maxLength": 300000 },
+        "catChargersImg": { "type": "string", "maxLength": 300000 },
+        "catCablesImg": { "type": "string", "maxLength": 300000 },
         "catPhonesNameAr": { "type": "string", "maxLength": 80 },
         "catAudioNameAr": { "type": "string", "maxLength": 80 },
         "catCasesNameAr": { "type": "string", "maxLength": 80 },
@@ -156,6 +207,18 @@
     "/heroSlides/{slideId}": {
       "schema": { "$ref": "#/entities/HeroSlide" },
       "description": "Public homepage hero slides; writes restricted exclusively to verified admin."
+    },
+    "/storeCategories/{categoryId}": {
+      "schema": { "$ref": "#/entities/StoreCategory" },
+      "description": "Public storefront categories managed independently by verified admin."
+    },
+    "/storeBrands/{brandId}": {
+      "schema": { "$ref": "#/entities/StoreBrand" },
+      "description": "Public storefront brands managed independently by verified admin."
+    },
+    "/siteLayout/{layoutId}": {
+      "schema": { "$ref": "#/entities/SiteLayout" },
+      "description": "Lightweight homepage visibility controls ('main'); writes restricted exclusively to verified admin."
     },
     "/siteConfig/{configId}": {
       "schema": { "$ref": "#/entities/SiteConfig" },

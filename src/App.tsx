@@ -1,6 +1,16 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { onAuthStateChanged, getRedirectResult, signOut, type User } from 'firebase/auth';
-import { PageView, Language, Currency, CategoryId, Product, CartItem, HeroSlideItem } from './types';
+import {
+  PageView,
+  Language,
+  Currency,
+  CategoryId,
+  Product,
+  CartItem,
+  HeroSlideItem,
+  StoreCategoryItem,
+  StoreBrandItem,
+} from './types';
 import {
   DEFAULT_HERO_SLIDES,
   INITIAL_PRODUCTS_LIST,
@@ -9,16 +19,30 @@ import { MessageCircle, ArrowLeft, ArrowRight, Pencil, Eye, EyeOff } from 'lucid
 import { auth, isVerifiedAdminUser } from './firebase';
 import {
   SiteConfig,
+  SiteLayoutConfig,
   DEFAULT_SITE_CONFIG,
+  DEFAULT_SITE_LAYOUT,
+  BUILTIN_BRAND_IDS,
+  mergeSiteConfigWithLayout,
   getStoreCategories,
+  getStoreBrands,
+  formatCloudError,
   subscribeToProducts,
   subscribeToHeroSlides,
   subscribeToSiteConfig,
+  subscribeToStoreCategories,
+  subscribeToStoreBrands,
+  subscribeToSiteLayout,
   saveProductToCloud,
   deleteProductFromCloud,
   saveHeroSlideToCloud,
   deleteHeroSlideFromCloud,
   saveSiteConfigToCloud,
+  saveStoreCategoryToCloud,
+  deleteStoreCategoryFromCloud,
+  saveStoreBrandToCloud,
+  deleteStoreBrandFromCloud,
+  saveSiteLayoutToCloud,
   seedDefaultDataToCloud,
 } from './services/firestoreService';
 
@@ -58,6 +82,7 @@ interface NavHistoryState {
   appNav: true;
   view: PageView;
   category: CategoryId;
+  brand: string;
   productId: string | null;
   overlay?: boolean;
 }
@@ -73,12 +98,17 @@ const VALID_VIEWS: PageView[] = [
   'compare',
 ];
 
-function parseLocationHash(): { view: PageView; category: CategoryId; productId: string | null } {
+function parseLocationHash(): {
+  view: PageView;
+  category: CategoryId;
+  brand: string;
+  productId: string | null;
+} {
   if (typeof window === 'undefined') {
-    return { view: 'home', category: 'all', productId: null };
+    return { view: 'home', category: 'all', brand: '', productId: null };
   }
 
-  // 1. Check hash route first: #/product/<id>, #/shop/<cat>, #/<view>
+  // 1. Check hash route first: #/product/<id>, #/shop/<cat>, #/brand/<name>, #/<view>
   const raw = window.location.hash.replace(/^#\/?/, '').trim();
   if (raw) {
     const parts = raw.split('/').map((p) => {
@@ -88,24 +118,31 @@ function parseLocationHash(): { view: PageView; category: CategoryId; productId:
         return p;
       }
     });
-    const first = parts[0] as PageView;
+    const first = parts[0];
     if (first === 'shop') {
-      return { view: 'shop', category: parts[1] || 'all', productId: null };
+      return { view: 'shop', category: parts[1] || 'all', brand: '', productId: null };
+    }
+    if (first === 'brand' && parts[1]) {
+      return { view: 'shop', category: 'all', brand: parts[1], productId: null };
     }
     if (first === 'product' && parts[1]) {
-      return { view: 'product', category: 'all', productId: parts[1] };
+      return { view: 'product', category: 'all', brand: '', productId: parts[1] };
     }
-    if (VALID_VIEWS.includes(first) && first !== 'product') {
-      return { view: first, category: 'all', productId: null };
+    if (VALID_VIEWS.includes(first as PageView) && first !== 'product') {
+      return { view: first as PageView, category: 'all', brand: '', productId: null };
     }
   }
 
-  // 2. Fallback: query param ?product=<id> or ?p=<id> (useful for WhatsApp/Facebook share links)
+  // 2. Fallback: query param ?product=<id>, ?p=<id>, or ?brand=<name>
   try {
     const params = new URLSearchParams(window.location.search);
     const qProduct = (params.get('product') || params.get('p') || '').trim();
     if (qProduct) {
-      return { view: 'product', category: 'all', productId: qProduct };
+      return { view: 'product', category: 'all', brand: '', productId: qProduct };
+    }
+    const qBrand = (params.get('brand') || '').trim();
+    if (qBrand) {
+      return { view: 'shop', category: 'all', brand: qBrand, productId: null };
     }
   } catch {
     // ignore malformed query strings
@@ -115,22 +152,31 @@ function parseLocationHash(): { view: PageView; category: CategoryId; productId:
   const pathMatch = window.location.pathname.match(/\/product\/([^/]+)/);
   if (pathMatch && pathMatch[1]) {
     try {
-      return { view: 'product', category: 'all', productId: decodeURIComponent(pathMatch[1]) };
+      return {
+        view: 'product',
+        category: 'all',
+        brand: '',
+        productId: decodeURIComponent(pathMatch[1]),
+      };
     } catch {
-      return { view: 'product', category: 'all', productId: pathMatch[1] };
+      return { view: 'product', category: 'all', brand: '', productId: pathMatch[1] };
     }
   }
 
-  return { view: 'home', category: 'all', productId: null };
+  return { view: 'home', category: 'all', brand: '', productId: null };
 }
 
 function buildLocationHash(
   view: PageView,
   category: CategoryId,
-  productId: string | null
+  productId: string | null,
+  brand = ''
 ): string {
   if (view === 'home') return '#/';
   if (view === 'shop') {
+    if (brand && brand.trim()) {
+      return `#/brand/${encodeURIComponent(brand.trim())}`;
+    }
     return category && category !== 'all' ? `#/shop/${encodeURIComponent(category)}` : '#/shop';
   }
   if (view === 'product' && productId) {
@@ -151,9 +197,12 @@ export default function App() {
   siteConfigRef.current = siteConfig;
   const [hasCloudConfig, setHasCloudConfig] = useState(false);
 
-  const products = productsSynced ? cloudProducts : [];
-  const heroSlides = hasCloudSlides ? cloudSlides : DEFAULT_HERO_SLIDES;
-  const allStoreCategories = getStoreCategories(siteConfig, true);
+  // Dedicated lightweight cloud collections for Categories, Brands, and Homepage Layout Toggles
+  const [cloudCategories, setCloudCategories] = useState<StoreCategoryItem[]>([]);
+  const [cloudBrands, setCloudBrands] = useState<StoreBrandItem[]>([]);
+  const [siteLayout, setSiteLayout] = useState<SiteLayoutConfig>(DEFAULT_SITE_LAYOUT);
+  const siteLayoutRef = useRef<SiteLayoutConfig>(siteLayout);
+  siteLayoutRef.current = siteLayout;
 
   // Firebase Auth & Hidden Visual Admin Mode State
   const [authUser, setAuthUser] = useState<User | null>(null);
@@ -169,9 +218,19 @@ export default function App() {
   const isAdminVerified = isVerifiedAdminUser(authUser);
   const isAdminMode = adminModeEnabled && isAdminVerified;
 
+  // Effective merged site configuration (siteLayout overlays legacy siteConfig toggles seamlessly)
+  const effectiveSiteConfig = mergeSiteConfigWithLayout(siteConfig, siteLayout);
+
+  const products = productsSynced ? cloudProducts : [];
+  const heroSlides = hasCloudSlides ? cloudSlides : DEFAULT_HERO_SLIDES;
+  const allStoreCategories = getStoreCategories(effectiveSiteConfig, true, cloudCategories);
+  const visibleStoreCategories = getStoreCategories(effectiveSiteConfig, isAdminMode, cloudCategories);
+  const allStoreBrands = getStoreBrands(cloudBrands, siteLayout, true);
+  const visibleStoreBrands = getStoreBrands(cloudBrands, siteLayout, isAdminMode);
+
   const showAdminToast = (msg: string) => {
     setAdminToast(msg);
-    setTimeout(() => setAdminToast(null), 3200);
+    setTimeout(() => setAdminToast(null), 3800);
   };
 
   // Subscribe to Firebase Auth state & handle redirect login completion
@@ -227,10 +286,23 @@ export default function App() {
       setSiteConfig(cfg);
       setHasCloudConfig(hasDoc);
     });
+    const unsubCategories = subscribeToStoreCategories((list) => {
+      setCloudCategories(list);
+    }, isAdminVerified);
+    const unsubBrands = subscribeToStoreBrands((list) => {
+      setCloudBrands(list);
+    }, isAdminVerified);
+    const unsubLayout = subscribeToSiteLayout((layout) => {
+      siteLayoutRef.current = layout;
+      setSiteLayout(layout);
+    });
     return () => {
       unsubProducts();
       unsubSlides();
       unsubConfig();
+      unsubCategories();
+      unsubBrands();
+      unsubLayout();
     };
   }, [isAdminVerified]);
 
@@ -243,6 +315,7 @@ export default function App() {
   const [selectedCategory, setSelectedCategory] = useState<CategoryId>(
     initialRoute.current.category
   );
+  const [selectedBrand, setSelectedBrand] = useState<string>(initialRoute.current.brand);
   const pendingProductIdRef = useRef<string | null>(initialRoute.current.productId);
 
   // Refs for Browser History API synchronization (phone & desktop Back/Forward support)
@@ -252,6 +325,8 @@ export default function App() {
   currentViewRef.current = currentView;
   const selectedCategoryRef = useRef<CategoryId>(selectedCategory);
   selectedCategoryRef.current = selectedCategory;
+  const selectedBrandRef = useRef<string>(selectedBrand);
+  selectedBrandRef.current = selectedBrand;
   const selectedProductRef = useRef<Product | null>(selectedProduct);
   selectedProductRef.current = selectedProduct;
 
@@ -273,7 +348,7 @@ export default function App() {
         setCurrentView('home');
         try {
           window.history.replaceState(
-            { appNav: true, view: 'home', category: 'all', productId: null } satisfies NavHistoryState,
+            { appNav: true, view: 'home', category: 'all', brand: '', productId: null } satisfies NavHistoryState,
             '',
             '#/'
           );
@@ -294,7 +369,7 @@ export default function App() {
         setCurrentView('home');
         try {
           window.history.replaceState(
-            { appNav: true, view: 'home', category: 'all', productId: null } satisfies NavHistoryState,
+            { appNav: true, view: 'home', category: 'all', brand: '', productId: null } satisfies NavHistoryState,
             '',
             '#/'
           );
@@ -386,6 +461,7 @@ export default function App() {
       nextView: PageView,
       opts?: {
         category?: CategoryId;
+        brand?: string;
         product?: Product | null;
         replace?: boolean;
       }
@@ -396,6 +472,12 @@ export default function App() {
           : nextView === 'home'
             ? 'all'
             : selectedCategoryRef.current;
+      const nextBrand =
+        opts?.brand !== undefined
+          ? opts.brand
+          : nextView === 'shop'
+            ? selectedBrandRef.current
+            : '';
       const nextProduct =
         opts?.product !== undefined
           ? opts.product
@@ -407,9 +489,11 @@ export default function App() {
       const isSameRoute =
         currentViewRef.current === nextView &&
         selectedCategoryRef.current === nextCategory &&
+        selectedBrandRef.current === nextBrand &&
         (nextView !== 'product' || selectedProductRef.current?.id === nextProductId);
 
       setSelectedCategory(nextCategory);
+      setSelectedBrand(nextBrand);
       if (opts?.product !== undefined || nextView !== 'product') {
         setSelectedProduct(nextProduct);
       }
@@ -420,9 +504,10 @@ export default function App() {
         appNav: true,
         view: nextView,
         category: nextCategory,
+        brand: nextBrand,
         productId: nextProductId,
       };
-      const hash = buildLocationHash(nextView, nextCategory, nextProductId);
+      const hash = buildLocationHash(nextView, nextCategory, nextProductId, nextBrand);
 
       try {
         if (overlayPushedRef.current) {
@@ -462,13 +547,14 @@ export default function App() {
       appNav: true,
       view: init.view,
       category: init.category,
+      brand: init.brand,
       productId: init.productId,
     };
     try {
       window.history.replaceState(
         initialState,
         '',
-        buildLocationHash(init.view, init.category, init.productId)
+        buildLocationHash(init.view, init.category, init.productId, init.brand)
       );
     } catch {
       // ignore
@@ -495,6 +581,7 @@ export default function App() {
           ? {
               view: rawState.view,
               category: rawState.category || 'all',
+              brand: rawState.brand || '',
               productId: rawState.productId || null,
             }
           : parseLocationHash();
@@ -505,16 +592,19 @@ export default function App() {
           pendingProductIdRef.current = null;
           setSelectedProduct(found);
           setSelectedCategory(target.category);
+          setSelectedBrand(target.brand);
           setCurrentView('product');
         } else {
           pendingProductIdRef.current = target.productId;
           setSelectedProduct(null);
           setSelectedCategory(target.category);
+          setSelectedBrand(target.brand);
           setCurrentView('product');
         }
       } else {
         pendingProductIdRef.current = null;
         setSelectedCategory(target.category);
+        setSelectedBrand(target.brand);
         setCurrentView(target.view);
       }
     };
@@ -531,6 +621,7 @@ export default function App() {
         overlay: true,
         view: currentViewRef.current,
         category: selectedCategoryRef.current,
+        brand: selectedBrandRef.current,
         productId: selectedProductRef.current?.id || null,
       };
       try {
@@ -540,7 +631,8 @@ export default function App() {
           buildLocationHash(
             currentViewRef.current,
             selectedCategoryRef.current,
-            selectedProductRef.current?.id || null
+            selectedProductRef.current?.id || null,
+            selectedBrandRef.current
           )
         );
         overlayPushedRef.current = true;
@@ -629,11 +721,12 @@ export default function App() {
     } catch (err) {
       siteConfigRef.current = prevCfg;
       setSiteConfig(prevCfg);
-      showAdminToast('تعذر حفظ التعديل في السحابة — تأكد من الاتصال وصلاحية المالك');
+      showAdminToast(formatCloudError(err, 'تعذر حفظ التعديل في السحابة'));
       throw err;
     }
   };
 
+  // Dedicated lightweight layout toggles -> saved to /siteLayout/main (instant & immune to siteConfig size)
   const handleToggleSiteBlock = async (
     field:
       | 'hideHero'
@@ -644,49 +737,185 @@ export default function App() {
       | 'hideCategoriesSection'
       | 'hideProductsSection'
   ) => {
-    const prevCfg = siteConfigRef.current;
-    const nextValue = !Boolean(prevCfg[field]);
-    const nextCfg: SiteConfig = { ...prevCfg, [field]: nextValue };
-    siteConfigRef.current = nextCfg;
-    setSiteConfig(nextCfg);
+    const prevLayout = siteLayoutRef.current;
+    const currentVal =
+      prevLayout[field] !== undefined ? Boolean(prevLayout[field]) : Boolean(siteConfigRef.current[field]);
+    const nextValue = !currentVal;
+    const nextLayout: SiteLayoutConfig = {
+      ...prevLayout,
+      [field]: nextValue,
+    };
+    siteLayoutRef.current = nextLayout;
+    setSiteLayout(nextLayout);
     try {
-      await saveSiteConfigToCloud(nextCfg);
-      showAdminToast(nextValue ? 'تم إخفاء هذا المربع عن الزوار' : 'تم إظهار هذا المربع مجدداً');
+      await saveSiteLayoutToCloud(nextLayout);
+      showAdminToast(nextValue ? 'تم إخفاء هذا القسم عن الزوار' : 'تم إظهار هذا القسم مجدداً');
     } catch (err) {
       console.error('Failed to toggle site block:', err);
-      siteConfigRef.current = prevCfg;
-      setSiteConfig(prevCfg);
-      showAdminToast('تعذر حفظ الإخفاء في السحابة — تأكد من الاتصال وصلاحية المالك');
+      siteLayoutRef.current = prevLayout;
+      setSiteLayout(prevLayout);
+      showAdminToast(formatCloudError(err, 'تعذر حفظ الإخفاء في السحابة'));
     }
   };
 
-  const handleToggleCategoryHide = async (catId: string, isCustom: boolean) => {
-    const prevCfg = siteConfigRef.current;
-    let nextCfg: SiteConfig;
-    if (isCustom) {
-      const updated = (prevCfg.customCategories || []).map((c) =>
-        c.id === catId ? { ...c, hidden: !c.hidden } : c
-      );
-      nextCfg = { ...prevCfg, customCategories: updated };
-    } else {
-      const current = new Set(prevCfg.hiddenCategories || []);
-      if (current.has(catId)) {
-        current.delete(catId);
-      } else {
-        current.add(catId);
+  // Dedicated Categories CRUD -> saved to /storeCategories/{categoryId}
+  const handleAdminSaveCategory = async (cat: StoreCategoryItem) => {
+    const existingIdx = cloudCategories.findIndex((c) => c.id === cat.id);
+    const order = existingIdx >= 0 ? existingIdx : cloudCategories.length;
+    await saveStoreCategoryToCloud({ ...cat, isCustom: true }, order);
+    showAdminToast('تم حفظ القسم الجديد وتحديث القوائم فوراً');
+  };
+
+  const handleAdminDeleteCategory = async (categoryId: string) => {
+    await deleteStoreCategoryFromCloud(categoryId);
+    // Clean legacy siteConfig.customCategories entry if it existed there too
+    const legacyList = siteConfigRef.current.customCategories || [];
+    if (legacyList.some((c) => c.id === categoryId)) {
+      const cleanedCfg: SiteConfig = {
+        ...siteConfigRef.current,
+        customCategories: legacyList.filter((c) => c.id !== categoryId),
+      };
+      siteConfigRef.current = cleanedCfg;
+      setSiteConfig(cleanedCfg);
+      try {
+        await saveSiteConfigToCloud(cleanedCfg);
+      } catch {
+        // non-blocking cleanup
       }
-      nextCfg = { ...prevCfg, hiddenCategories: Array.from(current) };
     }
-    siteConfigRef.current = nextCfg;
-    setSiteConfig(nextCfg);
+    showAdminToast('تم حذف القسم نهائياً من المتجر');
+  };
+
+  const handleToggleCategoryHide = async (catId: string, isCustom: boolean) => {
+    if (isCustom) {
+      const target = allStoreCategories.find((c) => c.id === catId);
+      if (!target) return;
+      const existingIdx = cloudCategories.findIndex((c) => c.id === catId);
+      const order = existingIdx >= 0 ? existingIdx : cloudCategories.length;
+      try {
+        await saveStoreCategoryToCloud(
+          { ...target, hidden: !target.hidden, isCustom: true },
+          order
+        );
+        showAdminToast(!target.hidden ? 'تم إخفاء القسم عن الزوار' : 'تم إظهار القسم للزوار');
+      } catch (err) {
+        console.error('Failed to toggle custom category visibility:', err);
+        showAdminToast(formatCloudError(err, 'تعذر حفظ تعديل القسم'));
+      }
+      return;
+    }
+
+    // Built-in category hide toggle -> saved to lightweight /siteLayout/main
+    const prevLayout = siteLayoutRef.current;
+    const baseHidden =
+      prevLayout.hiddenCategories && prevLayout.hiddenCategories.length > 0
+        ? prevLayout.hiddenCategories
+        : siteConfigRef.current.hiddenCategories || [];
+    const current = new Set(baseHidden);
+    const willHide = !current.has(catId);
+    if (willHide) {
+      current.add(catId);
+    } else {
+      current.delete(catId);
+    }
+    const nextLayout: SiteLayoutConfig = {
+      ...prevLayout,
+      hiddenCategories: Array.from(current),
+    };
+    siteLayoutRef.current = nextLayout;
+    setSiteLayout(nextLayout);
     try {
-      await saveSiteConfigToCloud(nextCfg);
-      showAdminToast('تم تحديث ظهور القسم في المتجر');
+      await saveSiteLayoutToCloud(nextLayout);
+      showAdminToast(willHide ? 'تم إخفاء القسم عن الزوار' : 'تم إظهار القسم مجدداً');
     } catch (err) {
-      console.error('Failed to toggle category visibility:', err);
-      siteConfigRef.current = prevCfg;
-      setSiteConfig(prevCfg);
-      showAdminToast('تعذر حفظ تعديل القسم في السحابة — تأكد من الاتصال وصلاحية المالك');
+      console.error('Failed to toggle built-in category visibility:', err);
+      siteLayoutRef.current = prevLayout;
+      setSiteLayout(prevLayout);
+      showAdminToast(formatCloudError(err, 'تعذر حفظ تعديل القسم'));
+    }
+  };
+
+  // Dedicated Brands CRUD -> saved to /storeBrands/{brandId} + /siteLayout/main
+  const handleAdminSaveBrand = async (brand: StoreBrandItem) => {
+    const existingIdx = cloudBrands.findIndex((b) => b.id === brand.id);
+    const order = existingIdx >= 0 ? existingIdx : cloudBrands.length;
+    await saveStoreBrandToCloud(brand, order);
+    // If re-adding or editing a previously deleted built-in brand, un-delete it in siteLayout
+    if (siteLayoutRef.current.deletedBrands.includes(brand.id)) {
+      const nextLayout: SiteLayoutConfig = {
+        ...siteLayoutRef.current,
+        deletedBrands: siteLayoutRef.current.deletedBrands.filter((id) => id !== brand.id),
+      };
+      siteLayoutRef.current = nextLayout;
+      setSiteLayout(nextLayout);
+      await saveSiteLayoutToCloud(nextLayout);
+    }
+    showAdminToast('تم حفظ العلامة التجارية وتحديث القوائم فوراً');
+  };
+
+  const handleToggleBrandHide = async (brand: StoreBrandItem) => {
+    const inCloud = cloudBrands.findIndex((b) => b.id === brand.id);
+    if (inCloud >= 0 || brand.isCustom) {
+      const order = inCloud >= 0 ? inCloud : cloudBrands.length;
+      try {
+        await saveStoreBrandToCloud({ ...brand, hidden: !brand.hidden }, order);
+        showAdminToast(!brand.hidden ? 'تم إخفاء العلامة التجارية' : 'تم إظهار العلامة التجارية');
+      } catch (err) {
+        console.error('Failed to toggle custom brand visibility:', err);
+        showAdminToast(formatCloudError(err, 'تعذر حفظ تعديل العلامة التجارية'));
+      }
+      return;
+    }
+
+    const prevLayout = siteLayoutRef.current;
+    const current = new Set(prevLayout.hiddenBrands || []);
+    const willHide = !current.has(brand.id);
+    if (willHide) {
+      current.add(brand.id);
+    } else {
+      current.delete(brand.id);
+    }
+    const nextLayout: SiteLayoutConfig = {
+      ...prevLayout,
+      hiddenBrands: Array.from(current),
+    };
+    siteLayoutRef.current = nextLayout;
+    setSiteLayout(nextLayout);
+    try {
+      await saveSiteLayoutToCloud(nextLayout);
+      showAdminToast(willHide ? 'تم إخفاء العلامة التجارية' : 'تم إظهار العلامة التجارية');
+    } catch (err) {
+      console.error('Failed to toggle built-in brand visibility:', err);
+      siteLayoutRef.current = prevLayout;
+      setSiteLayout(prevLayout);
+      showAdminToast(formatCloudError(err, 'تعذر حفظ تعديل العلامة التجارية'));
+    }
+  };
+
+  const handleAdminDeleteBrand = async (brand: StoreBrandItem) => {
+    const prevLayout = siteLayoutRef.current;
+    try {
+      if (BUILTIN_BRAND_IDS.has(brand.id)) {
+        const nextDeleted = Array.from(new Set([...(prevLayout.deletedBrands || []), brand.id]));
+        const nextLayout: SiteLayoutConfig = {
+          ...prevLayout,
+          deletedBrands: nextDeleted,
+          hiddenBrands: (prevLayout.hiddenBrands || []).filter((id) => id !== brand.id),
+        };
+        siteLayoutRef.current = nextLayout;
+        setSiteLayout(nextLayout);
+        await saveSiteLayoutToCloud(nextLayout);
+      }
+      if (cloudBrands.some((b) => b.id === brand.id) || brand.isCustom) {
+        await deleteStoreBrandFromCloud(brand.id);
+      }
+      showAdminToast('تم حذف العلامة التجارية من المتجر');
+    } catch (err) {
+      console.error('Failed to delete brand:', err);
+      siteLayoutRef.current = prevLayout;
+      setSiteLayout(prevLayout);
+      showAdminToast(formatCloudError(err, 'تعذر حذف العلامة التجارية'));
+      throw err;
     }
   };
 
@@ -803,7 +1032,13 @@ export default function App() {
 
   const handleSelectCategory = (catId: CategoryId) => {
     soundFX.playWhoosh();
-    navigateTo('shop', { category: catId });
+    navigateTo('shop', { category: catId, brand: '' });
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  };
+
+  const handleSelectBrand = (brandName: string) => {
+    soundFX.playWhoosh();
+    navigateTo('shop', { category: 'all', brand: brandName });
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
@@ -842,7 +1077,10 @@ export default function App() {
       <Header
         currentView={currentView}
         setCurrentView={(view) => {
-          navigateTo(view, { category: view === 'shop' ? 'all' : selectedCategory });
+          navigateTo(view, {
+            category: view === 'shop' ? 'all' : selectedCategory,
+            brand: view === 'shop' ? '' : selectedBrand,
+          });
         }}
         selectedCategory={selectedCategory}
         onSelectCategory={handleSelectCategory}
@@ -864,7 +1102,8 @@ export default function App() {
         setCurrency={setCurrency}
         onOpenSearch={() => setSearchOpen(true)}
         onOpenAuth={() => setAuthOpen(true)}
-        siteConfig={siteConfig}
+        siteConfig={effectiveSiteConfig}
+        categories={visibleStoreCategories}
         isAdminMode={isAdminMode}
         onAdminEditStore={() => setEditingSection({ type: 'storeSettings' })}
       />
@@ -909,22 +1148,29 @@ export default function App() {
               language={language}
               currency={currency}
               onExplore={(cat) => {
-                navigateTo('shop', { category: cat || 'all' });
+                navigateTo('shop', { category: cat || 'all', brand: '' });
               }}
               onSelectProduct={handleSelectProduct}
               slides={heroSlides}
-              siteConfig={siteConfig}
+              siteConfig={effectiveSiteConfig}
               isAdminMode={isAdminMode}
               onAdminEditSection={(target) => setEditingSection(target)}
               onToggleBlockHide={(field) => handleToggleSiteBlock(field)}
             />
 
-            {/* Section 2: Trust Pillars + Authorized Brands Ribbon */}
+            {/* Section 2: Trust Pillars + Interactive Managed Brands Strip */}
             <BrandTicker
               language={language}
-              siteConfig={siteConfig}
+              siteConfig={effectiveSiteConfig}
+              brands={visibleStoreBrands}
+              products={displayableProducts}
+              selectedBrand={selectedBrand}
+              onSelectBrand={handleSelectBrand}
               isAdminMode={isAdminMode}
               onToggleBlockHide={(field) => handleToggleSiteBlock(field)}
+              onAdminEditSection={(target) => setEditingSection(target)}
+              onToggleBrandHide={handleToggleBrandHide}
+              onDeleteBrand={handleAdminDeleteBrand}
             />
 
             {/* Section 3: Curated Liquid Glass Categories (Swipeable + Admin Add Category) */}
@@ -932,8 +1178,9 @@ export default function App() {
               language={language}
               onSelectCategory={handleSelectCategory}
               selectedCategory={selectedCategory}
-              siteConfig={siteConfig}
-              products={products}
+              siteConfig={effectiveSiteConfig}
+              categories={visibleStoreCategories}
+              products={displayableProducts}
               isAdminMode={isAdminMode}
               onAdminEditSection={(target) => setEditingSection(target)}
               onToggleSectionHide={() => handleToggleSiteBlock('hideCategoriesSection')}
@@ -941,7 +1188,7 @@ export default function App() {
             />
 
             {/* Section 4: Featured & Best-Selling Products Grid */}
-            {siteConfig.hideProductsSection && !isAdminMode ? null : siteConfig.hideProductsSection &&
+            {effectiveSiteConfig.hideProductsSection && !isAdminMode ? null : effectiveSiteConfig.hideProductsSection &&
               isAdminMode ? (
               <section className="py-4 px-3 sm:px-5">
                 <div className="container mx-auto max-w-7xl">
@@ -1147,7 +1394,11 @@ export default function App() {
             onToggleCompare={handleToggleCompare}
             initialCategory={selectedCategory}
             onCategoryChange={(cat) => navigateTo('shop', { category: cat })}
-            siteConfig={siteConfig}
+            initialBrand={selectedBrand}
+            onBrandChange={(brand) => navigateTo('shop', { brand })}
+            categories={visibleStoreCategories}
+            brands={visibleStoreBrands}
+            siteConfig={effectiveSiteConfig}
             isAdminMode={isAdminMode}
             onAdminEditProduct={(p) => {
               setIsCloningProduct(false);
@@ -1415,6 +1666,7 @@ export default function App() {
             isClone={isCloningProduct}
             defaultCategory={newProductDefaultCat}
             categories={allStoreCategories}
+            brands={allStoreBrands}
             onClose={() => {
               setIsCloningProduct(false);
               setEditingProduct(undefined);
@@ -1425,12 +1677,16 @@ export default function App() {
 
           <VisualSectionEditorModal
             target={editingSection}
-            siteConfig={siteConfig}
+            siteConfig={effectiveSiteConfig}
             heroSlides={heroSlides}
             onClose={() => setEditingSection(null)}
             onSaveSiteConfig={handleAdminSaveSiteConfig}
             onSaveHeroSlide={handleAdminSaveHeroSlide}
             onDeleteHeroSlide={handleAdminDeleteHeroSlide}
+            onSaveCategory={handleAdminSaveCategory}
+            onDeleteCategory={handleAdminDeleteCategory}
+            onSaveBrand={handleAdminSaveBrand}
+            onDeleteBrand={handleAdminDeleteBrand}
           />
         </>
       )}
@@ -1441,9 +1697,9 @@ export default function App() {
           language={language}
           onSelectCategory={handleSelectCategory}
           onNavigate={(view) => {
-            navigateTo(view, { category: view === 'shop' ? 'all' : selectedCategory });
+            navigateTo(view, { category: view === 'shop' ? 'all' : selectedCategory, brand: '' });
           }}
-          siteConfig={siteConfig}
+          siteConfig={effectiveSiteConfig}
           isAdminMode={isAdminMode}
           onAdminEditStore={() => setEditingSection({ type: 'storeSettings' })}
           onTriggerHiddenAdmin={handleTriggerHiddenAdmin}

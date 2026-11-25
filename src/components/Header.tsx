@@ -16,7 +16,7 @@ import {
   ShieldCheck,
   Pencil,
 } from 'lucide-react';
-import { PageView, Language, Currency, CategoryId } from '../types';
+import { PageView, Language, Currency, CategoryId, StoreCategoryItem } from '../types';
 import { formatPrice } from '../data/mockData';
 import { soundFX } from '../utils/audioEffects';
 import { SiteConfig, DEFAULT_SITE_CONFIG, getStoreCategories } from '../services/firestoreService';
@@ -39,6 +39,7 @@ interface HeaderProps {
   onOpenSearch: () => void;
   onOpenAuth: () => void;
   siteConfig?: SiteConfig;
+  categories?: StoreCategoryItem[];
   isAdminMode?: boolean;
   onAdminEditStore?: () => void;
 }
@@ -58,6 +59,7 @@ export default function Header({
   currency,
   onOpenSearch,
   siteConfig = DEFAULT_SITE_CONFIG,
+  categories,
   isAdminMode = false,
   onAdminEditStore,
 }: HeaderProps) {
@@ -89,12 +91,15 @@ export default function Header({
     cables: <Cable className="w-4 h-4" />,
   };
 
-  const categoryLinks = getStoreCategories(siteConfig, false).map((cat) => ({
-    id: cat.id,
-    nameEn: cat.nameEn,
-    nameAr: cat.nameAr,
-    icon: iconMap[cat.id] || <Smartphone className="w-4 h-4" />,
-  }));
+  const sourceCategories = categories ?? getStoreCategories(siteConfig, false);
+  const categoryLinks = sourceCategories
+    .filter((c) => !c.hidden)
+    .map((cat) => ({
+      id: cat.id,
+      nameEn: cat.nameEn,
+      nameAr: cat.nameAr,
+      icon: iconMap[cat.id] || <Smartphone className="w-4 h-4" />,
+    }));
 
   return (
     <header className={`sticky top-0 ${mobileMenuOpen ? 'z-[9999]' : 'z-40'} px-3 sm:px-5 pt-2.5 pb-1.5 transition-all`}>
