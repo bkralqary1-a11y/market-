@@ -1,4 +1,4 @@
-import { useState, useEffect, type FormEvent } from 'react';
+import { useState, useEffect, useRef, type FormEvent, type TouchEvent } from 'react';
 import {
   Star,
   ShoppingBag,
@@ -6,6 +6,8 @@ import {
   Check,
   ArrowRight,
   ArrowLeft,
+  ChevronLeft,
+  ChevronRight,
   SlidersHorizontal,
   Zap,
   Cpu,
@@ -14,6 +16,8 @@ import {
   ExternalLink,
   Image as ImageIcon,
   Smartphone,
+  Link2,
+  Share2,
 } from 'lucide-react';
 import { Product, Language, Currency, Review } from '../types';
 import { formatPrice } from '../data/mockData';
@@ -21,6 +25,11 @@ import { triggerFlyToCart } from './FlyingCartAnimation';
 import ProductCard from './ProductCard';
 import { getYouTubeId, getYouTubeEmbedUrl } from '../utils/videoUtils';
 import { sanitizeSafeHttpUrl } from '../utils/urlSecurity';
+import {
+  getProductShareUrl,
+  copyTextToClipboard,
+  shareOrCopyProductLink,
+} from '../utils/productLinks';
 
 interface ProductDetailViewProps {
   product: Product;
@@ -83,7 +92,50 @@ export default function ProductDetailView({
   const [newReviewRating, setNewReviewRating] = useState(5);
   const [reviewSubmitted, setReviewSubmitted] = useState(false);
   const [addedAlert, setAddedAlert] = useState(false);
+  const [linkCopied, setLinkCopied] = useState(false);
   const [mediaMode, setMediaMode] = useState<'photo' | 'video'>('photo');
+  const touchStartXRef = useRef<number | null>(null);
+
+  const handleCopyLink = async () => {
+    const ok = await copyTextToClipboard(getProductShareUrl(product.id));
+    if (ok) {
+      setLinkCopied(true);
+      setTimeout(() => setLinkCopied(false), 2400);
+    }
+  };
+
+  const handleShareProduct = async () => {
+    const result = await shareOrCopyProductLink(product);
+    if (result === 'copied') {
+      setLinkCopied(true);
+      setTimeout(() => setLinkCopied(false), 2400);
+    }
+  };
+
+  const activeImageIndex = Math.max(0, validImages.indexOf(activeImage));
+
+  const handleStepImage = (delta: number) => {
+    if (validImages.length <= 1) return;
+    const nextIdx = (activeImageIndex + delta + validImages.length) % validImages.length;
+    setActiveImage(validImages[nextIdx]);
+    setImgFailed(false);
+    setMediaMode('photo');
+  };
+
+  const handleStageTouchStart = (e: TouchEvent<HTMLDivElement>) => {
+    if (mediaMode !== 'photo' || validImages.length <= 1) return;
+    touchStartXRef.current = e.touches[0]?.clientX ?? null;
+  };
+
+  const handleStageTouchEnd = (e: TouchEvent<HTMLDivElement>) => {
+    if (touchStartXRef.current === null || mediaMode !== 'photo' || validImages.length <= 1) return;
+    const endX = e.changedTouches[0]?.clientX ?? touchStartXRef.current;
+    const diff = endX - touchStartXRef.current;
+    touchStartXRef.current = null;
+    if (Math.abs(diff) > 36) {
+      handleStepImage(diff > 0 ? -1 : 1);
+    }
+  };
 
   useEffect(() => {
     const imgs = (product.images || []).filter((u) => Boolean(u?.trim()));
@@ -167,8 +219,8 @@ export default function ProductDetailView({
   return (
     <div id="product-detail-page" className="py-8 sm:py-10 pb-24 lg:pb-12 min-h-screen">
       <div className="container mx-auto px-4 max-w-6xl">
-        {/* Back Navigation Bar */}
-        <div className="flex items-center justify-between mb-6 pb-3 border-b border-white/60 text-xs font-bold text-slate-600">
+        {/* Back Navigation Bar & Direct Product Share Link */}
+        <div className="flex flex-wrap items-center justify-between gap-2 mb-6 pb-3 border-b border-white/60 text-xs font-bold text-slate-600">
           <button
             onClick={onBack}
             className="flex items-center gap-1.5 hover:text-[#0071e3] transition-colors cursor-pointer"
@@ -177,7 +229,31 @@ export default function ProductDetailView({
             <span>{isAr ? 'العودة للمتجر والكتالوج' : 'Back to Catalog'}</span>
           </button>
 
-          {hasSku && <span className="font-mono text-slate-500">SKU: {product.sku}</span>}
+          <div className="flex items-center gap-2">
+            {hasSku && <span className="font-mono text-slate-500 hidden sm:inline">SKU: {product.sku}</span>}
+            <button
+              type="button"
+              onClick={handleCopyLink}
+              className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl border text-[11px] font-extrabold transition-all cursor-pointer ${
+                linkCopied
+                  ? 'bg-emerald-50 border-emerald-300 text-emerald-700'
+                  : 'bg-white/75 border-white/90 text-slate-700 hover:text-[#0071e3] hover:bg-white'
+              }`}
+              title={isAr ? 'نسخ الرابط المباشر لهذا المنتج' : 'Copy direct product link'}
+            >
+              {linkCopied ? <Check className="w-3.5 h-3.5 text-emerald-600" /> : <Link2 className="w-3.5 h-3.5" />}
+              <span>{linkCopied ? (isAr ? 'تم نسخ الرابط ✓' : 'Link Copied ✓') : isAr ? 'نسخ رابط المنتج' : 'Copy Link'}</span>
+            </button>
+            <button
+              type="button"
+              onClick={handleShareProduct}
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-white/75 hover:bg-white border border-white/90 text-slate-700 hover:text-[#0071e3] text-[11px] font-extrabold transition-all cursor-pointer"
+              title={isAr ? 'مشاركة رابط المنتج' : 'Share product link'}
+            >
+              <Share2 className="w-3.5 h-3.5" />
+              <span className="hidden sm:inline">{isAr ? 'مشاركة' : 'Share'}</span>
+            </button>
+          </div>
         </div>
 
         {/* Main Liquid Glass Product Showcase */}
@@ -217,8 +293,12 @@ export default function ProductDetailView({
                 </div>
               )}
 
-              {/* Image Stage */}
-              <div className="aspect-square liquid-glass-subtle rounded-[26px] overflow-hidden relative p-4 group flex items-center justify-center">
+              {/* Image Stage (Supports touch swipe & prev/next across all product photos) */}
+              <div
+                onTouchStart={handleStageTouchStart}
+                onTouchEnd={handleStageTouchEnd}
+                className="aspect-square liquid-glass-subtle rounded-[26px] overflow-hidden relative p-4 group flex items-center justify-center"
+              >
                 {mediaMode === 'photo' ? (
                   <>
                     {!imgFailed && activeImage?.trim() ? (
@@ -235,6 +315,30 @@ export default function ProductDetailView({
                         <Smartphone className="w-16 h-16 opacity-60" />
                         {hasBrand && <span className="text-xs font-bold">{product.brand}</span>}
                       </div>
+                    )}
+
+                    {validImages.length > 1 && (
+                      <>
+                        <button
+                          type="button"
+                          onClick={() => handleStepImage(-1)}
+                          aria-label={isAr ? 'الصورة السابقة' : 'Previous photo'}
+                          className="absolute right-3 top-1/2 -translate-y-1/2 z-10 w-9 h-9 rounded-full liquid-glass-strong text-[#0b1220] hover:text-[#0071e3] flex items-center justify-center shadow-md cursor-pointer transition-transform active:scale-95"
+                        >
+                          <ChevronRight className="w-5 h-5" />
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => handleStepImage(1)}
+                          aria-label={isAr ? 'الصورة التالية' : 'Next photo'}
+                          className="absolute left-3 top-1/2 -translate-y-1/2 z-10 w-9 h-9 rounded-full liquid-glass-strong text-[#0b1220] hover:text-[#0071e3] flex items-center justify-center shadow-md cursor-pointer transition-transform active:scale-95"
+                        >
+                          <ChevronLeft className="w-5 h-5" />
+                        </button>
+                        <span className="absolute bottom-6 left-1/2 -translate-x-1/2 z-10 px-2.5 py-1 rounded-full bg-slate-900/70 backdrop-blur-md text-white text-[11px] font-extrabold tabular-nums">
+                          {activeImageIndex + 1} / {validImages.length}
+                        </span>
+                      </>
                     )}
                   </>
                 ) : (

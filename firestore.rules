@@ -73,25 +73,9 @@ service cloud.firestore {
         (listVal.size() == 0 || listVal[0] is map);
     }
 
-    // --- Validation Blueprints ---
-    function isValidProduct(data, productId) {
-      return data.keys().hasAll([
-          'id', 'sku', 'name', 'nameAr', 'brand', 'price', 'category',
-          'categoryNameEn', 'categoryNameAr', 'image', 'images', 'rating',
-          'reviewsCount', 'description', 'descriptionAr', 'inStock',
-          'fastShipping', 'warrantyYears', 'colors', 'variants', 'specs',
-          'hidden', 'createdAt', 'updatedAt'
-        ]) &&
-        data.keys().hasOnly([
-          'id', 'sku', 'name', 'nameAr', 'brand', 'price', 'originalPrice',
-          'discountPercentage', 'category', 'categoryNameEn', 'categoryNameAr',
-          'image', 'images', 'rating', 'reviewsCount', 'description',
-          'descriptionAr', 'inStock', 'stock', 'fastShipping', 'warrantyYears',
-          'isTrending', 'isPopular', 'isFeatured', 'colors', 'colorNamesAr',
-          'variants', 'specs', 'tag', 'tagAr', 'videoUrl', 'hidden',
-          'createdAt', 'updatedAt'
-        ]) &&
-        data.id == productId &&
+    // --- Validation Blueprints (Modularized to stay well under CEL AST depth limits) ---
+    function isValidProductCore(data, productId) {
+      return data.id == productId &&
         isValidId(data.id) &&
         isValidString(data.sku, 0, 64) &&
         isValidString(data.name, 0, 200) &&
@@ -102,8 +86,11 @@ service cloud.firestore {
         isValidOptionalNumber(data, 'discountPercentage') &&
         isValidId(data.category) &&
         isValidString(data.categoryNameEn, 0, 80) &&
-        isValidString(data.categoryNameAr, 0, 80) &&
-        isValidString(data.image, 0, 450000) &&
+        isValidString(data.categoryNameAr, 0, 80);
+    }
+
+    function isValidProductMediaAndMeta(data) {
+      return isValidString(data.image, 0, 450000) &&
         isValidImageList(data.images, 8) &&
         data.rating is number && data.rating >= 0 && data.rating <= 5 &&
         data.reviewsCount is number && data.reviewsCount >= 0 &&
@@ -112,8 +99,11 @@ service cloud.firestore {
         data.inStock is bool &&
         isValidOptionalNumber(data, 'stock') &&
         data.fastShipping is bool &&
-        data.warrantyYears is number && data.warrantyYears >= 0 && data.warrantyYears <= 10 &&
-        isValidOptionalBool(data, 'isTrending') &&
+        data.warrantyYears is number && data.warrantyYears >= 0 && data.warrantyYears <= 10;
+    }
+
+    function isValidProductOptions(data) {
+      return isValidOptionalBool(data, 'isTrending') &&
         isValidOptionalBool(data, 'isPopular') &&
         isValidOptionalBool(data, 'isFeatured') &&
         isValidStringList(data.colors, 12) &&
@@ -134,6 +124,54 @@ service cloud.firestore {
         data.updatedAt is timestamp;
     }
 
+    function isValidProduct(data, productId) {
+      return data.keys().hasAll([
+          'id', 'sku', 'name', 'nameAr', 'brand', 'price', 'category',
+          'categoryNameEn', 'categoryNameAr', 'image', 'images', 'rating',
+          'reviewsCount', 'description', 'descriptionAr', 'inStock',
+          'fastShipping', 'warrantyYears', 'colors', 'variants', 'specs',
+          'hidden', 'createdAt', 'updatedAt'
+        ]) &&
+        data.keys().hasOnly([
+          'id', 'sku', 'name', 'nameAr', 'brand', 'price', 'originalPrice',
+          'discountPercentage', 'category', 'categoryNameEn', 'categoryNameAr',
+          'image', 'images', 'rating', 'reviewsCount', 'description',
+          'descriptionAr', 'inStock', 'stock', 'fastShipping', 'warrantyYears',
+          'isTrending', 'isPopular', 'isFeatured', 'colors', 'colorNamesAr',
+          'variants', 'specs', 'tag', 'tagAr', 'videoUrl', 'hidden',
+          'createdAt', 'updatedAt'
+        ]) &&
+        isValidProductCore(data, productId) &&
+        isValidProductMediaAndMeta(data) &&
+        isValidProductOptions(data);
+    }
+
+    function isValidHeroSlideCore(data, slideId) {
+      return data.id == slideId &&
+        isValidId(data.id) &&
+        isValidString(data.badgeAr, 0, 160) &&
+        isValidOptionalString(data, 'badgeEn', 160) &&
+        isValidString(data.titleAr, 1, 200) &&
+        isValidOptionalString(data, 'titleEn', 200) &&
+        isValidString(data.subtitleAr, 0, 500) &&
+        isValidOptionalString(data, 'subtitleEn', 500) &&
+        data.mediaType in ['image', 'video'] &&
+        isValidString(data.imageUrl, 0, 450000);
+    }
+
+    function isValidHeroSlideMeta(data) {
+      return isValidOptionalString(data, 'videoUrl', 1500) &&
+        isValidOptionalString(data, 'buttonTextAr', 80) &&
+        isValidOptionalString(data, 'buttonTextEn', 80) &&
+        isValidOptionalString(data, 'featureBadge1Ar', 100) &&
+        isValidOptionalString(data, 'featureBadge2Ar', 100) &&
+        isValidOptionalString(data, 'whatsappCustomTextAr', 300) &&
+        data.order is number && data.order >= 0 && data.order <= 100 &&
+        data.enabled is bool &&
+        data.createdAt is timestamp &&
+        data.updatedAt is timestamp;
+    }
+
     function isValidHeroSlide(data, slideId) {
       return data.keys().hasAll([
           'id', 'badgeAr', 'titleAr', 'subtitleAr', 'mediaType',
@@ -145,25 +183,62 @@ service cloud.firestore {
           'buttonTextEn', 'featureBadge1Ar', 'featureBadge2Ar',
           'whatsappCustomTextAr', 'order', 'enabled', 'createdAt', 'updatedAt'
         ]) &&
-        data.id == slideId &&
-        isValidId(data.id) &&
-        isValidString(data.badgeAr, 0, 160) &&
-        isValidOptionalString(data, 'badgeEn', 160) &&
-        isValidString(data.titleAr, 1, 200) &&
-        isValidOptionalString(data, 'titleEn', 200) &&
-        isValidString(data.subtitleAr, 0, 500) &&
-        isValidOptionalString(data, 'subtitleEn', 500) &&
-        data.mediaType in ['image', 'video'] &&
-        isValidString(data.imageUrl, 0, 450000) &&
-        isValidOptionalString(data, 'videoUrl', 1500) &&
-        isValidOptionalString(data, 'buttonTextAr', 80) &&
-        isValidOptionalString(data, 'buttonTextEn', 80) &&
-        isValidOptionalString(data, 'featureBadge1Ar', 100) &&
-        isValidOptionalString(data, 'featureBadge2Ar', 100) &&
-        isValidOptionalString(data, 'whatsappCustomTextAr', 300) &&
-        data.order is number && data.order >= 0 && data.order <= 100 &&
-        data.enabled is bool &&
-        data.createdAt is timestamp &&
+        isValidHeroSlideCore(data, slideId) &&
+        isValidHeroSlideMeta(data);
+    }
+
+    function isValidSiteConfigCore(data) {
+      return isValidString(data.storeNameAr, 1, 120) &&
+        isValidString(data.storeNameEn, 0, 120) &&
+        isValidString(data.taglineAr, 0, 200) &&
+        isValidString(data.taglineEn, 0, 200) &&
+        isValidString(data.addressAr, 0, 300) &&
+        isValidString(data.addressEn, 0, 300) &&
+        isValidString(data.whatsappPrimary, 0, 30) &&
+        isValidString(data.whatsappSecondary, 0, 30) &&
+        isValidString(data.phoneTertiary, 0, 30) &&
+        data.bannerEnabled is bool &&
+        isValidString(data.bannerTextAr, 0, 300) &&
+        isValidString(data.bannerTextEn, 0, 300) &&
+        isValidString(data.promoCode, 0, 40);
+    }
+
+    function isValidSiteConfigVisuals(data) {
+      return isValidString(data.bento1BadgeAr, 0, 120) &&
+        isValidString(data.bento1TitleAr, 0, 160) &&
+        isValidString(data.bento1DescAr, 0, 300) &&
+        isValidString(data.bento2BadgeAr, 0, 120) &&
+        isValidString(data.bento2TitleAr, 0, 160) &&
+        isValidString(data.bento2DescAr, 0, 300) &&
+        isValidString(data.catPhonesImg, 0, 300000) &&
+        isValidString(data.catAudioImg, 0, 300000) &&
+        isValidString(data.catCasesImg, 0, 300000) &&
+        isValidString(data.catChargersImg, 0, 300000) &&
+        isValidString(data.catCablesImg, 0, 300000);
+    }
+
+    function isValidSiteConfigLabels(data) {
+      return isValidOptionalString(data, 'catPhonesNameAr', 80) &&
+        isValidOptionalString(data, 'catAudioNameAr', 80) &&
+        isValidOptionalString(data, 'catCasesNameAr', 80) &&
+        isValidOptionalString(data, 'catChargersNameAr', 80) &&
+        isValidOptionalString(data, 'catCablesNameAr', 80) &&
+        isValidOptionalString(data, 'categoriesSectionBadgeAr', 120) &&
+        isValidOptionalString(data, 'categoriesSectionTitleAr', 160) &&
+        isValidOptionalString(data, 'productsSectionBadgeAr', 120) &&
+        isValidOptionalString(data, 'productsSectionTitleAr', 160);
+    }
+
+    function isValidSiteConfigLayout(data) {
+      return isValidOptionalBool(data, 'hideHero') &&
+        isValidOptionalBool(data, 'hideBento1') &&
+        isValidOptionalBool(data, 'hideBento2') &&
+        isValidOptionalBool(data, 'hideTrustPillars') &&
+        isValidOptionalBool(data, 'hideBrandsBar') &&
+        isValidOptionalBool(data, 'hideCategoriesSection') &&
+        isValidOptionalBool(data, 'hideProductsSection') &&
+        (!('hiddenCategories' in data) || isValidStringList(data.hiddenCategories, 20)) &&
+        (!('customCategories' in data) || isValidCustomCategoryList(data.customCategories)) &&
         data.updatedAt is timestamp;
     }
 
@@ -195,49 +270,10 @@ service cloud.firestore {
           'hiddenCategories', 'customCategories',
           'updatedAt'
         ]) &&
-        isValidString(data.storeNameAr, 1, 120) &&
-        isValidString(data.storeNameEn, 0, 120) &&
-        isValidString(data.taglineAr, 0, 200) &&
-        isValidString(data.taglineEn, 0, 200) &&
-        isValidString(data.addressAr, 0, 300) &&
-        isValidString(data.addressEn, 0, 300) &&
-        isValidString(data.whatsappPrimary, 0, 30) &&
-        isValidString(data.whatsappSecondary, 0, 30) &&
-        isValidString(data.phoneTertiary, 0, 30) &&
-        data.bannerEnabled is bool &&
-        isValidString(data.bannerTextAr, 0, 300) &&
-        isValidString(data.bannerTextEn, 0, 300) &&
-        isValidString(data.promoCode, 0, 40) &&
-        isValidString(data.bento1BadgeAr, 0, 120) &&
-        isValidString(data.bento1TitleAr, 0, 160) &&
-        isValidString(data.bento1DescAr, 0, 300) &&
-        isValidString(data.bento2BadgeAr, 0, 120) &&
-        isValidString(data.bento2TitleAr, 0, 160) &&
-        isValidString(data.bento2DescAr, 0, 300) &&
-        isValidString(data.catPhonesImg, 0, 250000) &&
-        isValidString(data.catAudioImg, 0, 250000) &&
-        isValidString(data.catCasesImg, 0, 250000) &&
-        isValidString(data.catChargersImg, 0, 250000) &&
-        isValidString(data.catCablesImg, 0, 250000) &&
-        isValidOptionalString(data, 'catPhonesNameAr', 80) &&
-        isValidOptionalString(data, 'catAudioNameAr', 80) &&
-        isValidOptionalString(data, 'catCasesNameAr', 80) &&
-        isValidOptionalString(data, 'catChargersNameAr', 80) &&
-        isValidOptionalString(data, 'catCablesNameAr', 80) &&
-        isValidOptionalString(data, 'categoriesSectionBadgeAr', 120) &&
-        isValidOptionalString(data, 'categoriesSectionTitleAr', 160) &&
-        isValidOptionalString(data, 'productsSectionBadgeAr', 120) &&
-        isValidOptionalString(data, 'productsSectionTitleAr', 160) &&
-        isValidOptionalBool(data, 'hideHero') &&
-        isValidOptionalBool(data, 'hideBento1') &&
-        isValidOptionalBool(data, 'hideBento2') &&
-        isValidOptionalBool(data, 'hideTrustPillars') &&
-        isValidOptionalBool(data, 'hideBrandsBar') &&
-        isValidOptionalBool(data, 'hideCategoriesSection') &&
-        isValidOptionalBool(data, 'hideProductsSection') &&
-        (!('hiddenCategories' in data) || isValidStringList(data.hiddenCategories, 20)) &&
-        (!('customCategories' in data) || isValidCustomCategoryList(data.customCategories)) &&
-        data.updatedAt is timestamp;
+        isValidSiteConfigCore(data) &&
+        isValidSiteConfigVisuals(data) &&
+        isValidSiteConfigLabels(data) &&
+        isValidSiteConfigLayout(data);
     }
 
     // --- Collection 1: Public Storefront Products (Admin-Only Writes) ---
@@ -315,25 +351,7 @@ service cloud.firestore {
         configId == 'main' &&
         isValidSiteConfig(incoming()) &&
         incoming().updatedAt == request.time &&
-        incoming().diff(existing()).addedKeys().hasOnly([
-          'storeNameAr', 'storeNameEn', 'taglineAr', 'taglineEn',
-          'addressAr', 'addressEn', 'whatsappPrimary', 'whatsappSecondary',
-          'phoneTertiary', 'bannerEnabled', 'bannerTextAr', 'bannerTextEn',
-          'promoCode', 'bento1BadgeAr', 'bento1TitleAr', 'bento1DescAr',
-          'bento2BadgeAr', 'bento2TitleAr', 'bento2DescAr',
-          'catPhonesImg', 'catAudioImg', 'catCasesImg',
-          'catChargersImg', 'catCablesImg',
-          'catPhonesNameAr', 'catAudioNameAr', 'catCasesNameAr',
-          'catChargersNameAr', 'catCablesNameAr',
-          'categoriesSectionBadgeAr', 'categoriesSectionTitleAr',
-          'productsSectionBadgeAr', 'productsSectionTitleAr',
-          'hideHero', 'hideBento1', 'hideBento2',
-          'hideTrustPillars', 'hideBrandsBar',
-          'hideCategoriesSection', 'hideProductsSection',
-          'hiddenCategories', 'customCategories',
-          'updatedAt'
-        ]) &&
-        incoming().diff(existing()).changedKeys().hasOnly([
+        incoming().diff(existing()).affectedKeys().hasOnly([
           'storeNameAr', 'storeNameEn', 'taglineAr', 'taglineEn',
           'addressAr', 'addressEn', 'whatsappPrimary', 'whatsappSecondary',
           'phoneTertiary', 'bannerEnabled', 'bannerTextAr', 'bannerTextEn',

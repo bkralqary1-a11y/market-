@@ -202,8 +202,9 @@ export default function VisualSectionEditorModal({
           setSaving(false);
           return;
         }
-        const existing = cfg.customCategories || [];
-        if (existing.length >= 15) {
+        const latestBase = siteConfigRef.current;
+        const latestExisting = latestBase.customCategories || [];
+        if (latestExisting.length >= 15) {
           setErrorMsg('وصلت للحد الأقصى للأقسام الإضافية (15 قسماً).');
           setSaving(false);
           return;
@@ -215,8 +216,6 @@ export default function VisualSectionEditorModal({
           image: customCatDraft.image.trim(),
           hidden: Boolean(customCatDraft.hidden),
         };
-        const latestBase = siteConfigRef.current;
-        const latestExisting = latestBase.customCategories || [];
         await onSaveSiteConfig({
           ...latestBase,
           customCategories: [...latestExisting, nextCat],
@@ -272,8 +271,11 @@ export default function VisualSectionEditorModal({
     if (target.type !== 'editCustomCategory') return;
     setSaving(true);
     try {
-      const remaining = (cfg.customCategories || []).filter((c) => c.id !== target.categoryId);
-      await onSaveSiteConfig({ ...cfg, customCategories: remaining });
+      const latestBase = siteConfigRef.current;
+      const remaining = (latestBase.customCategories || []).filter(
+        (c) => c.id !== target.categoryId
+      );
+      await onSaveSiteConfig({ ...latestBase, customCategories: remaining });
       onClose();
     } catch {
       setErrorMsg('تعذر حذف القسم.');

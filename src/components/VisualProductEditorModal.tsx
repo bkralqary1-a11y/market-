@@ -16,10 +16,40 @@ import {
   CheckCircle2,
   Sparkles,
   Upload,
+  Star,
+  Link2,
+  Check,
 } from 'lucide-react';
 import { Product, CategoryId, StoreCategoryItem } from '../types';
 import { normalizeSafeId } from '../services/firestoreService';
-import { compressImageFileToDataUrl } from '../utils/imageUpload';
+import { compressImageFileToDataUrl, recompressDataUrlToBudget } from '../utils/imageUpload';
+import { getProductShareUrl, copyTextToClipboard } from '../utils/productLinks';
+
+const MAX_PRODUCT_IMAGES = 5;
+
+function getPerImageBudget(totalCount: number, isPrimary: boolean) {
+  if (totalCount <= 1) {
+    return { maxDimension: 1600, quality: 0.92, maxChars: 360000 };
+  }
+  if (totalCount === 2) {
+    return isPrimary
+      ? { maxDimension: 1450, quality: 0.9, maxChars: 280000 }
+      : { maxDimension: 1280, quality: 0.88, maxChars: 220000 };
+  }
+  if (totalCount === 3) {
+    return isPrimary
+      ? { maxDimension: 1400, quality: 0.88, maxChars: 240000 }
+      : { maxDimension: 1200, quality: 0.86, maxChars: 185000 };
+  }
+  if (totalCount === 4) {
+    return isPrimary
+      ? { maxDimension: 1300, quality: 0.88, maxChars: 215000 }
+      : { maxDimension: 1120, quality: 0.85, maxChars: 160000 };
+  }
+  return isPrimary
+    ? { maxDimension: 1250, quality: 0.86, maxChars: 200000 }
+    : { maxDimension: 1080, quality: 0.84, maxChars: 145000 };
+}
 
 interface VisualProductEditorModalProps {
   isOpen: boolean;
@@ -123,6 +153,7 @@ export default function VisualProductEditorModal({
   const [deleting, setDeleting] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [statusError, setStatusError] = useState<string | null>(null);
+  const [linkCopied, setLinkCopied] = useState(false);
 
   useEffect(() => {
     if (!isOpen) return;
@@ -167,6 +198,7 @@ export default function VisualProductEditorModal({
     setUploadDoneMsg(null);
     setUploadProgress(0);
     setUploadLabel('');
+    setLinkCopied(false);
   }, [isOpen, product, isClone, defaultCategory]);
 
   if (!isOpen) return null;
@@ -195,62 +227,69 @@ export default function VisualProductEditorModal({
     }
   };
 
-  const handlePrimaryFileUpload = async (e: ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    e.target.value = '';
-    if (!file) return;
-    setUploadingImage(true);
-    setUploadProgress(8);
-    setUploadLabel('جاري رفع الصورة الرئيسية بأعلى جودة...');
-    setUploadDoneMsg(null);
-    setStatusError(null);
-    try {
-      const dataUrl = await compressImageFileToDataUrl(file, {
-        maxDimension: 1600,
-        quality: 0.92,
-        maxChars: 380000,
-        onProgress: (pct) => setUploadProgress(pct),
-      });
-      setForm((prev) => ({ ...prev, image: dataUrl }));
-      flashUploadDone('تم رفع الصورة الرئيسية بأعلى جودة ✓');
-    } catch (err) {
-      setStatusError(err instanceof Error ? err.message : 'تعذر رفع الصورة المختارة.');
-    } finally {
-      setUploadingImage(false);
-      setUploadProgress(0);
-      setUploadLabel('');
-    }
-  };
-
-  const handleGalleryFilesUpload = async (e: ChangeEvent<HTMLInputElement>) => {
+  const handleBatchPhotoUpload = async (
+    e: ChangeEvent<HTMLInputElement>,
+    mode: 'fill' | 'replace-primary' = 'fill'
+  ) => {
     const files: File[] = e.target.files ? Array.from(e.target.files) : [];
     e.target.value = '';
     if (files.length === 0) return;
+
+    const existingGallery = galleryUrls.filter((u) => Boolean(u.trim()));
+    const hasPrimary = Boolean(form.image.trim());
+
+    let maxAccept = MAX_PRODUCT_IMAGES;
+    if (mode === 'fill') {
+      const currentCount = (hasPrimary ? 1 : 0) + existingGallery.length;
+      maxAccept = Math.max(0, MAX_PRODUCT_IMAGES - currentCount);
+      if (maxAccept === 0) {
+        setStatusError(`الحد الأقصى لصور المنتج هو ${MAX_PRODUCT_IMAGES} صور. احذف صورة أولاً لإضافة غيرها.`);
+        return;
+      }
+    } else if (files.length === 1) {
+      maxAccept = 1;
+    } else {
+      // Replacing primary + filling remaining slots up to 5 photos in a single pick
+      maxAccept = MAX_PRODUCT_IMAGES;
+    }
+
+    const selected = files.slice(0, maxAccept);
+    const trimmedNotice =
+      files.length > selected.length
+        ? ` (تم اختيار أول ${selected.length} صور فقط لأن الحد الأقصى ${MAX_PRODUCT_IMAGES} صور)`
+        : '';
+
+    const projectedTotal =
+      mode === 'replace-primary' && selected.length > 1
+        ? selected.length
+        : Math.min(
+            MAX_PRODUCT_IMAGES,
+            (hasPrimary ? 1 : 0) +
+              existingGallery.length +
+              (mode === 'replace-primary' && hasPrimary ? 0 : selected.length)
+          );
+
     setUploadingImage(true);
     setUploadProgress(5);
     setUploadDoneMsg(null);
     setStatusError(null);
+
     try {
-      const needsPrimary = !form.image.trim();
-      const remainingSlots = Math.max(0, (needsPrimary ? 7 : 6) - galleryUrls.length);
-      const selected = files.slice(0, remainingSlots);
-      if (selected.length === 0) {
-        setStatusError('وصلت للحد الأقصى من الصور الإضافية (6 صور).');
-        return;
-      }
       const uploaded: string[] = [];
       for (let i = 0; i < selected.length; i++) {
         const file = selected[i];
-        const isFirstPrimary = needsPrimary && i === 0;
+        const isFirstPrimary =
+          (mode === 'replace-primary' && i === 0) || (!hasPrimary && i === 0);
+        const budget = getPerImageBudget(projectedTotal, isFirstPrimary);
+
         setUploadLabel(
           selected.length > 1
             ? `جاري رفع الصورة ${i + 1} من ${selected.length} بأعلى جودة...`
             : 'جاري رفع الصورة بأعلى جودة...'
         );
+
         const dataUrl = await compressImageFileToDataUrl(file, {
-          maxDimension: isFirstPrimary ? 1600 : 1280,
-          quality: isFirstPrimary ? 0.92 : 0.88,
-          maxChars: isFirstPrimary ? 380000 : 170000,
+          ...budget,
           onProgress: (pct) => {
             const overall = Math.round(((i + pct / 100) / selected.length) * 100);
             setUploadProgress(overall);
@@ -258,18 +297,43 @@ export default function VisualProductEditorModal({
         });
         uploaded.push(dataUrl);
       }
-      if (needsPrimary && uploaded.length > 0) {
-        setForm((prev) => ({ ...prev, image: uploaded[0] }));
-        if (uploaded.length > 1) {
-          setGalleryUrls((prev) => [...prev, ...uploaded.slice(1)]);
+
+      if (mode === 'replace-primary') {
+        if (uploaded.length === 1) {
+          setForm((prev) => ({ ...prev, image: uploaded[0] }));
+        } else if (uploaded.length > 1) {
+          setForm((prev) => ({ ...prev, image: uploaded[0] }));
+          const nextGallery = [...uploaded.slice(1), ...existingGallery].slice(
+            0,
+            MAX_PRODUCT_IMAGES - 1
+          );
+          setGalleryUrls(nextGallery);
         }
       } else {
-        setGalleryUrls((prev) => [...prev, ...uploaded]);
+        if (!hasPrimary && uploaded.length > 0) {
+          setForm((prev) => ({ ...prev, image: uploaded[0] }));
+          if (uploaded.length > 1) {
+            setGalleryUrls((prev) =>
+              [...prev.filter((u) => Boolean(u.trim())), ...uploaded.slice(1)].slice(
+                0,
+                MAX_PRODUCT_IMAGES - 1
+              )
+            );
+          }
+        } else {
+          setGalleryUrls((prev) =>
+            [...prev.filter((u) => Boolean(u.trim())), ...uploaded].slice(
+              0,
+              MAX_PRODUCT_IMAGES - 1
+            )
+          );
+        }
       }
+
       flashUploadDone(
         uploaded.length > 1
-          ? `تم رفع ${uploaded.length} صور بأعلى جودة ✓`
-          : 'تم رفع الصورة بأعلى جودة ✓'
+          ? `تم رفع ${uploaded.length} صور دفعة واحدة بأعلى جودة ✓${trimmedNotice}`
+          : `تم رفع الصورة بأعلى جودة ✓${trimmedNotice}`
       );
     } catch (err) {
       setStatusError(err instanceof Error ? err.message : 'تعذر رفع بعض الصور.');
@@ -281,19 +345,61 @@ export default function VisualProductEditorModal({
   };
 
   const handleSingleGalleryUpload = async (idx: number, e: ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
+    const files: File[] = e.target.files ? Array.from(e.target.files) : [];
     e.target.value = '';
-    if (!file) return;
+    if (files.length === 0) return;
+
+    // If user selected multiple files from a single slot, fill sequentially up to 5 total!
+    if (files.length > 1) {
+      const remaining = Math.max(1, MAX_PRODUCT_IMAGES - 1 - idx);
+      const selected = files.slice(0, remaining);
+      setUploadingImage(true);
+      setUploadProgress(5);
+      setUploadDoneMsg(null);
+      setStatusError(null);
+      try {
+        const budget = getPerImageBudget(MAX_PRODUCT_IMAGES, false);
+        const uploaded: string[] = [];
+        for (let i = 0; i < selected.length; i++) {
+          setUploadLabel(`جاري رفع الصورة ${i + 1} من ${selected.length} بأعلى جودة...`);
+          const dataUrl = await compressImageFileToDataUrl(selected[i], {
+            ...budget,
+            onProgress: (pct) => {
+              const overall = Math.round(((i + pct / 100) / selected.length) * 100);
+              setUploadProgress(overall);
+            },
+          });
+          uploaded.push(dataUrl);
+        }
+        setGalleryUrls((prev) => {
+          const next = [...prev];
+          uploaded.forEach((url, offset) => {
+            next[idx + offset] = url;
+          });
+          return next.slice(0, MAX_PRODUCT_IMAGES - 1);
+        });
+        flashUploadDone(`تم رفع ${uploaded.length} صور إضافية بأعلى جودة ✓`);
+      } catch (err) {
+        setStatusError(err instanceof Error ? err.message : 'تعذر رفع الصور.');
+      } finally {
+        setUploadingImage(false);
+        setUploadProgress(0);
+        setUploadLabel('');
+      }
+      return;
+    }
+
+    const file = files[0];
     setUploadingImage(true);
     setUploadProgress(10);
     setUploadLabel(`جاري رفع الصورة الإضافية ${idx + 2} بأعلى جودة...`);
     setUploadDoneMsg(null);
     setStatusError(null);
     try {
+      const totalCount = Math.max(2, (form.image.trim() ? 1 : 0) + galleryUrls.length);
+      const budget = getPerImageBudget(totalCount, false);
       const dataUrl = await compressImageFileToDataUrl(file, {
-        maxDimension: 1280,
-        quality: 0.88,
-        maxChars: 170000,
+        ...budget,
         onProgress: (pct) => setUploadProgress(pct),
       });
       setGalleryUrls((prev) => {
@@ -308,6 +414,35 @@ export default function VisualProductEditorModal({
       setUploadingImage(false);
       setUploadProgress(0);
       setUploadLabel('');
+    }
+  };
+
+  const handlePromoteToPrimary = (galleryIdx: number) => {
+    const chosen = galleryUrls[galleryIdx];
+    if (!chosen) return;
+    const oldPrimary = form.image.trim();
+    setForm((prev) => ({ ...prev, image: chosen }));
+    setGalleryUrls((prev) => {
+      const next = prev.filter((_, i) => i !== galleryIdx);
+      if (oldPrimary) {
+        next.splice(galleryIdx, 0, oldPrimary);
+      }
+      return next;
+    });
+  };
+
+  const handleRemovePhotoAtSlot = (slotIdx: number) => {
+    if (slotIdx === 0) {
+      const cleanExtra = galleryUrls.filter((u) => Boolean(u.trim()));
+      if (cleanExtra.length > 0) {
+        setForm((prev) => ({ ...prev, image: cleanExtra[0] }));
+        setGalleryUrls(cleanExtra.slice(1));
+      } else {
+        setForm((prev) => ({ ...prev, image: '' }));
+      }
+    } else {
+      const gIdx = slotIdx - 1;
+      setGalleryUrls((prev) => prev.filter((_, i) => i !== gIdx));
     }
   };
 
@@ -366,15 +501,46 @@ export default function VisualProductEditorModal({
 
     setSaving(true);
     try {
-      const cleanImages = [
+      let cleanImages = [
         form.image.trim(),
         ...galleryUrls.map((u) => u.trim()),
       ]
         .filter((u, idx, arr) => u.length > 0 && arr.indexOf(u) === idx)
-        .slice(0, 7);
+        .slice(0, MAX_PRODUCT_IMAGES);
 
-      // Guard total payload size comfortably below Firestore's 1MB document limit
-      const totalImageBytes = cleanImages.reduce((sum, s) => sum + s.length, 0);
+      // Automatically balance total size comfortably below Firestore's 1MB document limit
+      // so uploading 5 high-resolution photos ALWAYS succeeds on the first try
+      let totalImageBytes = cleanImages.reduce((sum, s) => sum + s.length, 0);
+      if (totalImageBytes > 820000) {
+        const dataUrlsCount = cleanImages.filter((s) => s.startsWith('data:image/')).length;
+        if (dataUrlsCount > 0) {
+          const nonDataBytes = cleanImages
+            .filter((s) => !s.startsWith('data:image/'))
+            .reduce((sum, s) => sum + s.length, 0);
+          const perImageShare = Math.max(
+            95000,
+            Math.floor((780000 - nonDataBytes) / dataUrlsCount)
+          );
+          const rebalanced: string[] = [];
+          for (let i = 0; i < cleanImages.length; i++) {
+            const imgStr = cleanImages[i];
+            if (imgStr.startsWith('data:image/') && imgStr.length > perImageShare) {
+              const targetShare = i === 0 ? Math.min(220000, Math.round(perImageShare * 1.15)) : perImageShare;
+              const fitted = await recompressDataUrlToBudget(imgStr, {
+                maxDimension: i === 0 ? 1250 : 1050,
+                quality: 0.84,
+                maxChars: targetShare,
+              });
+              rebalanced.push(fitted);
+            } else {
+              rebalanced.push(imgStr);
+            }
+          }
+          cleanImages = rebalanced;
+          totalImageBytes = cleanImages.reduce((sum, s) => sum + s.length, 0);
+        }
+      }
+
       if (totalImageBytes > 860000) {
         setStatusError(
           'مجموع حجم الصور كبير جداً. يرجى تقليل عدد الصور الإضافية أو استخدام روابط مباشرة لبعضها.'
@@ -526,242 +692,384 @@ export default function VisualProductEditorModal({
             </div>
           )}
 
-          {/* BLOCK 1: الصور (رفع مباشر من المعرض + رابط اختياري) */}
-          <div className="p-4 sm:p-5 rounded-2xl bg-white/70 border border-white/90 shadow-sm space-y-4">
-            <div className="flex flex-wrap items-center justify-between gap-2">
-              <h3 className="text-sm font-extrabold text-[#0b1220] flex items-center gap-2">
-                <ImageIcon className="w-4 h-4 text-[#0071e3]" />
-                <span>صور المنتج (رفع بأعلى جودة HD أو رابط)</span>
-              </h3>
-              <div className="flex flex-wrap items-center gap-2">
-                <label
-                  className={`text-xs font-bold bg-[#0071e3] hover:bg-[#005bbf] text-white px-3 py-1.5 rounded-xl flex items-center gap-1.5 cursor-pointer shadow-sm ${
-                    uploadingImage ? 'opacity-70 pointer-events-none' : ''
-                  }`}
-                >
-                  {uploadingImage ? (
-                    <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                  ) : (
-                    <Upload className="w-3.5 h-3.5" />
-                  )}
-                  <span>{uploadingImage ? `جاري الرفع ${uploadProgress}%` : 'رفع صور من المعرض'}</span>
-                  <input
-                    type="file"
-                    accept="image/*"
-                    multiple
-                    onChange={handleGalleryFilesUpload}
-                    className="hidden"
-                    disabled={uploadingImage}
-                  />
-                </label>
-                <button
-                  type="button"
-                  onClick={() => setGalleryUrls((prev) => [...prev, ''])}
-                  className="text-xs font-bold text-[#0071e3] hover:bg-sky-50 px-3 py-1.5 rounded-xl border border-sky-200/80 flex items-center gap-1 cursor-pointer"
-                >
-                  <Plus className="w-3.5 h-3.5" />
-                  <span>مربع رابط إضافي</span>
-                </button>
-              </div>
-            </div>
-
-            {uploadingImage && (
-              <div className="p-3 rounded-xl bg-sky-50 border border-sky-200 space-y-2">
-                <div className="flex items-center justify-between text-xs font-extrabold text-sky-900">
-                  <span className="flex items-center gap-2">
-                    <Loader2 className="w-4 h-4 animate-spin text-[#0071e3]" />
-                    <span>{uploadLabel || 'جاري رفع ومعالجة الصورة بأعلى جودة...'}</span>
+          {/* Direct Permanent Product Link Strip */}
+          {form.id && (
+            <div className="p-3.5 rounded-2xl bg-sky-50/90 border border-sky-200/90 flex flex-col sm:flex-row sm:items-center justify-between gap-2.5">
+              <div className="min-w-0 flex-1">
+                <div className="flex items-center gap-1.5 text-[11px] font-extrabold text-[#0071e3] mb-1">
+                  <Link2 className="w-3.5 h-3.5 shrink-0" />
+                  <span>
+                    {isNew
+                      ? 'الرابط المباشر الدائم للمنتج (يعمل فور الحفظ)'
+                      : 'الرابط المباشر الدائم للمنتج (للنشر في واتساب والفيسبوك وغيرها)'}
                   </span>
-                  <span className="tabular-nums font-black text-[#0071e3]">{uploadProgress}%</span>
                 </div>
-                <div className="w-full h-2 rounded-full bg-sky-200/80 overflow-hidden">
-                  <div
-                    className="h-full bg-gradient-to-l from-[#0071e3] to-sky-400 transition-all duration-200"
-                    style={{ width: `${Math.max(8, uploadProgress)}%` }}
-                  />
-                </div>
+                <p
+                  dir="ltr"
+                  className="text-[11px] font-mono text-slate-700 bg-white/80 border border-sky-200/70 rounded-xl px-3 py-1.5 truncate select-all"
+                >
+                  {getProductShareUrl(isNew ? normalizeSafeId(form.id, 'prod') : form.id)}
+                </p>
               </div>
-            )}
+              <button
+                type="button"
+                onClick={async () => {
+                  const safeId = isNew ? normalizeSafeId(form.id, 'prod') : form.id;
+                  const ok = await copyTextToClipboard(getProductShareUrl(safeId));
+                  if (ok) {
+                    setLinkCopied(true);
+                    setTimeout(() => setLinkCopied(false), 2200);
+                  }
+                }}
+                className={`px-3.5 py-2 rounded-xl text-xs font-extrabold flex items-center justify-center gap-1.5 shrink-0 transition-all cursor-pointer shadow-sm ${
+                  linkCopied
+                    ? 'bg-emerald-600 text-white'
+                    : 'bg-[#0071e3] hover:bg-[#005bbf] text-white'
+                }`}
+              >
+                {linkCopied ? <Check className="w-3.5 h-3.5" /> : <Link2 className="w-3.5 h-3.5" />}
+                <span>{linkCopied ? 'تم نسخ الرابط ✓' : 'نسخ رابط المنتج'}</span>
+              </button>
+            </div>
+          )}
 
-            {!uploadingImage && uploadDoneMsg && (
-              <div className="px-3.5 py-2 rounded-xl bg-emerald-50 border border-emerald-200 text-emerald-800 text-xs font-extrabold flex items-center gap-2">
-                <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
-                <span>{uploadDoneMsg}</span>
-              </div>
-            )}
+          {/* BLOCK 1: الصور (تحديد حتى 5 صور دفعة واحدة من المعرض + روابط اختيارية) */}
+          <div className="p-4 sm:p-5 rounded-2xl bg-white/70 border border-white/90 shadow-sm space-y-4">
+            {(() => {
+              const filledExtra = galleryUrls.filter((u) => Boolean(u.trim()));
+              const totalUploadedPhotos = (form.image.trim() ? 1 : 0) + filledExtra.length;
+              const remainingPhotos = Math.max(0, MAX_PRODUCT_IMAGES - totalUploadedPhotos);
+              const slots = Array.from({ length: MAX_PRODUCT_IMAGES }, (_, idx) =>
+                idx === 0 ? form.image.trim() : galleryUrls[idx - 1]?.trim() || ''
+              );
 
-            <div className="grid grid-cols-1 md:grid-cols-12 gap-4 items-start">
-              {/* Live Square Preview + Direct Tap to Upload */}
-              <div className="md:col-span-4 aspect-square rounded-2xl bg-slate-100/80 border-2 border-dashed border-slate-300 overflow-hidden flex items-center justify-center relative group">
-                {form.image ? (
-                  <>
-                    <img
-                      src={form.image}
-                      alt={form.nameAr || 'معاينة'}
-                      referrerPolicy="no-referrer"
-                      className="w-full h-full object-cover"
-                    />
-                    <div className="absolute bottom-2.5 inset-x-2.5 flex items-center justify-between gap-1.5">
-                      <label className="px-2.5 py-1.5 rounded-xl bg-[#0071e3]/95 hover:bg-[#005bbf] text-white text-[10px] font-extrabold flex items-center gap-1 cursor-pointer shadow">
-                        <Upload className="w-3 h-3" />
-                        <span>تغيير الصورة</span>
+              return (
+                <>
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <h3 className="text-sm font-extrabold text-[#0b1220] flex items-center gap-2">
+                      <ImageIcon className="w-4 h-4 text-[#0071e3]" />
+                      <span>صور المنتج ({totalUploadedPhotos} / {MAX_PRODUCT_IMAGES} صور)</span>
+                    </h3>
+                    <div className="flex flex-wrap items-center gap-2">
+                      <label
+                        className={`text-xs font-extrabold bg-[#0071e3] hover:bg-[#005bbf] text-white px-3.5 py-2 rounded-xl flex items-center gap-1.5 cursor-pointer shadow-sm ${
+                          uploadingImage || remainingPhotos === 0 ? 'opacity-65 pointer-events-none' : ''
+                        }`}
+                      >
+                        {uploadingImage ? (
+                          <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                        ) : (
+                          <Upload className="w-3.5 h-3.5" />
+                        )}
+                        <span>
+                          {uploadingImage
+                            ? `جاري الرفع ${uploadProgress}%`
+                            : remainingPhotos > 0
+                            ? `تحديد حتى ${remainingPhotos} صور دفعة واحدة`
+                            : `اكتملت ${MAX_PRODUCT_IMAGES} صور`}
+                        </span>
                         <input
                           type="file"
                           accept="image/*"
-                          onChange={handlePrimaryFileUpload}
+                          multiple
+                          onChange={(e) => handleBatchPhotoUpload(e, 'fill')}
                           className="hidden"
-                          disabled={uploadingImage}
+                          disabled={uploadingImage || remainingPhotos === 0}
                         />
                       </label>
-                      <button
-                        type="button"
-                        onClick={() => setForm((p) => ({ ...p, image: '' }))}
-                        className="px-2.5 py-1.5 rounded-xl bg-rose-600/95 hover:bg-rose-700 text-white text-[10px] font-extrabold flex items-center gap-1 cursor-pointer shadow"
-                      >
-                        <Trash2 className="w-3 h-3" />
-                        <span>مسح</span>
-                      </button>
-                    </div>
-                  </>
-                ) : (
-                  <label className="w-full h-full flex flex-col items-center justify-center p-4 text-slate-500 hover:text-[#0071e3] cursor-pointer text-center transition-colors">
-                    <Upload className="w-9 h-9 mb-2 opacity-75" />
-                    <span className="text-xs font-extrabold block">اضغط لاختيار صورة من جهازك</span>
-                    <span className="text-[10px] text-slate-400 mt-1">
-                      ترفع بأعلى دقة HD (حتى 1600px)
-                    </span>
-                    <input
-                      type="file"
-                      accept="image/*"
-                      onChange={handlePrimaryFileUpload}
-                      className="hidden"
-                      disabled={uploadingImage}
-                    />
-                  </label>
-                )}
-
-                {uploadingImage && (
-                  <div className="absolute inset-0 z-20 bg-slate-950/65 backdrop-blur-sm flex flex-col items-center justify-center p-4 text-white text-center">
-                    <Loader2 className="w-10 h-10 animate-spin text-sky-400 mb-2" />
-                    <span className="text-xs font-extrabold">جاري التحميل بأعلى جودة...</span>
-                    <span className="text-sm font-black tabular-nums text-sky-300 mt-1">
-                      {uploadProgress}%
-                    </span>
-                  </div>
-                )}
-
-                {form.discountPercentage ? (
-                  <span className="absolute top-2.5 right-2.5 bg-rose-600 text-white text-xs font-black px-2.5 py-1 rounded-xl shadow">
-                    -{form.discountPercentage}%
-                  </span>
-                ) : null}
-              </div>
-
-              {/* Primary & Gallery Upload / URL Boxes */}
-              <div className="md:col-span-8 space-y-3">
-                <div className="p-3 rounded-xl bg-white border border-slate-200/90 space-y-2">
-                  <div className="flex items-center justify-between gap-2">
-                    <label className="text-[11px] font-extrabold text-slate-600">
-                      الصورة الرئيسية (ارفع من الجهاز أو الصق رابطاً)
-                    </label>
-                    <label className="text-[11px] font-extrabold text-[#0071e3] hover:underline flex items-center gap-1 cursor-pointer">
-                      <Upload className="w-3.5 h-3.5" />
-                      <span>اختر من المعرض</span>
-                      <input
-                        type="file"
-                        accept="image/*"
-                        onChange={handlePrimaryFileUpload}
-                        className="hidden"
-                        disabled={uploadingImage}
-                      />
-                    </label>
-                  </div>
-                  <input
-                    type="text"
-                    dir="ltr"
-                    value={form.image.startsWith('data:') ? '' : form.image}
-                    onChange={(e) => setForm((p) => ({ ...p, image: e.target.value }))}
-                    placeholder={
-                      form.image.startsWith('data:')
-                        ? 'تم رفع الصورة من جهازك بنجاح ✓ (أو الصق رابطاً لاستبدالها)'
-                        : 'https://example.com/product-photo.jpg (اختياري)'
-                    }
-                    className="w-full px-3 py-2 rounded-lg bg-slate-50 border border-slate-200 text-xs text-[#0b1220] focus:outline-none focus:ring-2 focus:ring-[#0071e3]"
-                  />
-                </div>
-
-                {galleryUrls.map((url, idx) => (
-                  <div
-                    key={idx}
-                    className="p-2.5 rounded-xl bg-white border border-slate-200/90 flex items-center gap-2"
-                  >
-                    <div className="w-11 h-11 rounded-lg bg-slate-100 border border-slate-200 overflow-hidden shrink-0 flex items-center justify-center">
-                      {url ? (
-                        <img
-                          src={url}
-                          alt={`صورة ${idx + 2}`}
-                          referrerPolicy="no-referrer"
-                          className="w-full h-full object-cover"
-                        />
-                      ) : (
-                        <ImageIcon className="w-4 h-4 text-slate-400" />
+                      {galleryUrls.length < MAX_PRODUCT_IMAGES - 1 && (
+                        <button
+                          type="button"
+                          onClick={() => setGalleryUrls((prev) => [...prev, ''])}
+                          className="text-xs font-bold text-[#0071e3] hover:bg-sky-50 px-3 py-2 rounded-xl border border-sky-200/80 flex items-center gap-1 cursor-pointer"
+                        >
+                          <Plus className="w-3.5 h-3.5" />
+                          <span>رابط إضافي</span>
+                        </button>
                       )}
                     </div>
-                    <input
-                      type="text"
-                      dir="ltr"
-                      value={url.startsWith('data:') ? '' : url}
-                      onChange={(e) => {
-                        const next = [...galleryUrls];
-                        next[idx] = e.target.value;
-                        setGalleryUrls(next);
-                      }}
-                      placeholder={
-                        url.startsWith('data:')
-                          ? `صورة إضافية ${idx + 2} مرفوعة من الجهاز ✓`
-                          : `رابط صورة إضافية ${idx + 2}`
-                      }
-                      className="flex-1 min-w-0 px-3 py-2 rounded-lg bg-slate-50 border border-slate-200 text-xs text-[#0b1220] focus:outline-none focus:ring-2 focus:ring-[#0071e3]"
-                    />
-                    <label
-                      className="p-2 rounded-lg text-[#0071e3] hover:bg-sky-50 cursor-pointer shrink-0"
-                      title="رفع من المعرض"
-                    >
-                      <Upload className="w-4 h-4" />
-                      <input
-                        type="file"
-                        accept="image/*"
-                        onChange={(e) => handleSingleGalleryUpload(idx, e)}
-                        className="hidden"
-                        disabled={uploadingImage}
-                      />
-                    </label>
-                    <button
-                      type="button"
-                      onClick={() => setGalleryUrls((prev) => prev.filter((_, i) => i !== idx))}
-                      className="p-2 rounded-lg text-rose-500 hover:bg-rose-50 cursor-pointer shrink-0"
-                      aria-label="حذف الصورة"
-                    >
-                      <Trash2 className="w-4 h-4" />
-                    </button>
                   </div>
-                ))}
 
-                <div className="p-3 rounded-xl bg-white border border-slate-200/90">
-                  <label className="block text-[11px] font-extrabold text-slate-600 mb-1">
-                    رابط فيديو للمنتج (اختياري)
-                  </label>
-                  <input
-                    type="url"
-                    dir="ltr"
-                    value={form.videoUrl || ''}
-                    onChange={(e) => setForm((p) => ({ ...p, videoUrl: e.target.value }))}
-                    placeholder="اتركه فارغاً إذا لا يوجد فيديو"
-                    className="w-full px-3 py-2 rounded-lg bg-slate-50 border border-slate-200 text-xs text-[#0b1220] focus:outline-none focus:ring-2 focus:ring-[#0071e3]"
-                  />
-                </div>
-              </div>
-            </div>
+                  {uploadingImage && (
+                    <div className="p-3 rounded-xl bg-sky-50 border border-sky-200 space-y-2">
+                      <div className="flex items-center justify-between text-xs font-extrabold text-sky-900">
+                        <span className="flex items-center gap-2">
+                          <Loader2 className="w-4 h-4 animate-spin text-[#0071e3]" />
+                          <span>{uploadLabel || 'جاري رفع ومعالجة الصور بأعلى جودة...'}</span>
+                        </span>
+                        <span className="tabular-nums font-black text-[#0071e3]">{uploadProgress}%</span>
+                      </div>
+                      <div className="w-full h-2 rounded-full bg-sky-200/80 overflow-hidden">
+                        <div
+                          className="h-full bg-gradient-to-l from-[#0071e3] to-sky-400 transition-all duration-200"
+                          style={{ width: `${Math.max(8, uploadProgress)}%` }}
+                        />
+                      </div>
+                    </div>
+                  )}
+
+                  {!uploadingImage && uploadDoneMsg && (
+                    <div className="px-3.5 py-2 rounded-xl bg-emerald-50 border border-emerald-200 text-emerald-800 text-xs font-extrabold flex items-center gap-2">
+                      <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
+                      <span>{uploadDoneMsg}</span>
+                    </div>
+                  )}
+
+                  {/* Interactive 5-Photo Visual Strip (Select up to 5 photos at once!) */}
+                  <div className="grid grid-cols-5 gap-2 sm:gap-2.5">
+                    {slots.map((slotUrl, slotIdx) => {
+                      const isPrimarySlot = slotIdx === 0;
+                      return (
+                        <div
+                          key={slotIdx}
+                          className={`relative aspect-square rounded-xl overflow-hidden border-2 transition-all ${
+                            slotUrl
+                              ? isPrimarySlot
+                                ? 'border-[#0071e3] bg-white shadow-sm'
+                                : 'border-slate-200 bg-white'
+                              : 'border-dashed border-slate-300 bg-slate-50/80 hover:border-[#0071e3]'
+                          }`}
+                        >
+                          {slotUrl ? (
+                            <>
+                              <img
+                                src={slotUrl}
+                                alt={`صورة ${slotIdx + 1}`}
+                                referrerPolicy="no-referrer"
+                                className="w-full h-full object-cover"
+                              />
+                              <span
+                                className={`absolute top-1 right-1 px-1.5 py-0.5 rounded-md text-[9px] font-black shadow ${
+                                  isPrimarySlot
+                                    ? 'bg-[#0071e3] text-white'
+                                    : 'bg-slate-900/75 text-white'
+                                }`}
+                              >
+                                {isPrimarySlot ? 'رئيسية' : slotIdx + 1}
+                              </span>
+                              <button
+                                type="button"
+                                onClick={() => handleRemovePhotoAtSlot(slotIdx)}
+                                className="absolute top-1 left-1 w-5 h-5 rounded-full bg-rose-600/95 hover:bg-rose-700 text-white flex items-center justify-center shadow cursor-pointer"
+                                aria-label="حذف الصورة"
+                                title="حذف هذه الصورة"
+                              >
+                                <X className="w-3 h-3" />
+                              </button>
+                              {!isPrimarySlot && (
+                                <button
+                                  type="button"
+                                  onClick={() => handlePromoteToPrimary(slotIdx - 1)}
+                                  className="absolute bottom-1 inset-x-1 py-0.5 rounded-md bg-slate-900/75 hover:bg-[#0071e3] text-white text-[9px] font-extrabold flex items-center justify-center gap-0.5 cursor-pointer transition-colors"
+                                  title="جعلها الصورة الرئيسية"
+                                >
+                                  <Star className="w-2.5 h-2.5" />
+                                  <span className="truncate">رئيسية</span>
+                                </button>
+                              )}
+                            </>
+                          ) : (
+                            <label className="w-full h-full flex flex-col items-center justify-center p-1 text-slate-400 hover:text-[#0071e3] cursor-pointer text-center">
+                              <Plus className="w-4 h-4 sm:w-5 sm:h-5 mb-0.5" />
+                              <span className="text-[9px] sm:text-[10px] font-extrabold leading-tight">
+                                {isPrimarySlot ? 'رئيسية' : `صورة ${slotIdx + 1}`}
+                              </span>
+                              <input
+                                type="file"
+                                accept="image/*"
+                                multiple
+                                onChange={(e) => handleBatchPhotoUpload(e, 'fill')}
+                                className="hidden"
+                                disabled={uploadingImage}
+                              />
+                            </label>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+
+                  <div className="grid grid-cols-1 md:grid-cols-12 gap-4 items-start">
+                    {/* Live Square Preview + Direct Tap to Multi-Upload up to 5 Photos */}
+                    <div className="md:col-span-4 aspect-square rounded-2xl bg-slate-100/80 border-2 border-dashed border-slate-300 overflow-hidden flex items-center justify-center relative group">
+                      {form.image ? (
+                        <>
+                          <img
+                            src={form.image}
+                            alt={form.nameAr || 'معاينة'}
+                            referrerPolicy="no-referrer"
+                            className="w-full h-full object-cover"
+                          />
+                          <div className="absolute bottom-2.5 inset-x-2.5 flex items-center justify-between gap-1.5">
+                            <label className="px-2.5 py-1.5 rounded-xl bg-[#0071e3]/95 hover:bg-[#005bbf] text-white text-[10px] font-extrabold flex items-center gap-1 cursor-pointer shadow">
+                              <Upload className="w-3 h-3" />
+                              <span>تغيير / إضافة صور</span>
+                              <input
+                                type="file"
+                                accept="image/*"
+                                multiple
+                                onChange={(e) => handleBatchPhotoUpload(e, 'replace-primary')}
+                                className="hidden"
+                                disabled={uploadingImage}
+                              />
+                            </label>
+                            <button
+                              type="button"
+                              onClick={() => handleRemovePhotoAtSlot(0)}
+                              className="px-2.5 py-1.5 rounded-xl bg-rose-600/95 hover:bg-rose-700 text-white text-[10px] font-extrabold flex items-center gap-1 cursor-pointer shadow"
+                            >
+                              <Trash2 className="w-3 h-3" />
+                              <span>مسح</span>
+                            </button>
+                          </div>
+                        </>
+                      ) : (
+                        <label className="w-full h-full flex flex-col items-center justify-center p-4 text-slate-500 hover:text-[#0071e3] cursor-pointer text-center transition-colors">
+                          <Upload className="w-9 h-9 mb-2 opacity-75" />
+                          <span className="text-xs font-extrabold block">
+                            اضغط لاختيار حتى {MAX_PRODUCT_IMAGES} صور دفعة واحدة
+                          </span>
+                          <span className="text-[10px] text-slate-400 mt-1">
+                            حدّد عدة صور معاً وتُرفع تلقائياً بأعلى دقة HD
+                          </span>
+                          <input
+                            type="file"
+                            accept="image/*"
+                            multiple
+                            onChange={(e) => handleBatchPhotoUpload(e, 'fill')}
+                            className="hidden"
+                            disabled={uploadingImage}
+                          />
+                        </label>
+                      )}
+
+                      {uploadingImage && (
+                        <div className="absolute inset-0 z-20 bg-slate-950/65 backdrop-blur-sm flex flex-col items-center justify-center p-4 text-white text-center">
+                          <Loader2 className="w-10 h-10 animate-spin text-sky-400 mb-2" />
+                          <span className="text-xs font-extrabold">جاري التحميل بأعلى جودة...</span>
+                          <span className="text-sm font-black tabular-nums text-sky-300 mt-1">
+                            {uploadProgress}%
+                          </span>
+                        </div>
+                      )}
+
+                      {form.discountPercentage ? (
+                        <span className="absolute top-2.5 right-2.5 bg-rose-600 text-white text-xs font-black px-2.5 py-1 rounded-xl shadow">
+                          -{form.discountPercentage}%
+                        </span>
+                      ) : null}
+                    </div>
+
+                    {/* Primary & Gallery Upload / URL Boxes */}
+                    <div className="md:col-span-8 space-y-3">
+                      <div className="p-3 rounded-xl bg-white border border-slate-200/90 space-y-2">
+                        <div className="flex items-center justify-between gap-2">
+                          <label className="text-[11px] font-extrabold text-slate-600">
+                            الصورة الرئيسية (أو حدّد حتى {MAX_PRODUCT_IMAGES} صور معاً)
+                          </label>
+                          <label className="text-[11px] font-extrabold text-[#0071e3] hover:underline flex items-center gap-1 cursor-pointer">
+                            <Upload className="w-3.5 h-3.5" />
+                            <span>اختر من المعرض</span>
+                            <input
+                              type="file"
+                              accept="image/*"
+                              multiple
+                              onChange={(e) => handleBatchPhotoUpload(e, 'replace-primary')}
+                              className="hidden"
+                              disabled={uploadingImage}
+                            />
+                          </label>
+                        </div>
+                        <input
+                          type="text"
+                          dir="ltr"
+                          value={form.image.startsWith('data:') ? '' : form.image}
+                          onChange={(e) => setForm((p) => ({ ...p, image: e.target.value }))}
+                          placeholder={
+                            form.image.startsWith('data:')
+                              ? 'تم رفع الصورة الرئيسية من جهازك بنجاح ✓ (أو الصق رابطاً لاستبدالها)'
+                              : 'https://example.com/product-photo.jpg (اختياري)'
+                          }
+                          className="w-full px-3 py-2 rounded-lg bg-slate-50 border border-slate-200 text-xs text-[#0b1220] focus:outline-none focus:ring-2 focus:ring-[#0071e3]"
+                        />
+                      </div>
+
+                      {galleryUrls.map((url, idx) => (
+                        <div
+                          key={idx}
+                          className="p-2.5 rounded-xl bg-white border border-slate-200/90 flex items-center gap-2"
+                        >
+                          <div className="w-11 h-11 rounded-lg bg-slate-100 border border-slate-200 overflow-hidden shrink-0 flex items-center justify-center">
+                            {url ? (
+                              <img
+                                src={url}
+                                alt={`صورة ${idx + 2}`}
+                                referrerPolicy="no-referrer"
+                                className="w-full h-full object-cover"
+                              />
+                            ) : (
+                              <ImageIcon className="w-4 h-4 text-slate-400" />
+                            )}
+                          </div>
+                          <input
+                            type="text"
+                            dir="ltr"
+                            value={url.startsWith('data:') ? '' : url}
+                            onChange={(e) => {
+                              const next = [...galleryUrls];
+                              next[idx] = e.target.value;
+                              setGalleryUrls(next);
+                            }}
+                            placeholder={
+                              url.startsWith('data:')
+                                ? `صورة إضافية ${idx + 2} مرفوعة من الجهاز ✓`
+                                : `رابط صورة إضافية ${idx + 2}`
+                            }
+                            className="flex-1 min-w-0 px-3 py-2 rounded-lg bg-slate-50 border border-slate-200 text-xs text-[#0b1220] focus:outline-none focus:ring-2 focus:ring-[#0071e3]"
+                          />
+                          <label
+                            className="p-2 rounded-lg text-[#0071e3] hover:bg-sky-50 cursor-pointer shrink-0"
+                            title="رفع من المعرض"
+                          >
+                            <Upload className="w-4 h-4" />
+                            <input
+                              type="file"
+                              accept="image/*"
+                              multiple
+                              onChange={(e) => handleSingleGalleryUpload(idx, e)}
+                              className="hidden"
+                              disabled={uploadingImage}
+                            />
+                          </label>
+                          <button
+                            type="button"
+                            onClick={() => setGalleryUrls((prev) => prev.filter((_, i) => i !== idx))}
+                            className="p-2 rounded-lg text-rose-500 hover:bg-rose-50 cursor-pointer shrink-0"
+                            aria-label="حذف الصورة"
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </button>
+                        </div>
+                      ))}
+
+                      <div className="p-3 rounded-xl bg-white border border-slate-200/90">
+                        <label className="block text-[11px] font-extrabold text-slate-600 mb-1">
+                          رابط فيديو للمنتج (اختياري)
+                        </label>
+                        <input
+                          type="url"
+                          dir="ltr"
+                          value={form.videoUrl || ''}
+                          onChange={(e) => setForm((p) => ({ ...p, videoUrl: e.target.value }))}
+                          placeholder="اتركه فارغاً إذا لا يوجد فيديو"
+                          className="w-full px-3 py-2 rounded-lg bg-slate-50 border border-slate-200 text-xs text-[#0b1220] focus:outline-none focus:ring-2 focus:ring-[#0071e3]"
+                        />
+                      </div>
+                    </div>
+                  </div>
+                </>
+              );
+            })()}
           </div>
 
           {/* BLOCK 2: الاسم والتصنيف والعلامة التجارية */}

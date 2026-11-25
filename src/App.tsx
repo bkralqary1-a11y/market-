@@ -77,26 +77,50 @@ function parseLocationHash(): { view: PageView; category: CategoryId; productId:
   if (typeof window === 'undefined') {
     return { view: 'home', category: 'all', productId: null };
   }
-  const raw = window.location.hash.replace(/^#\/?/, '').trim();
-  if (!raw) return { view: 'home', category: 'all', productId: null };
 
-  const parts = raw.split('/').map((p) => {
-    try {
-      return decodeURIComponent(p);
-    } catch {
-      return p;
+  // 1. Check hash route first: #/product/<id>, #/shop/<cat>, #/<view>
+  const raw = window.location.hash.replace(/^#\/?/, '').trim();
+  if (raw) {
+    const parts = raw.split('/').map((p) => {
+      try {
+        return decodeURIComponent(p);
+      } catch {
+        return p;
+      }
+    });
+    const first = parts[0] as PageView;
+    if (first === 'shop') {
+      return { view: 'shop', category: parts[1] || 'all', productId: null };
     }
-  });
-  const first = parts[0] as PageView;
-  if (first === 'shop') {
-    return { view: 'shop', category: parts[1] || 'all', productId: null };
+    if (first === 'product' && parts[1]) {
+      return { view: 'product', category: 'all', productId: parts[1] };
+    }
+    if (VALID_VIEWS.includes(first) && first !== 'product') {
+      return { view: first, category: 'all', productId: null };
+    }
   }
-  if (first === 'product' && parts[1]) {
-    return { view: 'product', category: 'all', productId: parts[1] };
+
+  // 2. Fallback: query param ?product=<id> or ?p=<id> (useful for WhatsApp/Facebook share links)
+  try {
+    const params = new URLSearchParams(window.location.search);
+    const qProduct = (params.get('product') || params.get('p') || '').trim();
+    if (qProduct) {
+      return { view: 'product', category: 'all', productId: qProduct };
+    }
+  } catch {
+    // ignore malformed query strings
   }
-  if (VALID_VIEWS.includes(first) && first !== 'product') {
-    return { view: first, category: 'all', productId: null };
+
+  // 3. Fallback: clean pathname /product/<id> (via Netlify _redirects)
+  const pathMatch = window.location.pathname.match(/\/product\/([^/]+)/);
+  if (pathMatch && pathMatch[1]) {
+    try {
+      return { view: 'product', category: 'all', productId: decodeURIComponent(pathMatch[1]) };
+    } catch {
+      return { view: 'product', category: 'all', productId: pathMatch[1] };
+    }
   }
+
   return { view: 'home', category: 'all', productId: null };
 }
 
@@ -237,7 +261,7 @@ export default function App() {
 
   // Keep selectedProduct fresh (and resolve deep-linked #/product/:id once cloud catalog loads)
   useEffect(() => {
-    if (pendingProductIdRef.current && products.length > 0) {
+    if (pendingProductIdRef.current && (products.length > 0 || productsSynced)) {
       const target = products.find((p) => p.id === pendingProductIdRef.current);
       if (target) {
         setSelectedProduct(target);
@@ -478,15 +502,18 @@ export default function App() {
       if (target.view === 'product' && target.productId) {
         const found = productsRef.current.find((p) => p.id === target.productId);
         if (found) {
+          pendingProductIdRef.current = null;
           setSelectedProduct(found);
           setSelectedCategory(target.category);
           setCurrentView('product');
         } else {
+          pendingProductIdRef.current = target.productId;
           setSelectedProduct(null);
           setSelectedCategory(target.category);
-          setCurrentView('shop');
+          setCurrentView('product');
         }
       } else {
+        pendingProductIdRef.current = null;
         setSelectedCategory(target.category);
         setCurrentView(target.view);
       }
@@ -1135,7 +1162,18 @@ export default function App() {
           />
         )}
 
-        {/* VIEW 3: PRODUCT DETAIL */}
+        {/* VIEW 3: PRODUCT DETAIL (with clean loading state for direct shared links) */}
+        {currentView === 'product' && !selectedProduct && !productsSynced && (
+          <div className="min-h-[60vh] flex items-center justify-center px-4 py-16">
+            <div className="liquid-glass-strong rounded-3xl px-8 py-10 text-center max-w-sm w-full border border-white/60 shadow-xl space-y-3">
+              <div className="w-10 h-10 mx-auto rounded-full border-3 border-[#0071e3]/25 border-t-[#0071e3] animate-spin" />
+              <p className="text-sm font-extrabold text-[#0b1220]">
+                {isAr ? 'جاري تحميل تفاصيل المنتج...' : 'Loading product details...'}
+              </p>
+            </div>
+          </div>
+        )}
+
         {currentView === 'product' && selectedProduct && (
           <ProductDetailView
             product={selectedProduct}

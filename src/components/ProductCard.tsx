@@ -11,11 +11,14 @@ import {
   Pencil,
   EyeOff,
   Copy,
+  Images,
+  Link2,
 } from 'lucide-react';
 import { Product, Language, Currency } from '../types';
 import { formatPrice } from '../data/mockData';
 import { triggerFlyToCart } from './FlyingCartAnimation';
 import { soundFX } from '../utils/audioEffects';
+import { getProductShareUrl, copyTextToClipboard } from '../utils/productLinks';
 
 interface ProductCardProps {
   key?: string;
@@ -54,6 +57,7 @@ export default function ProductCard({
   const isAr = language === 'ar';
   const [selectedColor] = useState(product.colors?.[0] || '');
   const [addedAnim, setAddedAnim] = useState(false);
+  const [copiedLink, setCopiedLink] = useState(false);
   const [imgFailed, setImgFailed] = useState(false);
   const imgRef = useRef<HTMLImageElement | null>(null);
 
@@ -61,6 +65,11 @@ export default function ProductCard({
   const hasRating = Number(product.rating) > 0;
   const hasColors = Array.isArray(product.colors) && product.colors.length > 0;
   const defaultVariant = product.variants?.options?.[0] || '';
+  const photoCount = Array.isArray(product.images)
+    ? product.images.filter((u) => Boolean(u?.trim())).length
+    : product.image?.trim()
+    ? 1
+    : 0;
 
   const handleQuickAdd = (e: MouseEvent) => {
     e.stopPropagation();
@@ -106,6 +115,16 @@ export default function ProductCard({
     e.stopPropagation();
     soundFX.playModalOpen();
     if (onQuickView) onQuickView(product);
+  };
+
+  const handleCopyProductLink = async (e: MouseEvent) => {
+    e.stopPropagation();
+    soundFX.playClick();
+    const ok = await copyTextToClipboard(getProductShareUrl(product.id));
+    if (ok) {
+      setCopiedLink(true);
+      setTimeout(() => setCopiedLink(false), 2000);
+    }
   };
 
   return (
@@ -156,6 +175,17 @@ export default function ProductCard({
                 <span className="hidden sm:inline">استنساخ</span>
               </button>
             )}
+            <button
+              type="button"
+              onClick={handleCopyProductLink}
+              className={`px-2 py-1.5 rounded-xl text-white text-[11px] font-extrabold shadow-lg flex items-center gap-1 cursor-pointer transition-colors ${
+                copiedLink ? 'bg-emerald-600' : 'bg-slate-900/85 hover:bg-slate-900'
+              }`}
+              title="نسخ رابط هذا المنتج المباشر"
+            >
+              {copiedLink ? <Check className="w-3.5 h-3.5" /> : <Link2 className="w-3.5 h-3.5" />}
+              <span className="hidden sm:inline">{copiedLink ? 'تم النسخ' : 'رابط'}</span>
+            </button>
           </div>
         )}
 
@@ -171,6 +201,13 @@ export default function ProductCard({
             <span className="absolute bottom-2.5 right-2.5 z-20 px-2 py-0.5 rounded-lg bg-amber-500 text-slate-950 text-[10px] font-extrabold flex items-center gap-1 shadow">
               <EyeOff className="w-3 h-3" />
               <span>مخفي عن الزوار</span>
+            </span>
+          )}
+
+          {photoCount > 1 && (
+            <span className="absolute bottom-2.5 left-2.5 z-20 px-2 py-0.5 rounded-lg bg-slate-900/75 backdrop-blur-md text-white text-[10px] font-extrabold tabular-nums flex items-center gap-1 shadow">
+              <Images className="w-3 h-3 text-sky-300" />
+              <span>{photoCount}</span>
             </span>
           )}
 
@@ -213,6 +250,22 @@ export default function ProductCard({
             >
               <Eye className="w-3.5 h-3.5" />
             </button>
+
+            {!isAdminMode && (
+              <button
+                type="button"
+                onClick={handleCopyProductLink}
+                className={`w-8 h-8 rounded-full backdrop-blur-xl border flex items-center justify-center transition-all cursor-pointer ${
+                  copiedLink
+                    ? 'bg-emerald-500 text-white border-emerald-400 shadow'
+                    : 'bg-white/75 text-slate-700 border-white/80 hover:bg-white hover:text-[#0071e3]'
+                }`}
+                title={isAr ? 'نسخ رابط المنتج' : 'Copy product link'}
+                aria-label={isAr ? 'نسخ رابط المنتج' : 'Copy product link'}
+              >
+                {copiedLink ? <Check className="w-3.5 h-3.5" /> : <Link2 className="w-3.5 h-3.5" />}
+              </button>
+            )}
           </div>
 
           {/* Product Photo with Resilient Fallback */}
