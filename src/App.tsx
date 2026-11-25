@@ -123,6 +123,8 @@ export default function App() {
   const [cloudSlides, setCloudSlides] = useState<HeroSlideItem[]>([]);
   const [hasCloudSlides, setHasCloudSlides] = useState(false);
   const [siteConfig, setSiteConfig] = useState<SiteConfig>(DEFAULT_SITE_CONFIG);
+  const siteConfigRef = useRef<SiteConfig>(siteConfig);
+  siteConfigRef.current = siteConfig;
   const [hasCloudConfig, setHasCloudConfig] = useState(false);
 
   const products = productsSynced ? cloudProducts : [];
@@ -134,6 +136,7 @@ export default function App() {
   const [adminAuthModalOpen, setAdminAuthModalOpen] = useState(false);
   const [adminModeEnabled, setAdminModeEnabled] = useState(false);
   const [editingProduct, setEditingProduct] = useState<Product | null | undefined>(undefined);
+  const [isCloningProduct, setIsCloningProduct] = useState(false);
   const [newProductDefaultCat, setNewProductDefaultCat] = useState<CategoryId>('phones');
   const [editingSection, setEditingSection] = useState<EditableSectionTarget | null>(null);
   const [seedingCloud, setSeedingCloud] = useState(false);
@@ -196,6 +199,7 @@ export default function App() {
       setHasCloudSlides(hasDocs);
     }, isAdminVerified);
     const unsubConfig = subscribeToSiteConfig((cfg, hasDoc) => {
+      siteConfigRef.current = cfg;
       setSiteConfig(cfg);
       setHasCloudConfig(hasDoc);
     });
@@ -577,9 +581,30 @@ export default function App() {
     showAdminToast('تم حذف الشريحة');
   };
 
+  const handleStartCloneProduct = (prod: Product) => {
+    const clonedCopy: Product = {
+      ...prod,
+      id: `prod-${Date.now().toString(36)}`,
+      image: '',
+      images: [],
+    };
+    setIsCloningProduct(true);
+    setEditingProduct(clonedCopy);
+  };
+
   const handleAdminSaveSiteConfig = async (nextCfg: SiteConfig) => {
-    await saveSiteConfigToCloud(nextCfg);
-    showAdminToast('تم حفظ تعديلات الواجهة والإعدادات');
+    const prevCfg = siteConfigRef.current;
+    siteConfigRef.current = nextCfg;
+    setSiteConfig(nextCfg);
+    try {
+      await saveSiteConfigToCloud(nextCfg);
+      showAdminToast('تم حفظ تعديلات الواجهة والإعدادات');
+    } catch (err) {
+      siteConfigRef.current = prevCfg;
+      setSiteConfig(prevCfg);
+      showAdminToast('تعذر حفظ التعديل في السحابة — تأكد من الاتصال وصلاحية المالك');
+      throw err;
+    }
   };
 
   const handleToggleSiteBlock = async (
@@ -592,32 +617,50 @@ export default function App() {
       | 'hideCategoriesSection'
       | 'hideProductsSection'
   ) => {
-    const nextValue = !Boolean(siteConfig[field]);
-    const nextCfg: SiteConfig = { ...siteConfig, [field]: nextValue };
+    const prevCfg = siteConfigRef.current;
+    const nextValue = !Boolean(prevCfg[field]);
+    const nextCfg: SiteConfig = { ...prevCfg, [field]: nextValue };
+    siteConfigRef.current = nextCfg;
     setSiteConfig(nextCfg);
-    await saveSiteConfigToCloud(nextCfg);
-    showAdminToast(nextValue ? 'تم إخفاء هذا المربع عن الزوار' : 'تم إظهار هذا المربع مجدداً');
+    try {
+      await saveSiteConfigToCloud(nextCfg);
+      showAdminToast(nextValue ? 'تم إخفاء هذا المربع عن الزوار' : 'تم إظهار هذا المربع مجدداً');
+    } catch (err) {
+      console.error('Failed to toggle site block:', err);
+      siteConfigRef.current = prevCfg;
+      setSiteConfig(prevCfg);
+      showAdminToast('تعذر حفظ الإخفاء في السحابة — تأكد من الاتصال وصلاحية المالك');
+    }
   };
 
   const handleToggleCategoryHide = async (catId: string, isCustom: boolean) => {
+    const prevCfg = siteConfigRef.current;
     let nextCfg: SiteConfig;
     if (isCustom) {
-      const updated = (siteConfig.customCategories || []).map((c) =>
+      const updated = (prevCfg.customCategories || []).map((c) =>
         c.id === catId ? { ...c, hidden: !c.hidden } : c
       );
-      nextCfg = { ...siteConfig, customCategories: updated };
+      nextCfg = { ...prevCfg, customCategories: updated };
     } else {
-      const current = new Set(siteConfig.hiddenCategories || []);
+      const current = new Set(prevCfg.hiddenCategories || []);
       if (current.has(catId)) {
         current.delete(catId);
       } else {
         current.add(catId);
       }
-      nextCfg = { ...siteConfig, hiddenCategories: Array.from(current) };
+      nextCfg = { ...prevCfg, hiddenCategories: Array.from(current) };
     }
+    siteConfigRef.current = nextCfg;
     setSiteConfig(nextCfg);
-    await saveSiteConfigToCloud(nextCfg);
-    showAdminToast('تم تحديث ظهور القسم في المتجر');
+    try {
+      await saveSiteConfigToCloud(nextCfg);
+      showAdminToast('تم تحديث ظهور القسم في المتجر');
+    } catch (err) {
+      console.error('Failed to toggle category visibility:', err);
+      siteConfigRef.current = prevCfg;
+      setSiteConfig(prevCfg);
+      showAdminToast('تعذر حفظ تعديل القسم في السحابة — تأكد من الاتصال وصلاحية المالك');
+    }
   };
 
   const handleSeedCloud = async () => {
@@ -1018,7 +1061,11 @@ export default function App() {
                             onToggleCompare={handleToggleCompare}
                             onQuickView={(p) => setQuickViewProduct(p)}
                             isAdminMode={isAdminMode}
-                            onAdminEdit={(p) => setEditingProduct(p)}
+                            onAdminEdit={(p) => {
+                              setIsCloningProduct(false);
+                              setEditingProduct(p);
+                            }}
+                            onAdminClone={handleStartCloneProduct}
                           />
                         )
                       )}
@@ -1026,6 +1073,7 @@ export default function App() {
                         <AddProductTile
                           language={language}
                           onClick={() => {
+                            setIsCloningProduct(false);
                             setNewProductDefaultCat(allStoreCategories[0]?.id || 'phones');
                             setEditingProduct(null);
                           }}
@@ -1074,8 +1122,13 @@ export default function App() {
             onCategoryChange={(cat) => navigateTo('shop', { category: cat })}
             siteConfig={siteConfig}
             isAdminMode={isAdminMode}
-            onAdminEditProduct={(p) => setEditingProduct(p)}
+            onAdminEditProduct={(p) => {
+              setIsCloningProduct(false);
+              setEditingProduct(p);
+            }}
+            onAdminCloneProduct={handleStartCloneProduct}
             onAdminAddProduct={(cat) => {
+              setIsCloningProduct(false);
               setNewProductDefaultCat(cat === 'all' ? allStoreCategories[0]?.id || 'phones' : cat);
               setEditingProduct(null);
             }}
@@ -1308,6 +1361,7 @@ export default function App() {
             seeding={seedingCloud}
             toastMessage={adminToast}
             onAddNewProduct={() => {
+              setIsCloningProduct(false);
               setNewProductDefaultCat(selectedCategory === 'all' ? 'phones' : selectedCategory);
               setEditingProduct(null);
             }}
@@ -1320,9 +1374,13 @@ export default function App() {
           <VisualProductEditorModal
             isOpen={editingProduct !== undefined}
             product={editingProduct ?? null}
+            isClone={isCloningProduct}
             defaultCategory={newProductDefaultCat}
             categories={allStoreCategories}
-            onClose={() => setEditingProduct(undefined)}
+            onClose={() => {
+              setIsCloningProduct(false);
+              setEditingProduct(undefined);
+            }}
             onSave={handleAdminSaveProduct}
             onDelete={handleAdminDeleteProduct}
           />

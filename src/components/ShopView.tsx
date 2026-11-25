@@ -26,6 +26,7 @@ interface ShopViewProps {
   siteConfig?: SiteConfig;
   isAdminMode?: boolean;
   onAdminEditProduct?: (product: Product) => void;
+  onAdminCloneProduct?: (product: Product) => void;
   onAdminAddProduct?: (defaultCategory: CategoryId) => void;
 }
 
@@ -45,6 +46,7 @@ export default function ShopView({
   siteConfig = DEFAULT_SITE_CONFIG,
   isAdminMode = false,
   onAdminEditProduct,
+  onAdminCloneProduct,
   onAdminAddProduct,
 }: ShopViewProps) {
   const isAr = language === 'ar';
@@ -310,6 +312,7 @@ export default function ShopView({
                     onToggleCompare={onToggleCompare}
                     isAdminMode={isAdminMode}
                     onAdminEdit={onAdminEditProduct}
+                    onAdminClone={onAdminCloneProduct}
                   />
                 ))}
                 {isAdminMode && onAdminAddProduct && (

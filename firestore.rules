@@ -64,7 +64,7 @@ service cloud.firestore {
     function isValidImageList(listVal, maxItems) {
       return listVal is list &&
         listVal.size() <= maxItems &&
-        (listVal.size() == 0 || (listVal[0] is string && listVal[0].size() <= 250000));
+        (listVal.size() == 0 || (listVal[0] is string && listVal[0].size() <= 450000));
     }
 
     function isValidCustomCategoryList(listVal) {
@@ -103,7 +103,7 @@ service cloud.firestore {
         isValidId(data.category) &&
         isValidString(data.categoryNameEn, 0, 80) &&
         isValidString(data.categoryNameAr, 0, 80) &&
-        isValidString(data.image, 0, 250000) &&
+        isValidString(data.image, 0, 450000) &&
         isValidImageList(data.images, 8) &&
         data.rating is number && data.rating >= 0 && data.rating <= 5 &&
         data.reviewsCount is number && data.reviewsCount >= 0 &&
@@ -154,7 +154,7 @@ service cloud.firestore {
         isValidString(data.subtitleAr, 0, 500) &&
         isValidOptionalString(data, 'subtitleEn', 500) &&
         data.mediaType in ['image', 'video'] &&
-        isValidString(data.imageUrl, 0, 250000) &&
+        isValidString(data.imageUrl, 0, 450000) &&
         isValidOptionalString(data, 'videoUrl', 1500) &&
         isValidOptionalString(data, 'buttonTextAr', 80) &&
         isValidOptionalString(data, 'buttonTextEn', 80) &&
@@ -196,14 +196,14 @@ service cloud.firestore {
           'updatedAt'
         ]) &&
         isValidString(data.storeNameAr, 1, 120) &&
-        isValidString(data.storeNameEn, 1, 120) &&
+        isValidString(data.storeNameEn, 0, 120) &&
         isValidString(data.taglineAr, 0, 200) &&
         isValidString(data.taglineEn, 0, 200) &&
         isValidString(data.addressAr, 0, 300) &&
         isValidString(data.addressEn, 0, 300) &&
-        isValidString(data.whatsappPrimary, 6, 30) &&
-        isValidString(data.whatsappSecondary, 6, 30) &&
-        isValidString(data.phoneTertiary, 6, 30) &&
+        isValidString(data.whatsappPrimary, 0, 30) &&
+        isValidString(data.whatsappSecondary, 0, 30) &&
+        isValidString(data.phoneTertiary, 0, 30) &&
         data.bannerEnabled is bool &&
         isValidString(data.bannerTextAr, 0, 300) &&
         isValidString(data.bannerTextEn, 0, 300) &&
@@ -315,7 +315,25 @@ service cloud.firestore {
         configId == 'main' &&
         isValidSiteConfig(incoming()) &&
         incoming().updatedAt == request.time &&
-        incoming().diff(existing()).affectedKeys().hasOnly([
+        incoming().diff(existing()).addedKeys().hasOnly([
+          'storeNameAr', 'storeNameEn', 'taglineAr', 'taglineEn',
+          'addressAr', 'addressEn', 'whatsappPrimary', 'whatsappSecondary',
+          'phoneTertiary', 'bannerEnabled', 'bannerTextAr', 'bannerTextEn',
+          'promoCode', 'bento1BadgeAr', 'bento1TitleAr', 'bento1DescAr',
+          'bento2BadgeAr', 'bento2TitleAr', 'bento2DescAr',
+          'catPhonesImg', 'catAudioImg', 'catCasesImg',
+          'catChargersImg', 'catCablesImg',
+          'catPhonesNameAr', 'catAudioNameAr', 'catCasesNameAr',
+          'catChargersNameAr', 'catCablesNameAr',
+          'categoriesSectionBadgeAr', 'categoriesSectionTitleAr',
+          'productsSectionBadgeAr', 'productsSectionTitleAr',
+          'hideHero', 'hideBento1', 'hideBento2',
+          'hideTrustPillars', 'hideBrandsBar',
+          'hideCategoriesSection', 'hideProductsSection',
+          'hiddenCategories', 'customCategories',
+          'updatedAt'
+        ]) &&
+        incoming().diff(existing()).changedKeys().hasOnly([
           'storeNameAr', 'storeNameEn', 'taglineAr', 'taglineEn',
           'addressAr', 'addressEn', 'whatsappPrimary', 'whatsappSecondary',
           'phoneTertiary', 'bannerEnabled', 'bannerTextAr', 'bannerTextEn',

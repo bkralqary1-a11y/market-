@@ -193,7 +193,9 @@ export function getStoreCategories(
 
 const clip = (val: unknown, maxLen: number, fallback = ''): string => {
   if (typeof val !== 'string') return fallback.slice(0, maxLen);
-  return val.trim().slice(0, maxLen);
+  const trimmed = val.trim();
+  if (!trimmed && fallback) return fallback.slice(0, maxLen);
+  return trimmed.slice(0, maxLen);
 };
 
 export function normalizeSafeId(rawId: string, prefix: string): string {
@@ -236,14 +238,15 @@ export function sanitizeProductForFirestore(
     nameEn: product.categoryNameEn || product.categoryNameAr || '',
   };
 
-  const cleanImages = (Array.isArray(product.images) ? product.images : [])
-    .map((url) => sanitizeSafeMediaUrl(clip(url, 250000)))
-    .filter((url) => url.length > 0)
-    .slice(0, 8);
-  const primaryImage = sanitizeSafeMediaUrl(clip(product.image || cleanImages[0] || '', 250000));
-  if (primaryImage && !cleanImages.includes(primaryImage)) {
-    cleanImages.unshift(primaryImage);
-  }
+  const primaryImage = sanitizeSafeMediaUrl(
+    clip(product.image || (Array.isArray(product.images) ? product.images[0] : '') || '', 450000)
+  );
+  // Store ONLY additional gallery images in `images[]` so the HD primary image is never duplicated
+  // inside the same 1MB Firestore document (reconstructed seamlessly on read).
+  const extraImages = (Array.isArray(product.images) ? product.images : [])
+    .map((url) => sanitizeSafeMediaUrl(clip(url, 450000)))
+    .filter((url, idx, arr) => url.length > 0 && url !== primaryImage && arr.indexOf(url) === idx)
+    .slice(0, 7);
 
   const cleanColors = (Array.isArray(product.colors) ? product.colors : [])
     .map((c) => clip(c, 40))
@@ -289,7 +292,7 @@ export function sanitizeProductForFirestore(
     categoryNameEn: clip(product.categoryNameEn || catMeta.nameEn, 80),
     categoryNameAr: clip(product.categoryNameAr || catMeta.nameAr, 80),
     image: primaryImage,
-    images: cleanImages.slice(0, 8),
+    images: extraImages,
     rating,
     reviewsCount,
     description: clip(product.description || '', 3000),
@@ -338,7 +341,7 @@ export function sanitizeHeroSlideForFirestore(
     titleAr: clip(slide.titleAr || 'عرض خاص', 200, 'عرض خاص'),
     subtitleAr: clip(slide.subtitleAr || '', 500),
     mediaType: slide.mediaType === 'video' ? 'video' : 'image',
-    imageUrl: sanitizeSafeMediaUrl(clip(slide.imageUrl || '', 250000)),
+    imageUrl: sanitizeSafeMediaUrl(clip(slide.imageUrl || '', 450000)),
     order: Math.min(100, Math.max(0, Math.round(order))),
     enabled: slide.enabled !== false,
     createdAt: existingCreatedAt || serverTimestamp(),
@@ -460,16 +463,18 @@ export function subscribeToProducts(
           productCreatedAtCache.set(docSnap.id, data.createdAt);
         }
         const safeImg = sanitizeSafeMediaUrl(data.image);
-        const safeImages = (
-          Array.isArray(data.images) ? data.images : safeImg ? [safeImg] : []
-        )
+        const rawExtraImages = (Array.isArray(data.images) ? data.images : [])
           .map((u: unknown) => sanitizeSafeMediaUrl(u))
           .filter(Boolean);
+        // Merge primary image + extra gallery images cleanly with deduplication
+        const mergedImages = [safeImg, ...rawExtraImages].filter(
+          (u, idx, arr) => u.length > 0 && arr.indexOf(u) === idx
+        );
         return {
           ...(data as Product),
           id: docSnap.id,
-          image: safeImg || safeImages[0] || '',
-          images: safeImages,
+          image: safeImg || mergedImages[0] || '',
+          images: mergedImages,
           videoUrl: sanitizeSafeHttpUrl(data.videoUrl) || undefined,
           colors: Array.isArray(data.colors) ? data.colors : [],
           colorNamesAr: Array.isArray(data.colorNamesAr) ? data.colorNamesAr : [],

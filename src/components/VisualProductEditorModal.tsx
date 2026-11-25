@@ -1,9 +1,10 @@
-import { useState, useEffect, type ChangeEvent } from 'react';
+import { useState, useEffect, useRef, type ChangeEvent } from 'react';
 import {
   X,
   Plus,
   Trash2,
   Save,
+  Copy,
   Image as ImageIcon,
   Palette,
   Percent,
@@ -23,6 +24,7 @@ import { compressImageFileToDataUrl } from '../utils/imageUpload';
 interface VisualProductEditorModalProps {
   isOpen: boolean;
   product: Product | null; // null => Add new product
+  isClone?: boolean; // true => Opened as a clone (saves as a brand-new product without images)
   defaultCategory?: CategoryId;
   categories: StoreCategoryItem[];
   onClose: () => void;
@@ -91,13 +93,21 @@ function createEmptyProduct(
 export default function VisualProductEditorModal({
   isOpen,
   product,
+  isClone = false,
   defaultCategory = 'phones',
   categories,
   onClose,
   onSave,
   onDelete,
 }: VisualProductEditorModalProps) {
-  const isNew = !product;
+  const [clonedInModal, setClonedInModal] = useState(false);
+  const isNew = !product || isClone || clonedInModal;
+  const isCloneMode = isClone || clonedInModal;
+
+  const categoriesRef = useRef<StoreCategoryItem[]>(categories);
+  categoriesRef.current = categories;
+  const scrollBodyRef = useRef<HTMLDivElement | null>(null);
+
   const [form, setForm] = useState<Product>(() =>
     product ? { ...product } : createEmptyProduct(defaultCategory, categories)
   );
@@ -106,6 +116,9 @@ export default function VisualProductEditorModal({
   const [variantOptionsText, setVariantOptionsText] = useState('');
   const [specRows, setSpecRows] = useState<SpecRow[]>([]);
   const [uploadingImage, setUploadingImage] = useState(false);
+  const [uploadProgress, setUploadProgress] = useState(0);
+  const [uploadLabel, setUploadLabel] = useState('');
+  const [uploadDoneMsg, setUploadDoneMsg] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
@@ -113,10 +126,18 @@ export default function VisualProductEditorModal({
 
   useEffect(() => {
     if (!isOpen) return;
-    const base = product ? { ...product } : createEmptyProduct(defaultCategory, categories);
+    const base = product
+      ? {
+          ...product,
+          ...(isClone ? { id: `prod-${Date.now().toString(36)}`, image: '', images: [] } : {}),
+        }
+      : createEmptyProduct(defaultCategory, categoriesRef.current);
     setForm(base);
+    setClonedInModal(false);
 
-    const extraImages = (base.images || []).filter((img) => img && img !== base.image);
+    const extraImages = isClone
+      ? []
+      : (base.images || []).filter((img) => img && img !== base.image);
     setGalleryUrls(extraImages);
 
     const cols = base.colors || [];
@@ -143,27 +164,61 @@ export default function VisualProductEditorModal({
 
     setConfirmDelete(false);
     setStatusError(null);
-  }, [isOpen, product, defaultCategory, categories]);
+    setUploadDoneMsg(null);
+    setUploadProgress(0);
+    setUploadLabel('');
+  }, [isOpen, product, isClone, defaultCategory]);
 
   if (!isOpen) return null;
+
+  const flashUploadDone = (msg: string) => {
+    setUploadDoneMsg(msg);
+    setTimeout(() => {
+      setUploadDoneMsg((prev) => (prev === msg ? null : prev));
+    }, 3500);
+  };
+
+  const handleCloneInPlace = () => {
+    setForm((prev) => ({
+      ...prev,
+      id: `prod-${Date.now().toString(36)}`,
+      image: '',
+      images: [],
+    }));
+    setGalleryUrls([]);
+    setClonedInModal(true);
+    setConfirmDelete(false);
+    setStatusError(null);
+    setUploadDoneMsg(null);
+    if (scrollBodyRef.current) {
+      scrollBodyRef.current.scrollTo({ top: 0, behavior: 'smooth' });
+    }
+  };
 
   const handlePrimaryFileUpload = async (e: ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     e.target.value = '';
     if (!file) return;
     setUploadingImage(true);
+    setUploadProgress(8);
+    setUploadLabel('جاري رفع الصورة الرئيسية بأعلى جودة...');
+    setUploadDoneMsg(null);
     setStatusError(null);
     try {
       const dataUrl = await compressImageFileToDataUrl(file, {
-        maxDimension: 760,
-        quality: 0.76,
-        maxChars: 170000,
+        maxDimension: 1600,
+        quality: 0.92,
+        maxChars: 380000,
+        onProgress: (pct) => setUploadProgress(pct),
       });
       setForm((prev) => ({ ...prev, image: dataUrl }));
+      flashUploadDone('تم رفع الصورة الرئيسية بأعلى جودة ✓');
     } catch (err) {
       setStatusError(err instanceof Error ? err.message : 'تعذر رفع الصورة المختارة.');
     } finally {
       setUploadingImage(false);
+      setUploadProgress(0);
+      setUploadLabel('');
     }
   };
 
@@ -172,20 +227,38 @@ export default function VisualProductEditorModal({
     e.target.value = '';
     if (files.length === 0) return;
     setUploadingImage(true);
+    setUploadProgress(5);
+    setUploadDoneMsg(null);
     setStatusError(null);
     try {
-      const remainingSlots = Math.max(0, 6 - galleryUrls.length);
+      const needsPrimary = !form.image.trim();
+      const remainingSlots = Math.max(0, (needsPrimary ? 7 : 6) - galleryUrls.length);
       const selected = files.slice(0, remainingSlots);
+      if (selected.length === 0) {
+        setStatusError('وصلت للحد الأقصى من الصور الإضافية (6 صور).');
+        return;
+      }
       const uploaded: string[] = [];
-      for (const file of selected) {
+      for (let i = 0; i < selected.length; i++) {
+        const file = selected[i];
+        const isFirstPrimary = needsPrimary && i === 0;
+        setUploadLabel(
+          selected.length > 1
+            ? `جاري رفع الصورة ${i + 1} من ${selected.length} بأعلى جودة...`
+            : 'جاري رفع الصورة بأعلى جودة...'
+        );
         const dataUrl = await compressImageFileToDataUrl(file, {
-          maxDimension: 640,
-          quality: 0.72,
-          maxChars: 110000,
+          maxDimension: isFirstPrimary ? 1600 : 1280,
+          quality: isFirstPrimary ? 0.92 : 0.88,
+          maxChars: isFirstPrimary ? 380000 : 170000,
+          onProgress: (pct) => {
+            const overall = Math.round(((i + pct / 100) / selected.length) * 100);
+            setUploadProgress(overall);
+          },
         });
         uploaded.push(dataUrl);
       }
-      if (!form.image.trim() && uploaded.length > 0) {
+      if (needsPrimary && uploaded.length > 0) {
         setForm((prev) => ({ ...prev, image: uploaded[0] }));
         if (uploaded.length > 1) {
           setGalleryUrls((prev) => [...prev, ...uploaded.slice(1)]);
@@ -193,10 +266,17 @@ export default function VisualProductEditorModal({
       } else {
         setGalleryUrls((prev) => [...prev, ...uploaded]);
       }
+      flashUploadDone(
+        uploaded.length > 1
+          ? `تم رفع ${uploaded.length} صور بأعلى جودة ✓`
+          : 'تم رفع الصورة بأعلى جودة ✓'
+      );
     } catch (err) {
       setStatusError(err instanceof Error ? err.message : 'تعذر رفع بعض الصور.');
     } finally {
       setUploadingImage(false);
+      setUploadProgress(0);
+      setUploadLabel('');
     }
   };
 
@@ -205,22 +285,29 @@ export default function VisualProductEditorModal({
     e.target.value = '';
     if (!file) return;
     setUploadingImage(true);
+    setUploadProgress(10);
+    setUploadLabel(`جاري رفع الصورة الإضافية ${idx + 2} بأعلى جودة...`);
+    setUploadDoneMsg(null);
     setStatusError(null);
     try {
       const dataUrl = await compressImageFileToDataUrl(file, {
-        maxDimension: 640,
-        quality: 0.72,
-        maxChars: 110000,
+        maxDimension: 1280,
+        quality: 0.88,
+        maxChars: 170000,
+        onProgress: (pct) => setUploadProgress(pct),
       });
       setGalleryUrls((prev) => {
         const next = [...prev];
         next[idx] = dataUrl;
         return next;
       });
+      flashUploadDone('تم رفع الصورة الإضافية بأعلى جودة ✓');
     } catch (err) {
       setStatusError(err instanceof Error ? err.message : 'تعذر رفع الصورة.');
     } finally {
       setUploadingImage(false);
+      setUploadProgress(0);
+      setUploadLabel('');
     }
   };
 
@@ -288,7 +375,7 @@ export default function VisualProductEditorModal({
 
       // Guard total payload size comfortably below Firestore's 1MB document limit
       const totalImageBytes = cleanImages.reduce((sum, s) => sum + s.length, 0);
-      if (totalImageBytes > 780000) {
+      if (totalImageBytes > 860000) {
         setStatusError(
           'مجموع حجم الصور كبير جداً. يرجى تقليل عدد الصور الإضافية أو استخدام روابط مباشرة لبعضها.'
         );
@@ -383,8 +470,14 @@ export default function VisualProductEditorModal({
         {/* Top Frosted Header */}
         <div className="px-5 sm:px-7 py-4 border-b border-slate-900/10 flex items-center justify-between gap-3 bg-white/50">
           <div className="flex items-center gap-3 min-w-0">
-            <div className="w-10 h-10 rounded-2xl liquid-btn-primary flex items-center justify-center shrink-0">
-              {isNew ? (
+            <div
+              className={`w-10 h-10 rounded-2xl flex items-center justify-center shrink-0 ${
+                isCloneMode ? 'bg-indigo-600 shadow-md shadow-indigo-500/30' : 'liquid-btn-primary'
+              }`}
+            >
+              {isCloneMode ? (
+                <Copy className="w-5 h-5 text-white" />
+              ) : isNew ? (
                 <Plus className="w-5 h-5 text-white" />
               ) : (
                 <Sparkles className="w-5 h-5 text-white" />
@@ -392,10 +485,16 @@ export default function VisualProductEditorModal({
             </div>
             <div className="min-w-0">
               <h2 className="text-base sm:text-lg font-extrabold text-[#0b1220] truncate">
-                {isNew ? 'إضافة منتج جديد للمتجر' : `تعديل المنتج: ${form.nameAr || product?.nameAr}`}
+                {isCloneMode
+                  ? `استنساخ منتج جديد: ${form.nameAr || 'نسخة جديدة'}`
+                  : isNew
+                  ? 'إضافة منتج جديد للمتجر'
+                  : `تعديل المنتج: ${form.nameAr || product?.nameAr}`}
               </h2>
               <p className="text-[11px] text-slate-600">
-                كل المربعات اختيارية — أي مربع تكتب فيه سيظهر في صفحة المنتج، وأي مربع تتركه فارغاً لن يظهر
+                {isCloneMode
+                  ? 'تم نسخ كافة بيانات المنتج ما عدا الصور — أضف الصور الجديدة ثم اضغط حفظ ليصبح لديك منتجان مستقلان'
+                  : 'كل المربعات اختيارية — أي مربع تكتب فيه سيظهر في صفحة المنتج، وأي مربع تتركه فارغاً لن يظهر'}
               </p>
             </div>
           </div>
@@ -411,7 +510,16 @@ export default function VisualProductEditorModal({
         </div>
 
         {/* Scrollable Rectangular Blocks Editor Body */}
-        <div className="p-4 sm:p-6 overflow-y-auto space-y-5 flex-1">
+        <div ref={scrollBodyRef} className="p-4 sm:p-6 overflow-y-auto space-y-5 flex-1">
+          {isCloneMode && (
+            <div className="p-3.5 rounded-2xl bg-indigo-50 border border-indigo-200 text-indigo-800 text-xs font-extrabold flex items-center gap-2.5">
+              <Copy className="w-4 h-4 shrink-0 text-indigo-600" />
+              <span>
+                وضع الاستنساخ: تم نسخ الاسم والسعر والألوان والمواصفات والوصف ما عدا الصور. أضف الصور الجديدة ثم احفظ ليُضاف كمنتج مستقل ثانٍ!
+              </span>
+            </div>
+          )}
+
           {statusError && (
             <div className="p-3.5 rounded-2xl bg-rose-50 border border-rose-200 text-rose-700 text-xs font-bold">
               {statusError}
@@ -423,16 +531,20 @@ export default function VisualProductEditorModal({
             <div className="flex flex-wrap items-center justify-between gap-2">
               <h3 className="text-sm font-extrabold text-[#0b1220] flex items-center gap-2">
                 <ImageIcon className="w-4 h-4 text-[#0071e3]" />
-                <span>صور المنتج (اختر من المعرض أو أضف رابطاً)</span>
+                <span>صور المنتج (رفع بأعلى جودة HD أو رابط)</span>
               </h3>
               <div className="flex flex-wrap items-center gap-2">
-                <label className="text-xs font-bold bg-[#0071e3] hover:bg-[#005bbf] text-white px-3 py-1.5 rounded-xl flex items-center gap-1.5 cursor-pointer shadow-sm">
+                <label
+                  className={`text-xs font-bold bg-[#0071e3] hover:bg-[#005bbf] text-white px-3 py-1.5 rounded-xl flex items-center gap-1.5 cursor-pointer shadow-sm ${
+                    uploadingImage ? 'opacity-70 pointer-events-none' : ''
+                  }`}
+                >
                   {uploadingImage ? (
                     <Loader2 className="w-3.5 h-3.5 animate-spin" />
                   ) : (
                     <Upload className="w-3.5 h-3.5" />
                   )}
-                  <span>رفع صور من المعرض</span>
+                  <span>{uploadingImage ? `جاري الرفع ${uploadProgress}%` : 'رفع صور من المعرض'}</span>
                   <input
                     type="file"
                     accept="image/*"
@@ -453,6 +565,31 @@ export default function VisualProductEditorModal({
               </div>
             </div>
 
+            {uploadingImage && (
+              <div className="p-3 rounded-xl bg-sky-50 border border-sky-200 space-y-2">
+                <div className="flex items-center justify-between text-xs font-extrabold text-sky-900">
+                  <span className="flex items-center gap-2">
+                    <Loader2 className="w-4 h-4 animate-spin text-[#0071e3]" />
+                    <span>{uploadLabel || 'جاري رفع ومعالجة الصورة بأعلى جودة...'}</span>
+                  </span>
+                  <span className="tabular-nums font-black text-[#0071e3]">{uploadProgress}%</span>
+                </div>
+                <div className="w-full h-2 rounded-full bg-sky-200/80 overflow-hidden">
+                  <div
+                    className="h-full bg-gradient-to-l from-[#0071e3] to-sky-400 transition-all duration-200"
+                    style={{ width: `${Math.max(8, uploadProgress)}%` }}
+                  />
+                </div>
+              </div>
+            )}
+
+            {!uploadingImage && uploadDoneMsg && (
+              <div className="px-3.5 py-2 rounded-xl bg-emerald-50 border border-emerald-200 text-emerald-800 text-xs font-extrabold flex items-center gap-2">
+                <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
+                <span>{uploadDoneMsg}</span>
+              </div>
+            )}
+
             <div className="grid grid-cols-1 md:grid-cols-12 gap-4 items-start">
               {/* Live Square Preview + Direct Tap to Upload */}
               <div className="md:col-span-4 aspect-square rounded-2xl bg-slate-100/80 border-2 border-dashed border-slate-300 overflow-hidden flex items-center justify-center relative group">
@@ -464,24 +601,35 @@ export default function VisualProductEditorModal({
                       referrerPolicy="no-referrer"
                       className="w-full h-full object-cover"
                     />
-                    <button
-                      type="button"
-                      onClick={() => setForm((p) => ({ ...p, image: '' }))}
-                      className="absolute bottom-2.5 left-2.5 px-2.5 py-1 rounded-xl bg-rose-600/90 text-white text-[10px] font-bold flex items-center gap-1 cursor-pointer shadow"
-                    >
-                      <Trash2 className="w-3 h-3" />
-                      <span>مسح الصورة</span>
-                    </button>
+                    <div className="absolute bottom-2.5 inset-x-2.5 flex items-center justify-between gap-1.5">
+                      <label className="px-2.5 py-1.5 rounded-xl bg-[#0071e3]/95 hover:bg-[#005bbf] text-white text-[10px] font-extrabold flex items-center gap-1 cursor-pointer shadow">
+                        <Upload className="w-3 h-3" />
+                        <span>تغيير الصورة</span>
+                        <input
+                          type="file"
+                          accept="image/*"
+                          onChange={handlePrimaryFileUpload}
+                          className="hidden"
+                          disabled={uploadingImage}
+                        />
+                      </label>
+                      <button
+                        type="button"
+                        onClick={() => setForm((p) => ({ ...p, image: '' }))}
+                        className="px-2.5 py-1.5 rounded-xl bg-rose-600/95 hover:bg-rose-700 text-white text-[10px] font-extrabold flex items-center gap-1 cursor-pointer shadow"
+                      >
+                        <Trash2 className="w-3 h-3" />
+                        <span>مسح</span>
+                      </button>
+                    </div>
                   </>
                 ) : (
                   <label className="w-full h-full flex flex-col items-center justify-center p-4 text-slate-500 hover:text-[#0071e3] cursor-pointer text-center transition-colors">
-                    {uploadingImage ? (
-                      <Loader2 className="w-9 h-9 animate-spin text-[#0071e3] mb-2" />
-                    ) : (
-                      <Upload className="w-9 h-9 mb-2 opacity-75" />
-                    )}
+                    <Upload className="w-9 h-9 mb-2 opacity-75" />
                     <span className="text-xs font-extrabold block">اضغط لاختيار صورة من جهازك</span>
-                    <span className="text-[10px] text-slate-400 mt-1">يتم ضغطها تلقائياً للحفظ السريع</span>
+                    <span className="text-[10px] text-slate-400 mt-1">
+                      ترفع بأعلى دقة HD (حتى 1600px)
+                    </span>
                     <input
                       type="file"
                       accept="image/*"
@@ -491,6 +639,17 @@ export default function VisualProductEditorModal({
                     />
                   </label>
                 )}
+
+                {uploadingImage && (
+                  <div className="absolute inset-0 z-20 bg-slate-950/65 backdrop-blur-sm flex flex-col items-center justify-center p-4 text-white text-center">
+                    <Loader2 className="w-10 h-10 animate-spin text-sky-400 mb-2" />
+                    <span className="text-xs font-extrabold">جاري التحميل بأعلى جودة...</span>
+                    <span className="text-sm font-black tabular-nums text-sky-300 mt-1">
+                      {uploadProgress}%
+                    </span>
+                  </div>
+                )}
+
                 {form.discountPercentage ? (
                   <span className="absolute top-2.5 right-2.5 bg-rose-600 text-white text-xs font-black px-2.5 py-1 rounded-xl shadow">
                     -{form.discountPercentage}%
@@ -1038,44 +1197,57 @@ export default function VisualProductEditorModal({
         </div>
 
         {/* Sticky Bottom Action Footer */}
-        <div className="px-5 sm:px-7 py-4 border-t border-slate-900/10 bg-white/70 flex flex-wrap items-center justify-between gap-3">
-          {!isNew && onDelete ? (
-            confirmDelete ? (
-              <div className="flex items-center gap-2">
+        <div className="px-5 sm:px-7 py-4 border-t border-slate-900/10 bg-white/70 flex flex-wrap items-center justify-between gap-2.5">
+          <div className="flex flex-wrap items-center gap-2">
+            {!isNew && onDelete && (
+              confirmDelete ? (
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={handleDelete}
+                    disabled={deleting}
+                    className="px-4 py-2.5 rounded-xl bg-rose-600 hover:bg-rose-700 text-white text-xs font-extrabold flex items-center gap-1.5 cursor-pointer"
+                  >
+                    {deleting ? (
+                      <Loader2 className="w-4 h-4 animate-spin" />
+                    ) : (
+                      <Trash2 className="w-4 h-4" />
+                    )}
+                    <span>تأكيد الحذف النهائي</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setConfirmDelete(false)}
+                    className="px-3 py-2.5 rounded-xl bg-slate-200 text-slate-800 text-xs font-bold cursor-pointer"
+                  >
+                    تراجع
+                  </button>
+                </div>
+              ) : (
                 <button
                   type="button"
-                  onClick={handleDelete}
-                  disabled={deleting}
-                  className="px-4 py-2.5 rounded-xl bg-rose-600 hover:bg-rose-700 text-white text-xs font-extrabold flex items-center gap-1.5 cursor-pointer"
+                  onClick={() => setConfirmDelete(true)}
+                  className="px-3.5 py-2.5 rounded-xl bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 text-xs font-extrabold flex items-center gap-1.5 cursor-pointer"
                 >
-                  {deleting ? (
-                    <Loader2 className="w-4 h-4 animate-spin" />
-                  ) : (
-                    <Trash2 className="w-4 h-4" />
-                  )}
-                  <span>تأكيد الحذف النهائي</span>
+                  <Trash2 className="w-4 h-4" />
+                  <span>حذف المنتج</span>
                 </button>
-                <button
-                  type="button"
-                  onClick={() => setConfirmDelete(false)}
-                  className="px-3 py-2.5 rounded-xl bg-slate-200 text-slate-800 text-xs font-bold cursor-pointer"
-                >
-                  تراجع
-                </button>
-              </div>
-            ) : (
+              )
+            )}
+
+            {!isNew && (
               <button
                 type="button"
-                onClick={() => setConfirmDelete(true)}
-                className="px-4 py-2.5 rounded-xl bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 text-xs font-extrabold flex items-center gap-1.5 cursor-pointer"
+                onClick={handleCloneInPlace}
+                disabled={saving || uploadingImage}
+                className="px-3.5 py-2.5 rounded-xl bg-indigo-50 hover:bg-indigo-100 text-indigo-700 border border-indigo-200 text-xs font-extrabold flex items-center gap-1.5 cursor-pointer disabled:opacity-60"
+                title="نسخ كل بيانات المنتج كمنتج ثانٍ مستقل بدون الصور"
               >
-                <Trash2 className="w-4 h-4" />
-                <span>حذف المنتج</span>
+                <Copy className="w-4 h-4" />
+                <span>استنساخ بدون الصور</span>
               </button>
-            )
-          ) : (
-            <div />
-          )}
+            )}
+          </div>
 
           <div className="flex items-center gap-2.5 mr-auto">
             <button
@@ -1098,7 +1270,13 @@ export default function VisualProductEditorModal({
               ) : (
                 <Save className="w-4 h-4" />
               )}
-              <span>{isNew ? 'إضافة المنتج وحفظه' : 'حفظ التعديلات في السحابة'}</span>
+              <span>
+                {isCloneMode
+                  ? 'حفظ النسخة كمنتج جديد'
+                  : isNew
+                  ? 'إضافة المنتج وحفظه'
+                  : 'حفظ التعديلات في السحابة'}
+              </span>
             </button>
           </div>
         </div>

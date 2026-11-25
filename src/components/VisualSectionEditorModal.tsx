@@ -1,4 +1,4 @@
-import { useState, useEffect, type ChangeEvent } from 'react';
+import { useState, useEffect, useRef, type ChangeEvent } from 'react';
 import {
   X,
   Save,
@@ -72,21 +72,31 @@ export default function VisualSectionEditorModal({
     hidden: false,
   });
   const [uploadingImg, setUploadingImg] = useState(false);
+  const [uploadProgress, setUploadProgress] = useState(0);
   const [saving, setSaving] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
 
+  const siteConfigRef = useRef(siteConfig);
+  siteConfigRef.current = siteConfig;
+  const heroSlidesRef = useRef(heroSlides);
+  heroSlidesRef.current = heroSlides;
+
+  // Only initialize draft state when the editor target opens/changes (never wipe mid-edit on Firestore snapshots)
   useEffect(() => {
     if (!target) return;
-    setCfg(siteConfig);
+    const latestCfg = siteConfigRef.current;
+    const latestSlides = heroSlidesRef.current;
+    setCfg(latestCfg);
     setErrorMsg(null);
+    setUploadProgress(0);
 
     if (target.type === 'hero') {
-      const idx = Math.min(target.slideIndex, Math.max(0, heroSlides.length - 1));
+      const idx = Math.min(target.slideIndex, Math.max(0, latestSlides.length - 1));
       setActiveSlideIdx(idx);
       setIsNewSlide(false);
       setSlideDraft(
-        heroSlides[idx]
-          ? { ...heroSlides[idx] }
+        latestSlides[idx]
+          ? { ...latestSlides[idx] }
           : {
               id: `slide-${Date.now().toString(36)}`,
               badgeAr: '',
@@ -108,7 +118,7 @@ export default function VisualSectionEditorModal({
         hidden: false,
       });
     } else if (target.type === 'editCustomCategory') {
-      const found = (siteConfig.customCategories || []).find((c) => c.id === target.categoryId);
+      const found = (latestCfg.customCategories || []).find((c) => c.id === target.categoryId);
       setCustomCatDraft(
         found
           ? { ...found }
@@ -121,31 +131,35 @@ export default function VisualSectionEditorModal({
             }
       );
     }
-  }, [target, siteConfig, heroSlides]);
+  }, [target]);
 
   if (!target) return null;
 
   const handleUploadImage = async (
     e: ChangeEvent<HTMLInputElement>,
     onResult: (dataUrl: string) => void,
-    maxChars = 110000
+    maxChars = 90000,
+    maxDimension = 900
   ) => {
     const file = e.target.files?.[0];
     e.target.value = '';
     if (!file) return;
     setUploadingImg(true);
+    setUploadProgress(10);
     setErrorMsg(null);
     try {
       const dataUrl = await compressImageFileToDataUrl(file, {
-        maxDimension: 620,
-        quality: 0.72,
+        maxDimension,
+        quality: 0.9,
         maxChars,
+        onProgress: (pct) => setUploadProgress(pct),
       });
       onResult(dataUrl);
     } catch (err) {
       setErrorMsg(err instanceof Error ? err.message : 'تعذر رفع الصورة.');
     } finally {
       setUploadingImg(false);
+      setTimeout(() => setUploadProgress(0), 500);
     }
   };
 
@@ -195,15 +209,17 @@ export default function VisualSectionEditorModal({
           return;
         }
         const nextCat: CustomCategoryConfig = {
-          id: normalizeSafeId(customCatDraft.id || '', 'cat'),
+          id: normalizeSafeId(customCatDraft.id || `cat-${Date.now().toString(36)}`, 'cat'),
           nameAr: customCatDraft.nameAr.trim(),
           nameEn: customCatDraft.nameEn.trim() || customCatDraft.nameAr.trim(),
           image: customCatDraft.image.trim(),
           hidden: Boolean(customCatDraft.hidden),
         };
+        const latestBase = siteConfigRef.current;
+        const latestExisting = latestBase.customCategories || [];
         await onSaveSiteConfig({
-          ...cfg,
-          customCategories: [...existing, nextCat],
+          ...latestBase,
+          customCategories: [...latestExisting, nextCat],
         });
       } else if (target.type === 'editCustomCategory') {
         if (!customCatDraft.nameAr.trim()) {
@@ -211,7 +227,8 @@ export default function VisualSectionEditorModal({
           setSaving(false);
           return;
         }
-        const existing = cfg.customCategories || [];
+        const latestBase = siteConfigRef.current;
+        const existing = latestBase.customCategories || [];
         const updated = existing.map((c) =>
           c.id === target.categoryId
             ? {
@@ -224,7 +241,7 @@ export default function VisualSectionEditorModal({
             : c
         );
         await onSaveSiteConfig({
-          ...cfg,
+          ...latestBase,
           customCategories: updated,
         });
       } else {
@@ -334,6 +351,24 @@ export default function VisualSectionEditorModal({
           {errorMsg && (
             <div className="p-3 rounded-2xl bg-rose-50 border border-rose-200 text-rose-700 text-xs font-bold">
               {errorMsg}
+            </div>
+          )}
+
+          {uploadingImg && (
+            <div className="p-3 rounded-2xl bg-sky-50 border border-sky-200 space-y-2">
+              <div className="flex items-center justify-between text-xs font-extrabold text-[#0071e3]">
+                <span className="flex items-center gap-2">
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                  <span>جاري معالجة ورفع الصورة بأعلى جودة...</span>
+                </span>
+                <span className="tabular-nums">{uploadProgress}%</span>
+              </div>
+              <div className="w-full h-1.5 rounded-full bg-sky-200/80 overflow-hidden">
+                <div
+                  className="h-full bg-[#0071e3] transition-all duration-200 rounded-full"
+                  style={{ width: `${Math.max(12, uploadProgress)}%` }}
+                />
+              </div>
             </div>
           )}
 
@@ -458,7 +493,8 @@ export default function VisualSectionEditorModal({
                           handleUploadImage(
                             e,
                             (dataUrl) => setSlideDraft({ ...slideDraft, imageUrl: dataUrl }),
-                            180000
+                            350000,
+                            1600
                           )
                         }
                         className="hidden"

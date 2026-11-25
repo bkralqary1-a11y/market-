@@ -15,6 +15,7 @@ import {
   getFirestore,
   doc,
   getDocFromServer,
+  enableNetwork,
   type Firestore,
 } from 'firebase/firestore';
 import firebaseConfig from '../firebase-applet-config.json';
@@ -28,19 +29,32 @@ const OWNER_IDENTITY_DIGEST =
 
 const app = getApps().length > 0 ? getApp() : initializeApp(firebaseConfig);
 
-// Connect specifically to the provisioned named Firestore database with auto-detect long polling
-// so mobile networks / strict proxies do not stall on WebChannel streams
+// Connect specifically to the provisioned named Firestore database with forced HTTPS long-polling
+// and a 20s timeout so mobile ISPs, strict proxies, and VPNs never stall on persistent WebChannel streams
 let dbInstance: Firestore;
 try {
   dbInstance = initializeFirestore(
     app,
-    { experimentalAutoDetectLongPolling: true },
+    {
+      experimentalForceLongPolling: true,
+      experimentalLongPollingOptions: { timeoutSeconds: 20 },
+      ignoreUndefinedProperties: true,
+    },
     firebaseConfig.firestoreDatabaseId
   );
 } catch {
   dbInstance = getFirestore(app, firebaseConfig.firestoreDatabaseId);
 }
 export const db = dbInstance;
+
+// Automatically restore Firestore network transport when device regains connectivity
+if (typeof window !== 'undefined') {
+  window.addEventListener('online', () => {
+    enableNetwork(db).catch(() => {
+      // ignore transient reconnect error
+    });
+  });
+}
 
 // Initialize Auth with resilient persistence fallback for mobile browsers & embedded iframes
 let authInstance: Auth;
@@ -126,15 +140,24 @@ export function isVerifiedAdminUser(
   return Boolean(user.emailVerified && isOwnerEmailCandidate(user.email));
 }
 
-// Required startup connection test to verify Firestore reachability
-async function testConnection() {
+// Required startup connection test to verify Firestore reachability (retries once on transient hiccup)
+async function testConnection(retryAttempt = 0): Promise<void> {
+  if (typeof navigator !== 'undefined' && navigator.onLine === false) {
+    return;
+  }
   try {
     await getDocFromServer(doc(db, 'test', 'connection'));
   } catch (error) {
     if (error instanceof Error && error.message.includes('the client is offline')) {
+      if (retryAttempt === 0) {
+        setTimeout(() => {
+          void testConnection(1);
+        }, 2500);
+        return;
+      }
       console.error('Please check your Firebase configuration.');
     }
   }
 }
 
-testConnection();
+void testConnection();

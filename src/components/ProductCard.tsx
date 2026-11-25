@@ -10,6 +10,7 @@ import {
   Smartphone,
   Pencil,
   EyeOff,
+  Copy,
 } from 'lucide-react';
 import { Product, Language, Currency } from '../types';
 import { formatPrice } from '../data/mockData';
@@ -31,6 +32,7 @@ interface ProductCardProps {
   onQuickView?: (product: Product) => void;
   isAdminMode?: boolean;
   onAdminEdit?: (product: Product) => void;
+  onAdminClone?: (product: Product) => void;
 }
 
 export default function ProductCard({
@@ -47,6 +49,7 @@ export default function ProductCard({
   onQuickView,
   isAdminMode = false,
   onAdminEdit,
+  onAdminClone,
 }: ProductCardProps) {
   const isAr = language === 'ar';
   const [selectedColor] = useState(product.colors?.[0] || '');
@@ -124,20 +127,36 @@ export default function ProductCard({
           product.hidden ? 'opacity-65' : ''
         }`}
       >
-        {/* Admin Mode Floating Pencil Edit Trigger */}
+        {/* Admin Mode Floating Edit & Clone Triggers */}
         {isAdminMode && onAdminEdit && (
-          <button
-            type="button"
-            onClick={(e) => {
-              e.stopPropagation();
-              onAdminEdit(product);
-            }}
-            className="absolute top-3.5 right-3.5 rtl:right-3.5 rtl:left-auto ltr:left-3.5 ltr:right-auto z-20 px-2.5 py-1.5 rounded-xl bg-[#0071e3] hover:bg-[#005bbf] text-white text-[11px] font-extrabold shadow-lg flex items-center gap-1 cursor-pointer"
-            title="تعديل هذا المنتج"
-          >
-            <Pencil className="w-3.5 h-3.5" />
-            <span>تعديل</span>
-          </button>
+          <div className="absolute top-3.5 right-3.5 rtl:right-3.5 rtl:left-auto ltr:left-3.5 ltr:right-auto z-20 flex items-center gap-1.5">
+            <button
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation();
+                onAdminEdit(product);
+              }}
+              className="px-2.5 py-1.5 rounded-xl bg-[#0071e3] hover:bg-[#005bbf] text-white text-[11px] font-extrabold shadow-lg flex items-center gap-1 cursor-pointer"
+              title="تعديل هذا المنتج"
+            >
+              <Pencil className="w-3.5 h-3.5" />
+              <span>تعديل</span>
+            </button>
+            {onAdminClone && (
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onAdminClone(product);
+                }}
+                className="px-2 py-1.5 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white text-[11px] font-extrabold shadow-lg flex items-center gap-1 cursor-pointer"
+                title="استنساخ المنتج بدون الصور"
+              >
+                <Copy className="w-3.5 h-3.5" />
+                <span className="hidden sm:inline">استنساخ</span>
+              </button>
+            )}
+          </div>
         )}
 
         {/* 1. Product Image Stage */}
